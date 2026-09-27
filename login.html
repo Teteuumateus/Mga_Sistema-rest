@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>MGA | Entrar</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="theme.js"></script>
+</head>
+<body>
+  <div class="login-shell">
+    <aside class="login-hero" aria-label="Informações do sistema">
+      <div class="brand-block">
+        <div class="brand-mark" aria-hidden="true">
+          <span class="bar bar-1"></span>
+          <span class="bar bar-2"></span>
+          <span class="bar bar-3"></span>
+          <span class="bar bar-4"></span>
+        </div>
+        <div class="brand-copy">
+          <h1>MGA</h1>
+          <span>Sistema de gestão</span>
+        </div>
+      </div>
+
+      <div class="hero-copy">
+        <h2>Gestão inteligente para crescer sem perder o controle.</h2>
+        <p>Centralize vendas, estoque, financeiro e operações em uma plataforma moderna e prática.</p>
+      </div>
+
+      <ul class="feature-list">
+        <li>
+          <span class="feature-icon">✓</span>
+          <div>
+            <strong>Fluxo de caixa em tempo real</strong>
+            <small>Controle financeiro com visão imediata</small>
+          </div>
+        </li>
+        <li>
+          <span class="feature-icon">✓</span>
+          <div>
+            <strong>PDV e vendas integradas</strong>
+            <small>Checkout rápido com acompanhamento em tempo real</small>
+          </div>
+        </li>
+        <li>
+          <span class="feature-icon">✓</span>
+          <div>
+            <strong>Operações em um só lugar</strong>
+            <small>Gestão de loja, food e suporte conectados</small>
+          </div>
+        </li>
+      </ul>
+    </aside>
+
+    <main class="login-panel">
+      <button type="button" class="theme-toggle login-theme-toggle" role="switch" aria-checked="false" aria-label="Mudar para tema escuro">
+        <svg class="tt-ic tt-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1"/></svg>
+        <svg class="tt-ic tt-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 3.5a8.5 8.5 0 1 1-11 11 7 7 0 0 0 11-11z"/></svg>
+        <span class="tt-knob"></span>
+      </button>
+      <div class="login-wrap">
+        <div class="mini-brand" aria-label="MGA brand">
+          <div class="mini-mark" aria-hidden="true">
+            <span class="mini-bar mini-bar-1"></span>
+            <span class="mini-bar mini-bar-2"></span>
+            <span class="mini-bar mini-bar-3"></span>
+            <span class="mini-bar mini-bar-4"></span>
+          </div>
+          <div class="mini-text">
+            <h1>MGA</h1>
+            <span>Smart System</span>
+          </div>
+        </div>
+
+        <h3>Entrar</h3>
+        <p>Faça login para acessar sua conta.</p>
+
+        <form class="login-form" id="loginForm" novalidate>
+          <label class="input-field" aria-label="E-mail">
+            <span class="field-icon">✉️</span>
+            <input id="emailInput" type="email" placeholder="Seu e-mail" autocomplete="email">
+          </label>
+
+          <label class="input-field" aria-label="Senha">
+            <span class="field-icon">🔒</span>
+            <input id="passwordInput" type="password" placeholder="Sua senha" autocomplete="current-password">
+            <button type="button" class="password-toggle" id="togglePassword" aria-label="Mostrar senha">👁️</button>
+          </label>
+
+          <div class="form-row">
+            <label class="remember-me"><input type="checkbox"> Lembrar-me</label>
+            <a href="#">Esqueceu a senha?</a>
+          </div>
+
+          <button type="submit" class="submit-btn">
+            Entrar <span class="arrow">→</span>
+          </button>
+        </form>
+
+        <div class="divider"><span>ou continue com</span></div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const passwordInput = document.getElementById('passwordInput');
+    const togglePassword = document.getElementById('togglePassword');
+    const loginForm = document.getElementById('loginForm');
+
+    togglePassword.addEventListener('click', () => {
+      const showPassword = passwordInput.type === 'password';
+      passwordInput.type = showPassword ? 'text' : 'password';
+      togglePassword.textContent = showPassword ? '🙈' : '👁️';
+      togglePassword.setAttribute('aria-label', showPassword ? 'Ocultar senha' : 'Mostrar senha');
+    });
+
+    loginForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const email = document.getElementById('emailInput').value.trim();
+      const senha = passwordInput.value.trim();
+
+      if (!email || !senha) {
+        window.alert('Informe e-mail e senha para continuar.');
+        return;
+      }
+
+      // Nome do usuário (parte do e-mail antes de "." ou "@") para registrar nas movimentações
+      const nome = email.split('@')[0].split(/[._-]/)[0] || 'Operador';
+      const usuario = nome.charAt(0).toUpperCase() + nome.slice(1).toLowerCase();
+      try {
+        localStorage.setItem('mga_usuario', JSON.stringify(usuario));
+        // Auditoria: registra a entrada no sistema
+        const auditoria = JSON.parse(localStorage.getItem('mga_auditoria') || '[]');
+        auditoria.push({data: new Date().toISOString(), usuario, modulo: 'Sistema', descricao: 'Entrou no sistema', detalhe: email});
+        localStorage.setItem('mga_auditoria', JSON.stringify(auditoria.slice(-5000)));
+      } catch (e) { /* storage indisponível */ }
+
+      window.location.href = 'mga-sistema.html';
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,1788 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MGA | Sistema</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="theme.js"></script>
+</head>
+<body class="app-mode">
+  <div id="appShell">
+    <aside class="sidebar" id="sidebar">
+      <button type="button" class="brand" id="btnInicio" title="Início · boas-vindas"><span class="dot"></span>MGA</button>
+      <nav class="nav" id="navPrincipal" aria-label="Menu principal">
+        <div class="nav-grupo" data-grupo="pdv" data-modulo="pdv">
+          <button type="button" class="nav-titulo" aria-expanded="true"><span class="ic">🖥️</span>PDV<span class="nav-seta" aria-hidden="true">▾</span></button>
+          <div class="nav-itens">
+            <button type="button" data-rota="pdv/dashboard">Dashboard</button>
+            <button type="button" data-rota="pdv/vender">Vender <kbd>F2</kbd></button>
+            <button type="button" data-rota="pdv/caixa">Caixa</button>
+            <button type="button" data-rota="pdv/vendas">Vendas</button>
+          </div>
+        </div>
+        <div class="nav-grupo" data-grupo="estoque" data-modulo="pdv">
+          <button type="button" class="nav-titulo" aria-expanded="true"><span class="ic">📦</span>Estoque<span class="nav-badge" id="navBadgeEstoque"></span><span class="nav-seta" aria-hidden="true">▾</span></button>
+          <div class="nav-itens">
+            <button type="button" data-rota="estoque/produtos">Produtos</button>
+            <button type="button" data-rota="estoque/entrada">Entrada<span class="nav-badge" id="navBadgeEntrada"></span></button>
+            <button type="button" data-rota="estoque/saida">Saída</button>
+            <button type="button" data-rota="estoque/movimentacoes">Movimentações</button>
+            <button type="button" data-rota="estoque/inventario">Inventário</button>
+          </div>
+        </div>
+        <div class="nav-grupo" data-grupo="clientes" data-modulo="pdv">
+          <button type="button" class="nav-titulo" aria-expanded="true"><span class="ic">👥</span>Clientes<span class="nav-seta" aria-hidden="true">▾</span></button>
+          <div class="nav-itens">
+            <button type="button" data-rota="clientes/lista">Clientes</button>
+            <button type="button" data-rota="clientes/historico">Histórico</button>
+          </div>
+        </div>
+        <div class="nav-grupo" data-grupo="relatorios" data-modulo="pdv">
+          <button type="button" class="nav-titulo" aria-expanded="true"><span class="ic">📈</span>Relatórios<span class="nav-seta" aria-hidden="true">▾</span></button>
+          <div class="nav-itens">
+            <button type="button" data-rota="relatorios/vendas">Vendas</button>
+            <button type="button" data-rota="relatorios/produtos">Produtos</button>
+            <button type="button" data-rota="relatorios/estoque">Estoque</button>
+            <button type="button" data-rota="relatorios/financeiro">Financeiro</button>
+          </div>
+        </div>
+        <!-- Food fica separado dos módulos do varejo (PDV, Estoque, Clientes...) -->
+        <div class="nav-sep nav-sep-bloco" data-modulo="food">Alimentação</div>
+        <div class="nav-grupo" data-grupo="food" data-modulo="food">
+          <button type="button" class="nav-titulo" aria-expanded="true"><span class="ic">🍕</span>Food<span class="nav-seta" aria-hidden="true">▾</span></button>
+          <div class="nav-itens">
+            <button type="button" data-rota="food/painel">Dashboard</button>
+            <button type="button" data-rota="food/pedido">Novo pedido</button>
+            <button type="button" data-rota="food/pedidos">Pedidos</button>
+            <button type="button" data-rota="food/cardapio">Produtos</button>
+            <button type="button" data-rota="food/ficha">Ficha técnica</button>
+            <button type="button" data-rota="food/insumos">Ingredientes</button>
+            <button type="button" data-rota="food/estoque">Estoque<span class="nav-badge" id="navBadgeFoodEstoque"></span></button>
+            <button type="button" data-rota="food/clientes">Clientes</button>
+            <button type="button" data-rota="food/canais">Plataformas</button>
+            <button type="button" data-rota="food/importar">📲 Importar vendas</button>
+            <button type="button" data-rota="food/custos">Custos</button>
+            <button type="button" data-rota="food/relatorios">Relatórios</button>
+            <button type="button" data-rota="food/config">Configuração</button>
+          </div>
+        </div>
+        <div class="nav-sep nav-sep-bloco" data-modulo="financeiro">Administrativo</div>
+        <div class="nav-grupo" data-grupo="fin" data-modulo="financeiro">
+          <button type="button" class="nav-titulo" aria-expanded="true"><span class="ic">💰</span>Financeiro<span class="nav-badge" id="navBadgeFin"></span><span class="nav-seta" aria-hidden="true">▾</span></button>
+          <div class="nav-itens">
+            <button type="button" data-rota="fin/dashboard">Dashboard</button>
+            <button type="button" data-rota="fin/receitas">Receitas</button>
+            <button type="button" data-rota="fin/despesas">Despesas</button>
+            <button type="button" data-rota="fin/pagar">Contas a pagar<span class="nav-badge" id="navBadgePagar"></span></button>
+            <button type="button" data-rota="fin/receber">Contas a receber</button>
+            <button type="button" data-rota="fin/fluxo">Fluxo de caixa</button>
+            <button type="button" data-rota="fin/dre">DRE</button>
+            <button type="button" data-rota="fin/recorrencias">Recorrências</button>
+            <button type="button" data-rota="fin/integracoes">Integrações</button>
+            <button type="button" data-rota="fin/config">Configuração</button>
+          </div>
+        </div>
+        <div class="nav-sep nav-sep-bloco">Outros módulos</div>
+        <button type="button" class="nav-simples" data-rota="helpdesk"><span class="ic">🎫</span>Help Desk</button>
+      </nav>
+      <button type="button" class="logout-btn" id="btnLogout"><span class="ic">↪</span>Sair</button>
+      <!-- Auditoria fica no rodapé do menu, separada dos módulos -->
+      <button type="button" class="nav-rodape-btn" data-rota="modulos"><span class="ic">🧩</span>Módulos e plano</button>
+      <button type="button" class="nav-rodape-btn nav-rodape-2" data-rota="gestao/auditoria"><span class="ic">🛡️</span>Auditoria</button>
+      <div class="sidebar-foot">MGA Soluções Tecnológicas<br>v1.0 · 100% Web</div>
+    </aside>
+
+    <div class="main">
+      <div class="topbar">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <button class="menu-toggle" id="menuToggle" aria-label="Abrir menu"><span></span></button>
+          <h1 id="pageTitle">Gestão</h1>
+        </div>
+        <div class="topbar-right">
+          <button type="button" class="theme-toggle" role="switch" aria-checked="false" aria-label="Mudar para tema escuro">
+            <svg class="tt-ic tt-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1"/></svg>
+            <svg class="tt-ic tt-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 3.5a8.5 8.5 0 1 1-11 11 7 7 0 0 0 11-11z"/></svg>
+            <span class="tt-knob"></span>
+          </button>
+          <div class="who"><span>Loja Matriz</span><div class="avatar" id="avatarUsuario">MG</div></div>
+        </div>
+      </div>
+
+      <div class="content">
+        <!-- Menu de um grupo (ex.: PDV) antes de escolher a tela: fundo azul com as opções -->
+        <!-- Tela de boas-vindas: abre ao entrar no sistema e ao clicar no nome MGA -->
+        <section class="panel" id="panel-boasvindas">
+          <div class="bv-wrap">
+            <div class="bv-hero">
+              <span class="bv-data" id="bvData"></span>
+              <h2 id="bvTitulo">Bem-vindo(a) ao MGA</h2>
+              <p>Sua central de gestão: vendas no PDV, estoque, clientes, relatórios e delivery com lucro real por pedido. Escolha um módulo para começar.</p>
+            </div>
+            <div class="bv-resumo" id="bvResumo"></div>
+            <h3 class="bv-sub">Módulos</h3>
+            <div class="inicio-opcoes" id="bvModulos"></div>
+          </div>
+        </section>
+        <section class="panel" id="panel-inicio">
+          <div class="inicio-grupo">
+            <div class="inicio-cab"><span class="inicio-ic" id="inicioIcone"></span><div><h2 id="inicioTitulo"></h2><p>Escolha uma tela para começar</p></div></div>
+            <div class="inicio-opcoes" id="inicioOpcoes"></div>
+          </div>
+        </section>
+        <section class="panel" id="panel-gestao">
+          <div id="gestaoDashboard">
+            <div class="subtabs" id="subtabsDashboard" style="margin-bottom:18px;">
+              <button class="stab active" data-tab="pdv">PDV</button>
+              <button class="stab" data-tab="food">Food</button>
+              <button class="stab" data-tab="financeiro">Financeiro</button>
+              <button class="stab" data-tab="auditoria">Auditoria</button>
+              <button class="stab" data-tab="dados">Dados</button>
+            </div>
+
+            <div id="dashPdv">
+              <div class="grid4">
+                <div class="kpi k1"><span>Vendas hoje</span><b>R$ 1.240,00</b></div>
+                <div class="kpi k2"><span>Nº de vendas</span><b>18</b></div>
+                <div class="kpi k3"><span>Ticket médio</span><b>R$ 68,90</b></div>
+                <div class="kpi k4"><span>Forma mais usada</span><b>PIX (55%)</b></div>
+              </div>
+              <div class="stitle">Últimas vendas — PDV</div>
+              <div class="card">
+                <table>
+                  <thead><tr><th>Venda</th><th>Itens</th><th>Valor</th><th>Pagamento</th></tr></thead>
+                  <tbody>
+                    <tr><td>#1032</td><td>Camisa Polo, Boné</td><td>R$ 119,80</td><td><span class="badge b-ok">PIX</span></td></tr>
+                    <tr><td>#1031</td><td>Bermuda Jeans</td><td>R$ 89,90</td><td><span class="badge b-ok">Cartão</span></td></tr>
+                    <tr><td>#1030</td><td>Água, Refrigerante</td><td>R$ 13,40</td><td><span class="badge b-ok">Dinheiro</span></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div id="dashFood" style="display:none;">
+              <div class="grid4">
+                <div class="kpi k1"><span>Pedidos hoje</span><b>24</b></div>
+                <div class="kpi k2"><span>Faturamento hoje</span><b>R$ 1.890,00</b></div>
+                <div class="kpi k3"><span>Ticket médio</span><b>R$ 78,75</b></div>
+                <div class="kpi k4"><span>Em preparo agora</span><b>2 pedidos</b></div>
+              </div>
+              <div class="stitle">Últimos pedidos — Food</div>
+              <div class="card">
+                <table>
+                  <thead><tr><th>Pedido</th><th>Itens</th><th>Valor</th><th>Status</th></tr></thead>
+                  <tbody>
+                    <tr><td>#403</td><td>1x Pizza Frango c/ Catupiry</td><td>R$ 44,90</td><td><span class="badge b-wait">Em preparo</span></td></tr>
+                    <tr><td>#400</td><td>1x Pizza Marguerita + Refri</td><td>R$ 52,90</td><td><span class="badge b-ok">Pronto</span></td></tr>
+                    <tr><td>#398</td><td>3x Pizza Portuguesa</td><td>R$ 134,70</td><td><span class="badge b-ok">Saiu p/ entrega</span></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div id="dashFinanceiro" style="display:none;">
+              <div class="grid4">
+                <div class="kpi k1"><span>Contas a receber</span><b>R$ 12.450,00</b></div>
+                <div class="kpi k2"><span>Contas a pagar</span><b>R$ 6.700,00</b></div>
+                <div class="kpi k3"><span>Saldo em caixa</span><b>R$ 5.750,00</b></div>
+                <div class="kpi k4"><span>Fluxo do mês</span><b>Positivo</b></div>
+              </div>
+              <div class="stitle">Próximos vencimentos</div>
+              <div class="card">
+                <table>
+                  <thead><tr><th>Descrição</th><th>Tipo</th><th>Valor</th><th>Vencimento</th></tr></thead>
+                  <tbody>
+                    <tr><td>Aluguel</td><td>Despesa</td><td>R$ 4.000,00</td><td>05/10</td></tr>
+                    <tr><td>Fornecedor de bebidas</td><td>Despesa</td><td>R$ 2.500,00</td><td>08/10</td></tr>
+                    <tr><td>Cliente a prazo — Loja Centro</td><td>Receita</td><td>R$ 970,00</td><td>10/10</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div id="gestaoDados" style="display:none;">
+              <div class="card dados-card">
+                <h3>Dados guardados neste navegador</h3>
+                <p class="dv-ajuda">O MGA guarda os dados no armazenamento local deste navegador. Eles não aparecem em outro computador ou navegador.</p>
+                <div class="hv-resumo dados-resumo" id="dadosResumo"></div>
+              </div>
+
+              <div class="card dados-card">
+                <h3>Backup</h3>
+                <p class="dv-ajuda">Faça um backup antes de limpar. O arquivo pode ser importado depois para restaurar tudo como estava.</p>
+                <div class="dados-acoes">
+                  <button type="button" class="btn" id="btnExportarBackup">⬇ Exportar backup (.json)</button>
+                  <label class="btn btn-ghost dados-importar">⬆ Importar backup<input type="file" id="inputImportarBackup" accept=".json,application/json" hidden></label>
+                </div>
+              </div>
+
+              <div class="card dados-card dados-perigo">
+                <h3>Limpar todos os dados</h3>
+                <p class="dv-ajuda">Apaga vendas, caixa e fechamentos, produtos, estoque e movimentações, clientes, vales-troca, auditoria e os cadastros de Food, Financeiro e Help Desk. <b>Não pode ser desfeito</b> sem um backup. O tema e o usuário logado são mantidos.</p>
+                <button type="button" class="btn btn-perigo" id="btnAbrirLimparDados">Limpar todos os dados…</button>
+              </div>
+            </div>
+
+            <div id="gestaoAuditoria" style="display:none;">
+              <form class="card hv-filtros au-filtros" id="formFiltroAuditoria" autocomplete="off">
+                <div class="field hv-busca"><label for="auBusca">Buscar</label><input type="text" id="auBusca" placeholder="Venda #1037, produto, cliente, descrição..."></div>
+                <div class="field"><label for="auDataIni">Data inicial</label><input type="date" id="auDataIni"></div>
+                <div class="field"><label for="auDataFim">Data final</label><input type="date" id="auDataFim"></div>
+                <div class="field"><label for="auUsuario">Usuário</label><select id="auUsuario"><option value="">Todos</option></select></div>
+                <div class="field"><label for="auModulo">Módulo</label><select id="auModulo"><option value="">Todos</option></select></div>
+                <div class="hv-botoes">
+                  <button type="submit" class="btn">Filtrar</button>
+                  <button type="button" class="btn btn-ghost" id="btnLimparAuditoria">Limpar</button>
+                </div>
+              </form>
+              <div class="card table-scroll">
+                <div class="hv-tabela-topo">
+                  <span id="auContagem"></span>
+                  <button type="button" class="link-btn hv-exportar" id="btnExportarAuditoria">⬇ Exportar CSV</button>
+                </div>
+                <div class="au-lista" id="auLista"></div>
+              </div>
+              <p class="au-nota" id="auNota"></p>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" id="panel-pdv">
+          <div class="pdv-topbar">
+            <div class="caixa-status" id="caixaStatus"><span class="dot-status"></span>Caixa fechado</div>
+            <div class="pdv-topbar-acoes">
+              <form class="localizar-venda" id="formLocalizarVenda" autocomplete="off">
+                <input type="text" id="localizarVendaNum" inputmode="numeric" placeholder="Venda nº" aria-label="Número da venda">
+                <button type="submit" class="btn btn-ghost">Localizar venda</button>
+              </form>
+              <button class="btn" id="btnTopoCaixa" style="padding:8px 16px;font-size:13px;"></button>
+            </div>
+          </div>
+
+          <!-- Oculto: a navegação é pelo menu lateral; estes botões só alternam as telas internamente -->
+          <div class="subtabs subtabs-ocultas" id="subtabsPDV" aria-hidden="true">
+            <button class="stab active" data-tab="vender">Vender</button>
+            <button class="stab" data-tab="caixa">Caixa</button>
+            <button class="stab" data-tab="vendas">Vendas</button>
+            <button class="stab" data-tab="cadastro">Cadastro</button>
+            <button class="stab" data-tab="clientes">Clientes</button>
+            <button class="stab" data-tab="estoque">Entrada Estoque</button>
+            <button class="stab" data-tab="saida">Saída Estoque</button>
+            <button class="stab" data-tab="movimentacoes">Movimentações</button>
+            <button class="stab" data-tab="dashboard">Dashboard</button>
+            <button class="stab" data-tab="inventario">Inventário</button>
+            <button class="stab" data-tab="clihist">Histórico de clientes</button>
+            <button class="stab" data-tab="relatorio">Relatório</button>
+          </div>
+
+          <div id="pdvVender">
+            <div class="pdv-grid">
+              <div class="card pdv-catalogo">
+                <div class="pdv-busca">
+                  <label class="barcode-field" title="Atalho: F2">
+                    <span class="barcode-ic" aria-hidden="true">▥</span>
+                    <input type="text" id="codigoBarrasPDV" inputmode="numeric" autocomplete="off" placeholder="Código de barras + Enter" title="Bipe ou digite o código. Para quantidade use 3*código. Atalho: F2">
+                  </label>
+                  <input type="text" id="buscaPDV" class="search" placeholder="Buscar produto por nome...">
+                </div>
+                <div class="pdv-items" id="listaProdutosPDV"></div>
+              </div>
+
+              <div class="card pdv-carrinho">
+                <div class="cart-head">
+                  <h3>Venda atual</h3>
+                  <button type="button" class="link-btn" id="btnLimparVenda">Limpar venda</button>
+                </div>
+
+                <div class="venda-info">
+                  <div class="field cliente-field"><label for="vendaCliente">Cliente</label>
+                    <div class="combo" id="comboCliente">
+                      <input type="text" id="vendaCliente" autocomplete="off" placeholder="Consumidor final" role="combobox" aria-expanded="false" aria-controls="comboClienteLista" aria-autocomplete="list">
+                      <button type="button" class="combo-seta" id="comboClienteSeta" tabindex="-1" aria-label="Abrir lista de clientes">▾</button>
+                      <ul class="combo-lista" id="comboClienteLista" role="listbox"></ul>
+                    </div>
+                    <small class="cliente-info" id="vendaClienteInfo"></small>
+                  </div>
+                  <div class="field"><label for="vendaVendedor">Vendedor</label><input type="text" id="vendaVendedor" list="listaVendedoresPDV" placeholder="Nome do vendedor"></div>
+                  <datalist id="listaVendedoresPDV"></datalist>
+                </div>
+
+                <div id="carrinhoVazio" class="empty-msg">Nenhum item adicionado.</div>
+                <div id="carrinhoItens"></div>
+
+                <div class="cart-totais">
+                  <div class="tot-line"><span>Subtotal</span><b id="pdvSubtotal">R$ 0,00</b></div>
+                  <div class="tot-line" id="linhaDescItens" style="display:none;"><span>Desconto nos itens</span><b id="pdvDescItens">− R$ 0,00</b></div>
+                  <div class="desconto-row">
+                    <label for="descontoVenda">Desconto na venda <small>(R$ ou %)</small></label>
+                    <input type="text" id="descontoVenda" placeholder="0,00 ou 10%">
+                  </div>
+                  <div class="pdv-total">
+                    <span>TOTAL</span>
+                    <b id="pdvTotal">R$ 0,00</b>
+                  </div>
+                </div>
+
+                <div class="field venda-obs">
+                  <label for="vendaObs">Observação</label>
+                  <textarea id="vendaObs" rows="2" placeholder="Ex: embalar para presente, troca em até 7 dias..."></textarea>
+                </div>
+
+                <div class="pay-add">
+                  <select id="formaPagamentoSel"><option>PIX</option><option>Débito</option><option>Crédito</option><option>Dinheiro</option><option>Vale-troca</option><option>A prazo</option></select>
+                  <input type="text" id="valorPagamentoInput" inputmode="decimal" placeholder="Valor (padrão: restante)">
+                  <button class="btn btn-ghost" id="btnAddPagamento">+ Add</button>
+                </div>
+                <div class="troco-box" id="trocoBox" style="display:none;">
+                  <div class="troco-line"><span>Total a pagar</span><b id="trocoTotal">R$ 0,00</b></div>
+                  <div class="troco-line"><span>Cliente pagou</span><b id="trocoRecebido">R$ 0,00</b></div>
+                  <div class="troco-line troco-destaque" id="trocoLinha"><span id="trocoRotulo">Troco</span><b id="trocoValor">R$ 0,00</b></div>
+                  <div class="troco-atalhos" id="trocoAtalhos"></div>
+                </div>
+                <div id="pagamentosLista"></div>
+                <div class="pdv-restante" id="boxRestante"><span id="restanteRotulo">Restante a pagar</span><b id="restantePagar">R$ 0,00</b></div>
+
+                <button class="btn" id="btnFinalizar" style="width:100%;justify-content:center;margin-top:12px;" disabled>Finalizar venda</button>
+                <small class="finalizar-dica" id="finalizarDica" role="status" style="display:none;"></small>
+                <div class="toast" id="toastPDV" style="margin-top:12px;"></div>
+              </div>
+            </div>
+          </div>
+
+          <div id="pdvCaixa" style="display:none;">
+            <div id="caixaFechadoView">
+              <div class="card caixa-abertura-card">
+                <h3>Abrir caixa</h3>
+                <div class="field caixa-field"><label>Valor inicial (troco)</label><input type="text" id="valorInicialCaixa" placeholder="Ex: 100,00"></div>
+                <button class="btn" id="btnAbrirCaixa">Abrir caixa</button>
+              </div>
+              <div class="stitle">Histórico de fechamentos</div>
+              <div class="card table-scroll">
+                <table>
+                  <thead><tr><th>Caixa</th><th>Abertura</th><th>Fechamento</th><th>Operador</th><th>Total vendido</th><th>Diferença</th><th>Relatório</th></tr></thead>
+                  <tbody id="tabelaHistoricoCaixas"></tbody>
+                </table>
+              </div>
+            </div>
+            <div id="caixaAbertoView" style="display:none;">
+              <div class="grid4">
+                <div class="kpi k1"><span>Abertura</span><b id="kpiValorInicial">R$ 0,00</b></div>
+                <div class="kpi k2"><span>Total vendido</span><b id="kpiTotalVendido">R$ 0,00</b></div>
+                <div class="kpi k3"><span>Nº de vendas</span><b id="kpiNumVendas">0</b></div>
+                <div class="kpi k4"><span>Dinheiro esperado</span><b id="kpiSaldoEsperado">R$ 0,00</b></div>
+              </div>
+              <div style="display:flex;gap:10px;margin:16px 0;flex-wrap:wrap;">
+                <button class="btn btn-ghost" id="btnSangria">− Sangria (retirada)</button>
+                <button class="btn btn-ghost" id="btnSuprimento">+ Suprimento (entrada)</button>
+                <button class="btn" id="btnFecharCaixa" style="margin-left:auto;">Fechar caixa</button>
+              </div>
+              <div class="caixa-grid">
+                <div>
+                  <div class="stitle">Resumo do caixa <span class="stitle-sub" id="caixaAberturaInfo"></span></div>
+                  <div class="card resumo-caixa" id="resumoCaixa"></div>
+                </div>
+                <div>
+                  <div class="stitle">Sangrias e suprimentos</div>
+                  <div class="card table-scroll">
+                    <table>
+                      <thead><tr><th>Hora</th><th>Tipo</th><th>Motivo</th><th>Valor</th></tr></thead>
+                      <tbody id="tabelaMovCaixa"></tbody>
+                    </table>
+                  </div>
+
+                  <div class="stitle">Fechar caixa</div>
+                  <div class="card fechar-caixa-card" id="fecharCaixaCard">
+                    <div class="field">
+                      <label for="valorContadoCaixa">Valor contado na gaveta (dinheiro)</label>
+                      <input type="text" id="valorContadoCaixa" inputmode="decimal" autocomplete="off" placeholder="0,00">
+                    </div>
+                    <div class="fc-linhas">
+                      <div class="rc-line"><span>Dinheiro esperado</span><b id="fcEsperado">R$ 0,00</b></div>
+                      <div class="rc-line"><span>Valor contado</span><b id="fcContado">—</b></div>
+                      <div class="fc-diferenca" id="fcDiferenca">Conte o dinheiro da gaveta e informe o valor acima.</div>
+                    </div>
+                    <button type="button" class="btn fc-btn" id="btnConfirmarFechamento" disabled>Fechar caixa</button>
+                  </div>
+                </div>
+              </div>
+              <div class="stitle">Vendas deste caixa</div>
+              <div class="card"><table><thead><tr><th>Venda</th><th>Itens vendidos</th><th>Pagamento</th><th>Total</th><th>Comprovante</th></tr></thead><tbody id="tabelaMovimentos"></tbody></table></div>
+            </div>
+            <div class="card fechamento-card" id="fechamentoResumo" style="display:none;">
+              <h3><span class="fc-ok-ic" aria-hidden="true">✓</span> Caixa fechado</h3>
+              <div id="fechamentoConteudo"></div>
+              <div class="fc-acoes">
+                <button type="button" class="btn" id="btnVerRelatorioCaixa">Ver relatório</button>
+                <button type="button" class="btn btn-ghost" id="btnImprimirRelatorioCaixa">Imprimir relatório</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="pdvVendas" style="display:none;">
+            <form class="card hv-filtros" id="formFiltroVendas" autocomplete="off">
+              <div class="field hv-busca"><label for="hvBusca">Buscar venda</label><input type="text" id="hvBusca" placeholder="Nº da venda, cliente, CPF ou produto..."></div>
+              <div class="field"><label for="hvDataIni">Data inicial</label><input type="date" id="hvDataIni"></div>
+              <div class="field"><label for="hvDataFim">Data final</label><input type="date" id="hvDataFim"></div>
+              <div class="field"><label for="hvForma">Forma de pagamento</label><select id="hvForma"><option value="">Todas</option></select></div>
+              <div class="field"><label for="hvOperador">Operador</label><select id="hvOperador"><option value="">Todos</option></select></div>
+              <div class="field"><label for="hvStatus">Status</label>
+                <select id="hvStatus">
+                  <option value="">Todos</option>
+                  <option value="pago">Pago</option>
+                  <option value="pendente">Pendente</option>
+                  <option value="cancelado">Cancelado</option>
+                  <option value="devolvido">Devolvido (total ou parcial)</option>
+                </select>
+              </div>
+              <div class="hv-botoes">
+                <button type="submit" class="btn">Filtrar</button>
+                <button type="button" class="btn btn-ghost" id="btnLimparFiltroVendas">Limpar</button>
+              </div>
+            </form>
+            <div class="hv-resumo" id="hvResumo"></div>
+            <div class="card table-scroll">
+              <div class="hv-tabela-topo">
+                <span id="hvContagem"></span>
+                <button type="button" class="link-btn hv-exportar" id="btnExportarVendas">⬇ Exportar CSV</button>
+              </div>
+              <table>
+                <thead><tr><th>Venda</th><th>Cliente</th><th>Itens</th><th>Pagamento</th><th>Operador</th><th>Status</th><th>Total</th><th></th></tr></thead>
+                <tbody id="tabelaHistoricoVendas"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="pdvInventario" style="display:none;">
+            <div class="card inv-topo">
+              <div>
+                <h3>Inventário (contagem de estoque)</h3>
+                <p class="dv-ajuda">Conte os produtos na prateleira e digite a quantidade encontrada. Só os itens contados e com diferença geram ajuste. A contagem fica salva enquanto você trabalha.</p>
+              </div>
+              <div class="inv-resumo" id="invResumo"></div>
+            </div>
+            <div class="cad-toolbar prod-toolbar">
+              <input type="text" class="search" id="invBusca" placeholder="Buscar produto por nome, código ou código de barras...">
+              <label class="entrada-check inv-check"><input type="checkbox" id="invSoDiferenca"> Mostrar só itens com diferença</label>
+              <button type="button" class="btn btn-ghost" id="btnInvLimpar">Limpar contagem</button>
+            </div>
+            <div class="card table-scroll">
+              <table>
+                <thead><tr><th>Produto</th><th>Código</th><th>No sistema</th><th>Contado</th><th>Diferença</th><th>Valor (custo)</th></tr></thead>
+                <tbody id="tabelaInventario"></tbody>
+              </table>
+            </div>
+            <div class="card inv-aplicar">
+              <div class="field"><label for="invMotivo">Motivo do ajuste</label><input type="text" id="invMotivo" placeholder="Ex: Inventário mensal de setembro"></div>
+              <button type="button" class="btn" id="btnInvAplicar">Aplicar ajustes</button>
+            </div>
+            <div class="toast" id="toastInventario"></div>
+          </div>
+
+          <div id="pdvClientesHistorico" style="display:none;">
+            <div class="card ch-topo">
+              <div class="field ch-busca">
+                <label for="chCliente">Cliente</label>
+                <select id="chCliente"><option value="">Selecione um cliente...</option></select>
+              </div>
+              <p class="dv-ajuda" id="chAjuda">Escolha um cliente para ver o histórico completo de compras.</p>
+            </div>
+            <div class="card" id="chConteudo"></div>
+          </div>
+
+          <div id="pdvRelatorio" style="display:none;">
+            <form class="card rel-filtros" id="formRelatorio" autocomplete="off">
+              <div class="rel-titulo"><h3 id="relTitulo">Relatório</h3><p class="dv-ajuda" id="relDescricao"></p></div>
+              <div class="field"><label for="relDataIni">Data inicial</label><input type="date" id="relDataIni"></div>
+              <div class="field"><label for="relDataFim">Data final</label><input type="date" id="relDataFim"></div>
+              <div class="hv-botoes">
+                <button type="submit" class="btn">Gerar</button>
+                <button type="button" class="btn btn-ghost" id="btnRelExportar">⬇ CSV</button>
+                <button type="button" class="btn btn-ghost" id="btnRelImprimir">Imprimir</button>
+              </div>
+            </form>
+            <div id="relConteudo"></div>
+          </div>
+
+          <div id="pdvClientes" style="display:none;">
+            <div class="grid4">
+              <div class="kpi k1"><span>Clientes cadastrados</span><b id="kpiClientesTotal">0</b></div>
+              <div class="kpi k2"><span>Compraram nos últimos 30 dias</span><b id="kpiClientesAtivos">0</b></div>
+              <div class="kpi k3"><span>Vendas identificadas</span><b id="kpiClientesVendasPct">0%</b></div>
+              <div class="kpi k4"><span>Melhor cliente</span><b id="kpiClientesTop">—</b></div>
+            </div>
+            <div class="cad-toolbar prod-toolbar">
+              <input type="text" class="search" id="buscaClientes" placeholder="Buscar por nome, CPF/CNPJ, telefone ou e-mail...">
+              <select id="ordemClientes">
+                <option value="nome">Ordenar: nome</option>
+                <option value="total">Ordenar: total comprado</option>
+                <option value="ultima">Ordenar: última compra</option>
+                <option value="cadastro">Ordenar: data de cadastro</option>
+              </select>
+              <button type="button" class="btn" id="btnNovoCliente">+ Novo cliente</button>
+            </div>
+            <div class="toast" id="toastCliente"></div>
+
+            <div class="card prod-form cli-form" id="formCliente" style="display:none;">
+              <h3 id="formClienteTitulo">Novo cliente</h3>
+              <div class="prod-grid">
+                <div class="field span-2"><label for="cliNome">Nome *</label><input type="text" id="cliNome" placeholder="Nome completo ou razão social"></div>
+                <div class="field"><label for="cliDoc">CPF/CNPJ</label><input type="text" id="cliDoc" inputmode="numeric" placeholder="000.000.000-00"></div>
+                <div class="field"><label for="cliTelefone">Telefone</label><input type="text" id="cliTelefone" inputmode="tel" placeholder="(00) 00000-0000"></div>
+                <div class="field span-2"><label for="cliEmail">E-mail</label><input type="email" id="cliEmail" placeholder="cliente@email.com"></div>
+                <div class="field span-2"><label for="cliEndereco">Endereço</label><input type="text" id="cliEndereco" placeholder="Rua, número, bairro, cidade/UF, CEP"></div>
+                <div class="field span-2"><label for="cliObs">Observação</label><input type="text" id="cliObs" placeholder="Preferências, tamanho, aniversário..."></div>
+                <div class="field"><label for="cliLimite">Limite de crédito (R$)</label><input type="text" id="cliLimite" inputmode="decimal" placeholder="Sem limite"></div>
+                <div class="field"><label>Data de cadastro</label><input type="text" id="cliDataCadastro" disabled></div>
+                <p class="prod-dica span-2 cli-limite-dica">O limite vale para vendas <b>a prazo</b>: a soma do que o cliente deve não pode passar dele. Em branco = sem limite.</p>
+              </div>
+              <div class="prod-erro" id="cliErro"></div>
+              <div class="cf-acoes">
+                <button type="button" class="btn btn-ghost" id="btnCancelarCliente">Cancelar</button>
+                <button type="button" class="btn" id="btnSalvarCliente">Salvar cliente</button>
+              </div>
+            </div>
+
+            <div class="card table-scroll">
+              <table>
+                <thead><tr><th>Cliente</th><th>CPF/CNPJ</th><th>Telefone / E-mail</th><th>Endereço</th><th>Total comprado</th><th>Compras</th><th>Ticket médio</th><th>Última compra</th><th>Crédito</th><th></th></tr></thead>
+                <tbody id="tabelaClientes"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="pdvCadastro" style="display:none;">
+            <div class="cad-toolbar prod-toolbar">
+              <input type="text" class="search" id="buscaProdutos" placeholder="Buscar por nome, código, barras, marca...">
+              <select id="filtroStatusProdutos">
+                <option value="">Todos os status</option>
+                <option value="ativo">Ativos</option>
+                <option value="inativo">Inativos</option>
+              </select>
+              <button type="button" class="btn" id="btnNovoProduto">+ Novo produto</button>
+            </div>
+            <div class="toast" id="toastProduto"></div>
+
+            <div class="card prod-form" id="formProduto" style="display:none;">
+              <h3 id="formProdutoTitulo">Novo produto</h3>
+              <div class="prod-form-body">
+                <div class="prod-foto">
+                  <div class="prod-foto-preview" id="prodFotoPreview"><span>Sem foto</span></div>
+                  <label class="btn btn-ghost prod-foto-btn">Escolher foto<input type="file" id="prodFoto" accept="image/*" hidden></label>
+                  <button type="button" class="link-btn" id="btnRemoverFoto" style="display:none;">Remover foto</button>
+                </div>
+
+                <div class="prod-secoes">
+                  <fieldset>
+                    <legend>Produto</legend>
+                    <div class="prod-grid">
+                      <div class="field span-2"><label for="prodNome">Nome *</label><input type="text" id="prodNome" placeholder="Ex: Camisa Polo"></div>
+                      <div class="field"><label for="prodCodigo">Código interno *</label><input type="text" id="prodCodigo" placeholder="007"></div>
+                      <div class="field"><label for="prodBarras">Código de barras</label><input type="text" id="prodBarras" inputmode="numeric" placeholder="7891000001010"></div>
+                      <div class="field"><label for="prodCategoria">Categoria</label><input type="text" id="prodCategoria" list="listaCategorias" placeholder="Vestuário, Bebidas..."></div>
+                      <div class="field"><label for="prodMarca">Marca</label><input type="text" id="prodMarca" list="listaMarcas" placeholder="Ex: Nike"></div>
+                      <div class="field"><label for="prodUnidade">Unidade</label>
+                        <select id="prodUnidade">
+                          <option value="UN">UN — Unidade</option><option value="PC">PC — Peça</option><option value="PAR">PAR — Par</option>
+                          <option value="CX">CX — Caixa</option><option value="PCT">PCT — Pacote</option><option value="KG">KG — Quilo</option>
+                          <option value="G">G — Grama</option><option value="L">L — Litro</option><option value="ML">ML — Mililitro</option><option value="M">M — Metro</option>
+                        </select>
+                      </div>
+                      <div class="field"><label for="prodFornecedor">Fornecedor</label><input type="text" id="prodFornecedor" list="listaFornecedores" placeholder="Fornecedor principal"></div>
+                    </div>
+                  </fieldset>
+
+                  <fieldset>
+                    <legend>Preços</legend>
+                    <div class="prod-grid">
+                      <div class="field"><label for="prodCusto">Preço de custo (R$)</label><input type="text" id="prodCusto" inputmode="decimal" placeholder="0,00"></div>
+                      <div class="field"><label for="prodPreco">Preço de venda (R$) *</label><input type="text" id="prodPreco" inputmode="decimal" placeholder="0,00"></div>
+                      <div class="field"><label for="prodMargem">Margem (%)</label><input type="text" id="prodMargem" inputmode="decimal" placeholder="0"></div>
+                      <div class="prod-lucro" id="prodLucro"></div>
+                    </div>
+                  </fieldset>
+
+                  <fieldset>
+                    <legend>Estoque</legend>
+                    <div class="prod-grid">
+                      <div class="field"><label for="prodEstoque" id="prodEstoqueLabel">Estoque atual</label><input type="number" id="prodEstoque" min="0" step="1" placeholder="0"></div>
+                      <div class="field"><label for="prodMinimo">Estoque mínimo</label><input type="number" id="prodMinimo" min="0" step="1" placeholder="0"></div>
+                      <div class="field"><label for="prodMaximo">Estoque máximo</label><input type="number" id="prodMaximo" min="0" step="1" placeholder="Opcional"></div>
+                      <div class="field"><label for="prodStatus">Status</label>
+                        <select id="prodStatus"><option value="ativo">Ativo</option><option value="inativo">Inativo</option></select>
+                      </div>
+                    </div>
+                    <p class="prod-dica" id="prodEstoqueDica"></p>
+                  </fieldset>
+
+                  <div class="field"><label for="prodObs">Observação</label><textarea id="prodObs" rows="2" placeholder="Informações adicionais do produto"></textarea></div>
+                </div>
+              </div>
+              <div class="prod-erro" id="prodErro"></div>
+              <div class="cf-acoes">
+                <button type="button" class="btn btn-ghost" id="btnCancelarProduto">Cancelar</button>
+                <button type="button" class="btn" id="btnSalvarProduto">Salvar produto</button>
+              </div>
+              <datalist id="listaCategorias"></datalist>
+              <datalist id="listaMarcas"></datalist>
+            </div>
+
+            <div class="card table-scroll">
+              <table class="prod-tabela">
+                <thead><tr><th></th><th>Produto</th><th>Códigos</th><th>Categoria</th><th>Custo</th><th>Venda</th><th>Margem</th><th>Estoque</th><th>Status</th><th></th></tr></thead>
+                <tbody id="tabelaProdutos"></tbody>
+              </table>
+            </div>
+          </div>
+          <div id="pdvEstoque" style="display:none;">
+            <div class="estoque-toolbar">
+              <button type="button" class="btn" id="btnNovaEntrada">+ Nova entrada</button>
+              <button type="button" class="btn btn-ghost" id="btnSaidaAjuste">Registrar saída / ajuste →</button>
+            </div>
+            <div class="toast" id="toastMovEstoque"></div>
+
+            <div class="card entrada-card" id="entradaCard" style="display:none;">
+              <h3>Entrada de estoque</h3>
+              <div class="entrada-grid">
+                <div class="field"><label for="entFornecedor">Fornecedor</label><input type="text" id="entFornecedor" list="listaFornecedores" autocomplete="off" placeholder="Nome do fornecedor"></div>
+                <div class="field"><label for="entProduto">Produto</label><select id="entProduto"></select></div>
+                <div class="field"><label for="entQtd">Quantidade</label><input type="number" id="entQtd" min="1" step="1" placeholder="0"></div>
+                <div class="field"><label for="entCusto">Custo unitário (R$)</label><input type="text" id="entCusto" inputmode="decimal" placeholder="0,00"></div>
+                <div class="field"><label for="entData">Data</label><input type="date" id="entData"></div>
+                <div class="field entrada-obs"><label for="entObs">Observação</label><input type="text" id="entObs" placeholder="Ex: NF 1234, compra fornecedor X"></div>
+                <datalist id="listaFornecedores"></datalist>
+              </div>
+              <div class="entrada-resumo" id="entResumo"></div>
+              <label class="entrada-check"><input type="checkbox" id="entAtualizarCusto" checked> Atualizar o custo do produto no cadastro com este valor</label>
+              <div class="cf-acoes">
+                <button type="button" class="btn btn-ghost" id="btnCancelarEntrada">Cancelar</button>
+                <button type="button" class="btn" id="btnRegistrarEntrada">Registrar entrada</button>
+              </div>
+            </div>
+
+            <div class="card estoque-baixo" id="painelEstoqueBaixo" style="display:none;">
+              <div class="eb-head">
+                <div>
+                  <h3><span aria-hidden="true">⚠️</span> Estoque baixo</h3>
+                  <p id="ebResumo"></p>
+                </div>
+                <button type="button" class="btn eb-btn" id="btnVerReposicao">Ver produtos para reposição</button>
+              </div>
+              <ul class="eb-lista" id="ebLista"></ul>
+            </div>
+
+            <div class="grid4">
+              <div class="kpi k1"><span>Produtos cadastrados</span><b id="peTotalProdutos">0</b></div>
+              <div class="kpi k2"><span>Total em unidades</span><b id="peTotalUnidades">0</b></div>
+              <div class="kpi k3"><span>Maior estoque</span><b id="peMaiorEstoque">—</b></div>
+              <div class="kpi k4"><span>Menor estoque</span><b id="peMenorEstoque">—</b></div>
+            </div>
+
+            <div class="stitle">De onde vem o estoque</div>
+            <div class="flow" id="fluxoEstoqueEntrada"></div>
+
+            <div class="stitle">Estoque inicial <span class="stitle-sub" id="estoqueInicialResumo"></span></div>
+            <div class="card table-scroll estoque-inicial-card">
+              <p class="ei-ajuda">Estoque inicial é o saldo que <b>já existia</b> quando o controle de estoque começou (ou quando o produto foi cadastrado). Não é compra: compras e reposições aparecem em <b>Histórico de entradas</b>, abaixo.</p>
+              <details class="ei-detalhes">
+                <summary>Ver estoque inicial por produto</summary>
+                <table>
+                  <thead><tr><th>Produto</th><th>Quantidade</th><th>Registrado em</th><th>Origem</th><th>Usuário</th></tr></thead>
+                  <tbody id="tabelaEstoqueInicial"></tbody>
+                </table>
+              </details>
+            </div>
+
+            <div class="stitle">Histórico de entradas <span class="stitle-sub">compras e reposições</span></div>
+            <div class="card table-scroll" style="margin-bottom:20px;">
+              <table>
+                <thead><tr><th>Data</th><th>Fornecedor</th><th>Produto</th><th>Qtd.</th><th>Custo unit.</th><th>Total</th><th>Observação</th><th>Usuário</th></tr></thead>
+                <tbody id="tabelaEntradasEstoque"></tbody>
+              </table>
+            </div>
+            <div class="stitle">Ranking de estoque (maior → menor)</div>
+            <div class="card" id="rankingEstoquePDV" style="margin-bottom:20px;"></div>
+            <div class="card table-scroll" id="cardTabelaEstoque">
+              <input type="text" id="buscaEstoquePDV" class="search" style="width:100%;margin-bottom:14px;" placeholder="Buscar produto por nome ou categoria...">
+              <div class="filtro-reposicao" id="filtroReposicao" style="display:none;">
+                <span>Mostrando apenas produtos para reposição</span>
+                <button type="button" class="link-btn" id="btnMostrarTodosEstoque">Mostrar todos</button>
+              </div>
+              <table>
+                <thead><tr><th>Produto</th><th>Categoria</th><th>Estoque</th><th>Mínimo</th><th>Situação</th><th></th></tr></thead>
+                <tbody id="tabelaEstoquePDV"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="pdvSaidaEstoque" style="display:none;">
+            <div class="card mov-form-card" id="saidaAjusteCard">
+              <h3>Saída ou ajuste de inventário</h3>
+              <div class="mov-form">
+                <div class="field"><label for="movTipo">Tipo</label>
+                  <select id="movTipo">
+                    <option value="Saída">Saída (perda, avaria, consumo)</option>
+                    <option value="Ajuste">Ajuste de inventário (contagem)</option>
+                  </select>
+                </div>
+                <div class="field"><label for="movProduto">Produto</label><select id="movProduto"></select></div>
+                <div class="field"><label for="movQtd" id="movQtdLabel">Quantidade</label><input type="number" id="movQtd" min="0" step="1" placeholder="0"></div>
+                <div class="field"><label for="movMotivo">Motivo</label><input type="text" id="movMotivo" placeholder="Ex: Perda / avaria"></div>
+                <button class="btn" id="btnRegistrarMov">Registrar</button>
+              </div>
+              <p class="mov-dica" id="movDica"></p>
+              <p class="mov-dica">Para conferir o estoque inteiro de uma vez, use <button type="button" class="link-btn link-inline" data-ir="estoque/inventario">Estoque › Inventário</button>.</p>
+            </div>
+            <div class="grid4">
+              <div class="kpi k1"><span>Saídas hoje</span><b id="psUnidadesHoje">0</b></div>
+              <div class="kpi k2"><span>Produtos vendidos hoje</span><b id="psProdutosHoje">0</b></div>
+              <div class="kpi k3"><span>Total de saídas registradas</span><b id="psTotalRegistros">0</b></div>
+              <div class="kpi k4"><span>Mais vendido hoje</span><b id="psMaisVendidoHoje">—</b></div>
+            </div>
+            <div class="stitle">Produtos vendidos (saída de estoque)</div>
+            <div class="card">
+              <table>
+                <thead><tr><th>Data/Hora</th><th>Produto</th><th>Tipo</th><th>Qtd.</th><th>Origem</th></tr></thead>
+                <tbody id="tabelaSaidaEstoque"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="pdvMovimentacoes" style="display:none;">
+            <div class="mov-filtros">
+              <select id="filtroMovProduto"><option value="">Todos os produtos</option></select>
+              <select id="filtroMovTipo">
+                <option value="">Todos os tipos</option>
+                <option value="Inicial">Estoque inicial</option>
+                <option value="Entrada">Entrada</option>
+                <option value="Venda">Venda</option>
+                <option value="Devolução">Devolução / cancelamento</option>
+                <option value="Saída">Saída</option>
+                <option value="Ajuste">Ajuste</option>
+              </select>
+            </div>
+            <div class="stitle">De onde vem o estoque</div>
+            <div class="flow" id="fluxoEstoque"></div>
+            <div class="flow-alert" id="fluxoAviso" style="display:none;"></div>
+            <div class="stitle">Conferência por produto</div>
+            <div class="card table-scroll">
+              <table>
+                <thead><tr><th>Produto</th><th>Inicial</th><th>Entradas</th><th>Vendas</th><th>Devoluções</th><th>Saídas</th><th>Ajustes</th><th>Atual</th><th>Conferência</th></tr></thead>
+                <tbody id="tabelaConferenciaEstoque"></tbody>
+              </table>
+            </div>
+            <div class="stitle">Extrato de movimentações</div>
+            <div class="card table-scroll">
+              <table>
+                <thead><tr><th>Data</th><th>Produto</th><th>Tipo</th><th>Quantidade</th><th>Saldo</th><th>Motivo</th><th>Usuário</th></tr></thead>
+                <tbody id="tabelaMovEstoque"></tbody>
+              </table>
+            </div>
+          </div>
+          <div id="pdvDashboard" style="display:none;">
+            <div class="dash-head">
+              <div>
+                <h2 class="dash-titulo">Olá, <span id="dashUsuario"></span></h2>
+                <p class="dash-sub" id="dashData"></p>
+              </div>
+              <div class="dash-head-acoes">
+                <div class="seg" id="dashPeriodo" role="group" aria-label="Período">
+                  <button type="button" data-p="hoje" class="active">Hoje</button>
+                  <button type="button" data-p="7">7 dias</button>
+                  <button type="button" data-p="30">30 dias</button>
+                  <button type="button" data-p="mes">Este mês</button>
+                </div>
+                <button type="button" class="btn" id="btnIrPDV">Nova venda →</button>
+              </div>
+            </div>
+
+            <div class="dash-kpis">
+              <div class="dk dk-hero"><span class="dk-label" id="dkVendasLabel">Vendas hoje</span><b class="dk-valor" id="dkVendas">R$ 0,00</b><span class="dk-sub" id="dkVendasDelta"></span></div>
+              <div class="dk"><span class="dk-label">Vendas</span><b class="dk-valor" id="dkNumVendas">0</b><span class="dk-sub">vendas finalizadas</span></div>
+              <div class="dk"><span class="dk-label">Ticket médio por venda</span><b class="dk-valor" id="dkTicket">R$ 0,00</b><span class="dk-sub" id="dkTicketSub">valor médio gasto em cada venda</span></div>
+              <div class="dk"><span class="dk-label">Produtos vendidos</span><b class="dk-valor" id="dkProdutos">0</b><span class="dk-sub" id="dkProdutosSub">unidades</span></div>
+              <button type="button" class="dk dk-alerta" id="dkEstoqueBaixoBox"><span class="dk-label">Produtos com estoque baixo</span><b class="dk-valor" id="dkEstoqueBaixo">0</b><span class="dk-sub" id="dkEstoqueBaixoSub">ver reposição →</span></button>
+              <div class="dk dk-lucro">
+                <span class="dk-label">Lucro bruto estimado
+                  <button type="button" class="dk-info" aria-describedby="dkLucroInfo" aria-label="O que é lucro bruto estimado">i</button>
+                </span>
+                <b class="dk-valor" id="dkLucro">R$ 0,00</b>
+                <span class="dk-sub" id="dkLucroSub"></span>
+                <span class="dk-sub dk-aviso">Antes de despesas e impostos</span>
+                <span class="dk-tooltip" id="dkLucroInfo" role="tooltip">
+                  <b>Lucro bruto = vendas − custo dos produtos vendidos.</b>
+                  <span class="dk-conta" id="dkLucroConta"></span>
+                  Ainda <u>não</u> foram descontados: aluguel, salários, impostos, taxas de cartão/maquininha, despesas e outros custos operacionais.
+                  Por isso não é o lucro líquido do negócio.
+                </span>
+              </div>
+            </div>
+
+            <div class="dash-grid">
+              <div class="card dash-card span-2">
+                <div class="dash-card-head">
+                  <div><h3 id="chartVendasTitulo">Faturamento por hora</h3><p class="dash-card-sub" id="chartVendasSub"></p></div>
+                  <div class="seg seg-sm" id="dashMetrica" role="group" aria-label="Métrica">
+                    <button type="button" data-m="faturamento" class="active">Faturamento</button>
+                    <button type="button" data-m="vendas">Nº de vendas</button>
+                  </div>
+                </div>
+                <div class="viz" id="chartVendas"></div>
+                <details class="viz-dados"><summary>Ver dados em tabela</summary><div id="tabelaChartVendas"></div></details>
+              </div>
+
+              <div class="card dash-card">
+                <div class="dash-card-head"><div><h3>Produtos mais vendidos</h3><p class="dash-card-sub">unidades no período</p></div></div>
+                <div class="viz" id="chartTopProdutos"></div>
+              </div>
+
+              <div class="card dash-card">
+                <div class="dash-card-head"><div><h3>Formas de pagamento</h3><p class="dash-card-sub">valor recebido no período</p></div></div>
+                <div class="viz" id="chartPagamentos"></div>
+              </div>
+
+              <div class="card dash-card span-2">
+                <div class="dash-card-head"><div><h3>Estoque por produto</h3><p class="dash-card-sub">menor cobertura primeiro · a marca indica o estoque mínimo</p></div></div>
+                <div class="viz" id="chartEstoque"></div>
+              </div>
+            </div>
+            <div class="viz-tooltip" id="vizTooltip" role="tooltip"></div>
+          </div>
+
+        </section>
+
+        <div class="modal-overlay conferencia-overlay" id="detalhesVendaOverlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="detalhesVendaTitulo">
+          <div class="conferencia-box historico-box">
+            <h3 id="detalhesVendaTitulo">Venda</h3>
+            <div id="detalhesVendaConteudo"></div>
+            <div class="cf-acoes dv-acoes">
+              <button type="button" class="btn btn-ghost" id="btnFecharDetalhesVenda">Fechar</button>
+              <button type="button" class="btn btn-ghost" id="btnDvComprovante">Comprovante</button>
+              <button type="button" class="btn" id="btnDvReceber">Receber pagamento</button>
+              <button type="button" class="btn btn-aviso" id="btnDvDevolucao">Troca / devolução</button>
+              <button type="button" class="btn btn-perigo" id="btnDvCancelar">Cancelar venda</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-overlay conferencia-overlay" id="receberOverlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="receberTitulo">
+          <div class="conferencia-box">
+            <h3 id="receberTitulo">Receber pagamento</h3>
+            <div id="receberResumo"></div>
+            <div class="cr-grid">
+              <div class="field"><label for="rcForma">Forma</label><select id="rcForma"><option>Dinheiro</option><option>PIX</option><option>Débito</option><option>Crédito</option></select></div>
+              <div class="field"><label for="rcValor">Valor (R$)</label><input type="text" id="rcValor" inputmode="decimal"></div>
+            </div>
+            <div class="cf-erro" id="rcErro"></div>
+            <div class="cf-acoes">
+              <button type="button" class="btn btn-ghost" id="btnVoltarReceber">Voltar</button>
+              <button type="button" class="btn" id="btnConfirmarReceber">Registrar recebimento</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-overlay conferencia-overlay" id="cancelarVendaOverlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="cancelarVendaTitulo">
+          <div class="conferencia-box">
+            <h3 id="cancelarVendaTitulo">Cancelar venda</h3>
+            <div id="cancelarVendaResumo"></div>
+            <div class="field">
+              <label for="cvMotivoSel">Motivo *</label>
+              <select id="cvMotivoSel">
+                <option value="">Selecione...</option>
+                <option>Cliente desistiu</option>
+                <option>Erro no lançamento</option>
+                <option>Pagamento não aprovado</option>
+                <option>Produto sem estoque físico</option>
+                <option>Venda duplicada</option>
+                <option value="outro">Outro motivo</option>
+              </select>
+            </div>
+            <div class="field" id="cvMotivoOutroBox" style="display:none;margin-top:10px;"><label for="cvMotivoOutro">Descreva o motivo</label><input type="text" id="cvMotivoOutro"></div>
+            <div class="field" style="margin-top:10px;"><label for="cvSenha">Senha do supervisor *</label><input type="password" id="cvSenha" autocomplete="off"></div>
+            <div class="cf-erro" id="cvErro"></div>
+            <div class="cf-acoes">
+              <button type="button" class="btn btn-ghost" id="btnVoltarCancelamento">Voltar</button>
+              <button type="button" class="btn btn-perigo" id="btnConfirmarCancelamento">Cancelar venda</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-overlay conferencia-overlay" id="devolucaoOverlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="devolucaoTitulo">
+          <div class="conferencia-box historico-box">
+            <h3 id="devolucaoTitulo">Troca / devolução</h3>
+            <p class="dv-ajuda">Informe a quantidade devolvida de cada item. O valor considera os descontos da venda.</p>
+            <div class="table-scroll"><table class="dv-tabela">
+              <thead><tr><th>Produto</th><th>Vendido</th><th>Já devolvido</th><th>Valor un.</th><th>Devolver</th></tr></thead>
+              <tbody id="devolucaoItens"></tbody>
+            </table></div>
+            <label class="entrada-check"><input type="checkbox" id="dvDefeito"> Produto com defeito (registra a devolução e dá baixa como avaria, sem voltar para venda)</label>
+            <div class="dv-grid">
+              <div class="field"><label for="dvMotivo">Motivo *</label>
+                <select id="dvMotivo">
+                  <option value="">Selecione...</option>
+                  <option>Troca de tamanho/cor</option>
+                  <option>Produto com defeito</option>
+                  <option>Cliente se arrependeu</option>
+                  <option>Produto diferente do anunciado</option>
+                  <option>Outro</option>
+                </select>
+              </div>
+              <div class="field"><label for="dvTipo">O cliente recebe</label>
+                <select id="dvTipo">
+                  <option value="vale">Vale-troca (crédito para nova compra)</option>
+                  <option value="reembolso">Reembolso</option>
+                </select>
+              </div>
+              <div class="field" id="dvFormaBox" style="display:none;"><label for="dvForma">Forma do reembolso</label>
+                <select id="dvForma"><option>Dinheiro</option><option>PIX</option><option>Estorno no cartão</option></select>
+              </div>
+              <div class="field"><label for="dvSenha">Senha do supervisor *</label><input type="password" id="dvSenha" autocomplete="off"></div>
+            </div>
+            <div class="dv-total" id="dvTotal"></div>
+            <div class="cf-erro" id="dvErro"></div>
+            <div class="cf-acoes">
+              <button type="button" class="btn btn-ghost" id="btnVoltarDevolucao">Voltar</button>
+              <button type="button" class="btn btn-aviso" id="btnConfirmarDevolucao">Confirmar devolução</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-overlay conferencia-overlay" id="adicionaisOverlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="adicionaisTitulo">
+          <div class="conferencia-box">
+            <h3 id="adicionaisTitulo">Adicionais</h3>
+            <p class="dv-ajuda" id="adicionaisSub"></p>
+            <div class="ad-lista" id="adicionaisLista"></div>
+            <div class="ad-total" id="adicionaisTotal"></div>
+            <div class="cf-acoes">
+              <button type="button" class="btn btn-ghost" id="btnAdCancelar">Cancelar</button>
+              <button type="button" class="btn" id="btnAdConfirmar">Adicionar ao pedido</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-overlay conferencia-overlay" id="limparDadosOverlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="limparDadosTitulo">
+          <div class="conferencia-box">
+            <h3 id="limparDadosTitulo">Limpar todos os dados</h3>
+            <p class="dv-ajuda">Esta ação apaga <b>tudo</b> o que foi registrado neste navegador:</p>
+            <ul class="cv-efeitos" id="limparDadosLista"></ul>
+            <div class="field">
+              <label>Depois de limpar</label>
+              <label class="entrada-check"><input type="radio" name="limparModo" value="demo" checked> Recomeçar com os <b>produtos de exemplo</b> (para testes)</label>
+              <label class="entrada-check"><input type="radio" name="limparModo" value="vazio"> Começar <b>totalmente vazio</b> (sem produtos nem cadastros)</label>
+            </div>
+            <div class="field" style="margin-top:10px;"><label for="ldConfirma">Digite <b>LIMPAR</b> para confirmar</label><input type="text" id="ldConfirma" autocomplete="off"></div>
+            <div class="field" style="margin-top:10px;"><label for="ldSenha">Senha do supervisor *</label><input type="password" id="ldSenha" autocomplete="off"></div>
+            <div class="cf-erro" id="ldErro"></div>
+            <div class="cf-acoes">
+              <button type="button" class="btn btn-ghost" id="btnCancelarLimparDados">Cancelar</button>
+              <button type="button" class="btn btn-perigo" id="btnConfirmarLimparDados" disabled>Apagar tudo</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-overlay conferencia-overlay" id="clienteRapidoOverlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="clienteRapidoTitulo">
+          <div class="conferencia-box">
+            <h3 id="clienteRapidoTitulo">Cadastrar cliente</h3>
+            <div class="field"><label for="crNome">Nome *</label><input type="text" id="crNome"></div>
+            <div class="cr-grid">
+              <div class="field"><label for="crDoc">CPF/CNPJ</label><input type="text" id="crDoc" inputmode="numeric" placeholder="000.000.000-00"></div>
+              <div class="field"><label for="crTelefone">Telefone</label><input type="text" id="crTelefone" inputmode="tel" placeholder="(00) 00000-0000"></div>
+            </div>
+            <div class="field"><label for="crEmail">E-mail</label><input type="email" id="crEmail"></div>
+            <div class="cf-erro" id="crErro"></div>
+            <div class="cf-acoes">
+              <button type="button" class="btn btn-ghost" id="btnCancelarClienteRapido">Cancelar</button>
+              <button type="button" class="btn" id="btnSalvarClienteRapido">Salvar e usar na venda</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-overlay conferencia-overlay" id="historicoClienteOverlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="historicoClienteTitulo">
+          <div class="conferencia-box historico-box">
+            <h3 id="historicoClienteTitulo">Histórico de compras</h3>
+            <div id="historicoClienteConteudo"></div>
+            <div class="cf-acoes">
+              <button type="button" class="btn btn-ghost" id="btnFecharHistoricoCliente">Fechar</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-overlay conferencia-overlay" id="conferenciaOverlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="conferenciaTitulo">
+          <div class="conferencia-box">
+            <h3 id="conferenciaTitulo">Fechamento de caixa</h3>
+            <div class="cf-linha"><span>Dinheiro esperado</span><b id="cfEsperado">R$ 0,00</b></div>
+            <div class="cf-linha cf-input">
+              <label for="cfInformado">Dinheiro informado</label>
+              <input type="text" id="cfInformado" inputmode="decimal" autocomplete="off">
+            </div>
+            <div class="cf-linha cf-diferenca" id="cfDiferencaLinha"><span>Diferença</span><b id="cfDiferenca">R$ 0,00</b></div>
+            <div class="field cf-motivo">
+              <label for="cfMotivo">Motivo da diferença <span id="cfMotivoObrig"></span></label>
+              <textarea id="cfMotivo" rows="3" placeholder="Ex: troco dado a mais, erro de digitação, nota rasgada..."></textarea>
+            </div>
+            <div class="cf-erro" id="cfErro"></div>
+            <div class="cf-acoes">
+              <button type="button" class="btn btn-ghost" id="btnCancelarConferencia">Cancelar</button>
+              <button type="button" class="btn" id="btnConfirmarConferencia">Confirmar fechamento</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-overlay" id="comprovanteOverlay" style="display:none;">
+          <div class="modal-box" id="comprovanteBox">
+            <h3 id="comprovanteTitulo" style="font-size:15px;margin-bottom:10px;">Comprovante de venda</h3>
+            <div id="comprovanteConteudo"></div>
+            <div style="display:flex;gap:10px;margin-top:16px;">
+              <button class="btn" id="btnImprimir">Imprimir</button>
+              <button class="btn btn-ghost" id="btnFecharComprovante">Fechar</button>
+            </div>
+          </div>
+        </div>
+
+        <section class="panel" id="panel-food">
+          <!-- Oculto: a navegação é pelo menu lateral -->
+          <div class="subtabs subtabs-ocultas" id="subtabsFood" aria-hidden="true">
+            <button class="stab active" data-tab="painel">Painel</button>
+            <button class="stab" data-tab="pedido">Novo pedido</button>
+            <button class="stab" data-tab="pedidos">Pedidos</button>
+            <button class="stab" data-tab="importar">Importar</button>
+            <button class="stab" data-tab="cardapio">Cardápio</button>
+            <button class="stab" data-tab="insumos">Ingredientes</button>
+            <button class="stab" data-tab="canais">Canais</button>
+            <button class="stab" data-tab="ficha">Ficha técnica</button>
+            <button class="stab" data-tab="estoque">Estoque</button>
+            <button class="stab" data-tab="relatorios">Relatórios</button>
+            <button class="stab" data-tab="clientes">Clientes</button>
+            <button class="stab" data-tab="custos">Custos</button>
+            <button class="stab" data-tab="config">Configuração</button>
+          </div>
+
+          <!-- Painel de lucro -->
+          <div id="foodPainel">
+            <div class="dash-head">
+              <div>
+                <h2 class="dash-titulo" id="fpTitulo">Quanto sobra em cada venda</h2>
+                <p class="dash-sub" id="fpSub"></p>
+              </div>
+              <div class="dash-head-acoes">
+                <div class="seg" id="fpPeriodo" role="group" aria-label="Período">
+                  <button type="button" data-p="hoje" class="active">Hoje</button>
+                  <button type="button" data-p="7">7 dias</button>
+                  <button type="button" data-p="30">30 dias</button>
+                </div>
+                <button type="button" class="btn btn-ghost" id="btnFpFechamento">📊 Fechamento do dia</button>
+                <button type="button" class="btn" data-ir="food/pedido">+ Novo pedido</button>
+              </div>
+            </div>
+            <div class="hv-resumo fp-kpis" id="fpKpis"></div>
+            <div class="rel-grid">
+              <div class="card table-scroll rel-bloco">
+                <div class="rel-bloco-titulo">Vendas por canal</div>
+                <p class="dv-ajuda">Quanto cada canal realmente deixa para você depois de custos e taxas.</p>
+                <table><thead><tr><th>Canal</th><th>Pedidos</th><th>Vendas</th><th>Taxas</th><th>Lucro</th><th>Margem</th></tr></thead><tbody id="fpCanais"></tbody></table>
+              </div>
+              <div class="card table-scroll rel-bloco">
+                <div class="rel-bloco-titulo">🔥 Onde estou ganhando dinheiro?</div>
+                <p class="dv-ajuda">Faturamento − custo dos produtos, antes das taxas das plataformas.</p>
+                <table><thead><tr><th>Produto</th><th>Vendas</th><th>Faturamento</th><th>Custo</th><th>Lucro</th></tr></thead><tbody id="fpItens"></tbody></table>
+                <button type="button" class="link-btn" data-ir="food/relatorios">Ver todos os produtos em Relatórios →</button>
+              </div>
+            </div>
+            <div class="card table-scroll rel-bloco">
+              <div class="rel-bloco-titulo">⚠️ Produtos com baixa margem</div>
+              <p class="dv-ajuda">Os produtos do cardápio com a menor margem (preço de venda − custo), do menor para o maior.</p>
+              <table><thead><tr><th>Produto</th><th>Venda</th><th>Custo</th><th>Margem</th><th class="fp-col-canal">Lucro no canal</th></tr></thead><tbody id="fpBaixaMargem"></tbody></table>
+            </div>
+            <div class="card fp-alertas" id="fpAlertas"></div>
+          </div>
+
+          <!-- Novo pedido -->
+          <div id="foodPedido" style="display:none;">
+            <div class="pdv-grid food-grid">
+              <div class="card">
+                <input type="text" class="search" id="fnBusca" placeholder="Buscar no cardápio..." style="width:100%;margin-bottom:10px;">
+                <div class="fn-categorias" id="fnCategorias"></div>
+                <div class="pdv-items" id="fnItens"></div>
+              </div>
+              <div class="card pdv-carrinho">
+                <div class="cart-head">
+                  <h3>Pedido <span id="fnNumero"></span></h3>
+                  <button type="button" class="link-btn" id="btnFnLimpar">Limpar</button>
+                </div>
+                <div class="venda-info">
+                  <div class="field"><label for="fnCanal">Canal de venda</label><select id="fnCanal"></select></div>
+                  <div class="field"><label for="fnCliente">Cliente / mesa</label><input type="text" id="fnCliente" list="listaClientesFood" placeholder="Ex: Mesa 4, João"><datalist id="listaClientesFood"></datalist></div>
+                </div>
+                <div id="fnVazio" class="empty-msg fn-vazio">Toque nos itens do cardápio para montar o pedido.</div>
+                <div id="fnCarrinho"></div>
+                <div class="desconto-row">
+                  <label for="fnDesconto">Desconto (R$)</label>
+                  <input type="text" id="fnDesconto" placeholder="0,00" inputmode="decimal">
+                </div>
+                <div class="field venda-obs">
+                  <label for="fnObs">Observação</label>
+                  <textarea id="fnObs" rows="2" placeholder="Ex: sem cebola, borda recheada, troco para 100"></textarea>
+                </div>
+                <div class="lucro-card" id="fnLucro"></div>
+                <button class="btn" id="btnFnRegistrar" style="width:100%;margin-top:12px;" disabled>Registrar pedido</button>
+                <div class="toast" id="toastFood"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pedidos (quadro) -->
+          <div id="foodPedidos" style="display:none;">
+            <div class="fk-topo">
+              <p class="dv-ajuda" id="fkResumo"></p>
+              <button type="button" class="btn" data-ir="food/pedido">+ Novo pedido</button>
+            </div>
+            <div class="fk-quadro" id="fkQuadro"></div>
+          </div>
+
+          <!-- Importar vendas de plataformas -->
+          <div id="foodImportar" style="display:none;">
+            <div class="card dados-card imp-passo">
+              <h3><span class="imp-num">1</span> Selecione a plataforma</h3>
+              <div class="imp-plataformas" id="impPlataformas" role="group" aria-label="Plataforma"></div>
+              <div class="field imp-outra" id="impOutraBox" style="display:none;"><label for="impCanalOutro">Canal de venda</label><select id="impCanalOutro"></select></div>
+              <p class="dv-ajuda" id="impTaxaInfo"></p>
+            </div>
+
+            <div class="card dados-card imp-passo">
+              <h3><span class="imp-num">2</span> Envie o print</h3>
+              <label class="imp-drop" id="impDrop" tabindex="0">
+                <input type="file" id="impArquivo" accept="image/*" multiple hidden>
+                <span class="imp-drop-ic" aria-hidden="true">📷</span>
+                <span><b class="imp-drop-btn">Selecionar imagem</b> ou arraste o print aqui</span>
+                <small>Pode enviar vários prints de uma vez (PNG ou JPG). As imagens são lidas no seu navegador e não são enviadas para nenhum servidor.</small>
+              </label>
+              <div class="imp-previas" id="impPrevias"></div>
+              <div class="imp-progresso" id="impProgresso" style="display:none;">
+                <div class="imp-barra"><span id="impBarra"></span></div>
+                <span id="impProgressoTexto"></span>
+              </div>
+              <details class="imp-colar">
+                <summary>Ou cole o texto do relatório da plataforma</summary>
+                <textarea id="impTexto" rows="6" placeholder="Ex.:&#10;Pedidos do dia 27/09&#10;#5021 Pizza Calabresa R$ 49,90&#10;#5022 X-Burger R$ 32,90"></textarea>
+                <button type="button" class="btn btn-ghost" id="btnImpLerTexto">Ler texto</button>
+              </details>
+            </div>
+
+            <div class="card dados-card imp-passo" id="impRevisao" style="display:none;">
+              <h3><span class="imp-num">3</span> Confira antes de importar</h3>
+              <p class="dv-ajuda" id="impResumo"></p>
+              <div id="impPedidos"></div>
+              <details class="imp-colar"><summary>Ver o texto que foi lido do print</summary><pre class="imp-texto-lido" id="impTextoLido"></pre></details>
+              <div class="cf-acoes">
+                <button type="button" class="btn btn-ghost" id="btnImpDescartar">Descartar</button>
+                <button type="button" class="btn" id="btnImpConfirmar">Importar pedidos</button>
+              </div>
+            </div>
+            <div class="toast" id="toastImp"></div>
+
+            <div class="stitle">Importações anteriores</div>
+            <div class="card table-scroll">
+              <table>
+                <thead><tr><th>Data</th><th>Plataforma</th><th>Pedidos</th><th>Vendas</th><th>Lucro estimado</th><th>Usuário</th><th></th></tr></thead>
+                <tbody id="impHistorico"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Cardápio e custos -->
+          <div id="foodCardapio" style="display:none;">
+            <div class="cad-toolbar prod-toolbar">
+              <input type="text" class="search" id="fcBusca" placeholder="Buscar item ou categoria...">
+              <select id="fcCanalRef" title="Canal usado para comparar o lucro"></select>
+              <button type="button" class="btn" id="btnFcNovo">+ Novo item</button>
+            </div>
+            <div class="card prod-form" id="fcForm" style="display:none;">
+              <h3 id="fcFormTitulo">Novo item</h3>
+              <div class="seg fc-tipo" id="fcTipo" role="group" aria-label="Tipo do item">
+                <button type="button" data-t="produto" class="active">🍕 Produto</button>
+                <button type="button" data-t="adicional">➕ Adicional</button>
+                <button type="button" data-t="combo">🍔 Combo</button>
+              </div>
+              <p class="dv-ajuda" id="fcTipoAjuda"></p>
+              <div class="fc-form-corpo">
+                <div>
+                  <div class="prod-grid">
+                    <div class="field span-2"><label for="fcNome">Nome *</label><input type="text" id="fcNome" placeholder="Ex: Pizza Calabresa"></div>
+                    <div class="field"><label for="fcCategoria">Categoria</label><input type="text" id="fcCategoria" list="listaCategoriasFood" placeholder="Ex: Pizzas"></div>
+                    <div class="field"><label for="fcPreco">Preço de venda (R$) *</label><input type="text" id="fcPreco" inputmode="decimal" placeholder="0,00"></div>
+                    <div class="field"><label for="fcAtivo">Status</label><select id="fcAtivo"><option value="1">Ativo</option><option value="0">Inativo</option></select></div>
+                    <datalist id="listaCategoriasFood"></datalist>
+                  </div>
+
+                  <div class="fc-bloco" id="fcBlocoFicha">
+                    <div class="fc-bloco-titulo">Ficha técnica <small>ingredientes e embalagens usados em 1 unidade</small></div>
+                    <table class="fc-ficha">
+                      <thead><tr><th>Ingrediente</th><th>Quantidade</th><th>Custo</th><th></th></tr></thead>
+                      <tbody id="fcFichaLinhas"></tbody>
+                    </table>
+                    <div class="fc-ficha-acoes">
+                      <button type="button" class="link-btn" id="btnFcAddLinha">+ Adicionar ingrediente</button>
+                      <button type="button" class="link-btn" data-ir="food/insumos">Cadastrar ingredientes →</button>
+                    </div>
+                    <div class="fc-manual" id="fcManual">
+                      <p class="dv-ajuda">Sem ficha técnica? Informe o custo direto (menos preciso):</p>
+                      <div class="prod-grid">
+                        <div class="field"><label for="fcIngredientes">Custo dos ingredientes (R$)</label><input type="text" id="fcIngredientes" inputmode="decimal" placeholder="0,00"></div>
+                        <div class="field"><label for="fcEmbalagem">Embalagem (R$)</label><input type="text" id="fcEmbalagem" inputmode="decimal" placeholder="0,00"></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="fc-bloco" id="fcBlocoCombo" style="display:none;">
+                    <div class="fc-bloco-titulo">Itens do combo <small>o custo vem da ficha técnica de cada item</small></div>
+                    <table class="fc-ficha">
+                      <thead><tr><th>Item</th><th>Qtd.</th><th>Custo</th><th></th></tr></thead>
+                      <tbody id="fcComboLinhas"></tbody>
+                    </table>
+                    <div class="fc-ficha-acoes"><button type="button" class="link-btn" id="btnFcAddComponente">+ Adicionar item ao combo</button></div>
+                  </div>
+
+                  <div class="prod-grid" style="margin-top:12px;">
+                    <div class="field span-2"><label for="fcOutros">Outros custos por unidade (R$)</label><input type="text" id="fcOutros" inputmode="decimal" placeholder="gás, energia, sachês, guardanapo..."></div>
+                  </div>
+                </div>
+                <div class="fc-preview">
+                  <div class="fc-resumo" id="fcResumo"></div>
+                  <div class="field" style="margin-top:12px;"><label for="fcPreviewCanal">Simular em um canal de venda</label><select id="fcPreviewCanal"></select></div>
+                  <div class="lucro-card" id="fcPreview"></div>
+                </div>
+              </div>
+              <div class="prod-erro" id="fcErro"></div>
+              <div class="cf-acoes">
+                <button type="button" class="btn btn-ghost" id="btnFcCancelar">Cancelar</button>
+                <button type="button" class="btn" id="btnFcSalvar">Salvar item</button>
+              </div>
+            </div>
+
+            <div class="card table-scroll">
+              <table>
+                <thead><tr><th>Item</th><th>Tipo</th><th>Categoria</th><th>Preço</th><th>Custo total</th><th>Lucro no balcão</th><th id="fcColCanal">Lucro no canal</th><th>Situação</th><th></th></tr></thead>
+                <tbody id="fcTabela"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Ingredientes (insumos) -->
+          <div id="foodInsumos" style="display:none;">
+            <div class="card dados-card">
+              <h3>Ingredientes e embalagens</h3>
+              <p class="dv-ajuda">Cadastre o <b>preço de compra</b> de cada ingrediente (ex.: Mussarela R$ 34,00 o kg). As fichas técnicas usam esses preços: ao atualizar um preço aqui, o custo de todos os itens que usam o ingrediente é recalculado.</p>
+            </div>
+            <div class="cad-toolbar prod-toolbar">
+              <input type="text" class="search" id="fiBusca" placeholder="Buscar ingrediente...">
+              <select id="fiFiltroTipo"><option value="">Todos os tipos</option><option value="ingrediente">Ingredientes</option><option value="embalagem">Embalagens</option></select>
+              <button type="button" class="btn" id="btnFiNovo">+ Novo ingrediente</button>
+            </div>
+            <div class="card prod-form" id="fiForm" style="display:none;">
+              <h3 id="fiFormTitulo">Novo ingrediente</h3>
+              <div class="prod-grid">
+                <div class="field span-2"><label for="fiNome">Nome *</label><input type="text" id="fiNome" placeholder="Ex: Mussarela"></div>
+                <div class="field"><label for="fiTipo">Tipo</label><select id="fiTipo"><option value="ingrediente">Ingrediente</option><option value="embalagem">Embalagem</option></select></div>
+                <div class="field"><label for="fiUnidade">Unidade de compra</label>
+                  <select id="fiUnidade"><option value="kg">kg (quilo)</option><option value="g">g (grama)</option><option value="L">L (litro)</option><option value="ml">ml (mililitro)</option><option value="un">un (unidade)</option></select>
+                </div>
+                <div class="field"><label for="fiPreco" id="fiPrecoLabel">Preço por kg (R$) *</label><input type="text" id="fiPreco" inputmode="decimal" placeholder="0,00"></div>
+                <div class="prod-lucro" id="fiBase"></div>
+              </div>
+              <p class="prod-dica" id="fiImpacto"></p>
+              <div class="prod-erro" id="fiErro"></div>
+              <div class="cf-acoes">
+                <button type="button" class="btn btn-ghost" id="btnFiCancelar">Cancelar</button>
+                <button type="button" class="btn" id="btnFiSalvar">Salvar ingrediente</button>
+              </div>
+            </div>
+            <div class="card fi-resultado" id="fiResultado" style="display:none;"></div>
+            <div class="card table-scroll">
+              <table>
+                <thead><tr><th>Ingrediente</th><th>Tipo</th><th>Preço de compra</th><th>Custo base</th><th>Usado em</th><th></th></tr></thead>
+                <tbody id="fiTabela"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Ficha técnica -->
+          <div id="foodFicha" style="display:none;">
+            <div class="ft-layout">
+              <div class="card ft-lista-card">
+                <input type="text" class="search" id="ftBusca" placeholder="Buscar produto..." style="width:100%;">
+                <div class="ft-lista" id="ftLista"></div>
+              </div>
+              <div class="card ft-detalhe" id="ftDetalhe"></div>
+            </div>
+          </div>
+
+          <!-- Estoque de ingredientes -->
+          <div id="foodEstoque" style="display:none;">
+            <div class="card dados-card">
+              <h3>Estoque de ingredientes</h3>
+              <p class="dv-ajuda">Cada pedido dá <b>baixa automática</b> dos ingredientes pela ficha técnica, inclusive os importados das plataformas. Pedido cancelado ou importação desfeita <b>devolve</b> os ingredientes. Entram no controle os ingredientes com estoque informado.</p>
+            </div>
+            <div class="hv-resumo fp-kpis" id="feKpis"></div>
+            <div class="cad-toolbar prod-toolbar">
+              <input type="text" class="search" id="feBusca" placeholder="Buscar ingrediente...">
+              <select id="feFiltro"><option value="">Todos</option><option value="baixo">Abaixo do mínimo</option><option value="controlados">Controlados</option><option value="nao">Não controlados</option></select>
+              <button type="button" class="btn" id="btnFeNovo">+ Lançar movimentação</button>
+            </div>
+            <div class="card prod-form" id="feForm" style="display:none;">
+              <h3>Movimentação de estoque</h3>
+              <div class="seg" id="feTipo" role="group" aria-label="Tipo de movimentação">
+                <button type="button" data-t="entrada" class="active">Entrada (compra)</button>
+                <button type="button" data-t="ajuste">Ajuste (contagem)</button>
+                <button type="button" data-t="perda">Perda / desperdício</button>
+              </div>
+              <p class="dv-ajuda" id="feTipoAjuda"></p>
+              <div class="prod-grid">
+                <div class="field span-2"><label for="feInsumo">Ingrediente *</label><select id="feInsumo"></select></div>
+                <div class="field"><label for="feQtd" id="feQtdLabel">Quantidade *</label><input type="text" id="feQtd" inputmode="decimal" placeholder="0"></div>
+                <div class="field" id="feCustoBox"><label for="feCusto" id="feCustoLabel">Custo pago (R$)</label><input type="text" id="feCusto" inputmode="decimal" placeholder="0,00"></div>
+                <div class="field"><label for="feMinimo" id="feMinimoLabel">Estoque mínimo</label><input type="text" id="feMinimo" inputmode="decimal" placeholder="0"></div>
+                <div class="field span-2"><label for="feMotivo">Observação</label><input type="text" id="feMotivo" placeholder="Ex: NF 1234, fornecedor, validade"></div>
+              </div>
+              <label class="fe-atualizar" id="feAtualizarBox" style="display:none;"><input type="checkbox" id="feAtualizarPreco" checked> <span id="feAtualizarTexto">Atualizar o preço de compra do ingrediente</span></label>
+              <p class="prod-dica" id="feResumo"></p>
+              <div class="prod-erro" id="feErro"></div>
+              <div class="cf-acoes">
+                <button type="button" class="btn btn-ghost" id="btnFeCancelar">Cancelar</button>
+                <button type="button" class="btn" id="btnFeSalvar">Registrar</button>
+              </div>
+            </div>
+            <div class="card fi-resultado" id="feResultado" style="display:none;"></div>
+            <div class="card table-scroll">
+              <table>
+                <thead><tr><th>Ingrediente</th><th>Estoque atual</th><th>Mínimo</th><th>Situação</th><th>Valor em estoque</th><th>Consumo 7 dias</th><th></th></tr></thead>
+                <tbody id="feTabela"></tbody>
+              </table>
+            </div>
+            <div class="card table-scroll rel-bloco">
+              <div class="rel-bloco-titulo">Movimentações</div>
+              <table>
+                <thead><tr><th>Data</th><th>Ingrediente</th><th>Tipo</th><th>Quantidade</th><th>Saldo</th><th>Motivo</th><th>Usuário</th></tr></thead>
+                <tbody id="feMovs"></tbody>
+              </table>
+            </div>
+            <div class="toast" id="toastFe"></div>
+          </div>
+
+          <!-- Relatórios do Food -->
+          <div id="foodRelatorios" style="display:none;">
+            <div class="dash-head">
+              <div>
+                <h2 class="dash-titulo">Relatórios do Food</h2>
+                <p class="dash-sub" id="frSub"></p>
+              </div>
+              <div class="dash-head-acoes">
+                <div class="seg" id="frPeriodo" role="group" aria-label="Período">
+                  <button type="button" data-p="hoje">Hoje</button>
+                  <button type="button" data-p="7">7 dias</button>
+                  <button type="button" data-p="30" class="active">30 dias</button>
+                  <button type="button" data-p="mes">Este mês</button>
+                  <button type="button" data-p="custom">Escolher datas</button>
+                </div>
+                <span class="fr-datas" id="frDatas" style="display:none;"><input type="date" id="frIni" aria-label="Data inicial"> até <input type="date" id="frFim" aria-label="Data final"></span>
+                <button type="button" class="btn btn-ghost" id="btnFrCSV">Exportar CSV</button>
+              </div>
+            </div>
+            <div class="card fr-fech">
+              <div><div class="rel-bloco-titulo">📊 Fechamento do dia</div><p class="dv-ajuda">Pedidos, faturamento, descontos, taxas, custos e resultado de um dia, com o resumo por canal. Dá para imprimir ou copiar.</p></div>
+              <div class="fr-fech-acoes"><input type="date" id="frFechData" aria-label="Dia do fechamento"><button type="button" class="btn" id="btnFrFech">Ver fechamento</button></div>
+            </div>
+            <div class="hv-resumo fp-kpis" id="frKpis"></div>
+            <div class="card table-scroll rel-bloco">
+              <div class="rel-bloco-titulo">🔥 Onde estou ganhando dinheiro?</div>
+              <p class="dv-ajuda">Produtos vendidos no período, do que mais deixa lucro para o que menos deixa. Lucro = faturamento − custo dos produtos, antes das taxas das plataformas.</p>
+              <table><thead><tr><th>Produto</th><th>Vendas</th><th>Faturamento</th><th>Custo</th><th>Lucro</th><th>Margem</th><th>% do lucro</th></tr></thead><tbody id="frProdutos"></tbody></table>
+            </div>
+            <div class="card table-scroll rel-bloco">
+              <div class="rel-bloco-titulo">⚠️ Onde estou perdendo dinheiro?</div>
+              <p class="dv-ajuda">Produtos do cardápio com baixa margem, do menor para o maior. Só os números: a decisão é sua.</p>
+              <table><thead><tr><th>Produto</th><th>Venda</th><th>Custo</th><th>Margem</th><th class="fr-col-canal">Lucro no canal</th></tr></thead><tbody id="frBaixa"></tbody></table>
+              <div id="frNegativos"></div>
+            </div>
+            <div class="rel-grid">
+              <div class="card table-scroll rel-bloco">
+                <div class="rel-bloco-titulo">Vendas por canal</div>
+                <table><thead><tr><th>Canal</th><th>Pedidos</th><th>Faturamento</th><th>Part.</th><th>Taxas</th><th>Lucro</th><th>Margem</th></tr></thead><tbody id="frCanais"></tbody></table>
+              </div>
+              <div class="card table-scroll rel-bloco">
+                <div class="rel-bloco-titulo">Vendas por dia</div>
+                <table><thead><tr><th>Dia</th><th>Pedidos</th><th>Faturamento</th><th>Custo</th><th>Taxas</th><th>Lucro</th></tr></thead><tbody id="frDias"></tbody></table>
+              </div>
+            </div>
+            <div class="card table-scroll rel-bloco">
+              <div class="rel-bloco-titulo">Ingredientes consumidos</div>
+              <p class="dv-ajuda">Quanto os pedidos do período usaram de cada ingrediente, pelas fichas técnicas atuais.</p>
+              <table><thead><tr><th>Ingrediente</th><th>Quantidade</th><th>Custo</th></tr></thead><tbody id="frConsumo"></tbody></table>
+            </div>
+          </div>
+
+          <!-- Clientes do Food -->
+          <div id="foodClientes" style="display:none;">
+            <div class="hv-resumo fp-kpis" id="fclKpis"></div>
+            <div class="cad-toolbar prod-toolbar">
+              <input type="text" class="search" id="fclBusca" placeholder="Buscar cliente...">
+              <button type="button" class="btn btn-ghost" data-ir="clientes/lista">Cadastro de clientes →</button>
+            </div>
+            <div class="card table-scroll">
+              <table>
+                <thead><tr><th>Cliente</th><th>Pedidos</th><th>Total gasto</th><th>Ticket médio</th><th>Lucro gerado</th><th>Canal preferido</th><th>Último pedido</th><th></th></tr></thead>
+                <tbody id="fclTabela"></tbody>
+              </table>
+            </div>
+            <div class="card table-scroll rel-bloco" id="fclDetalhe" style="display:none;"></div>
+            <p class="dv-ajuda">Os clientes vêm do campo "Cliente" do Novo pedido (os nomes do cadastro de clientes aparecem como sugestão). Mesas e comandas não entram. Pedidos importados das plataformas não trazem o cliente.</p>
+          </div>
+
+          <!-- Custos fixos -->
+          <div id="foodCustos" style="display:none;">
+            <div class="card dados-card">
+              <h3>Custos fixos do mês</h3>
+              <p class="dv-ajuda">Aluguel, salários, energia, gás… Esses custos não entram no lucro de cada pedido, mas mostram quanto o negócio precisa lucrar por dia para fechar o mês no azul. O valor por dia aparece no <b>Fechamento do dia</b>.</p>
+              <div class="fcu-sugestoes" id="fcuSugestoes"></div>
+              <div class="table-scroll">
+                <table class="fcu-tabela">
+                  <thead><tr><th>Custo</th><th>Valor por mês (R$)</th><th></th></tr></thead>
+                  <tbody id="fcuTabela"></tbody>
+                  <tfoot><tr><td>Total por mês</td><td id="fcuTotal"></td><td></td></tr></tfoot>
+                </table>
+              </div>
+              <div class="prod-grid" style="margin-top:12px;">
+                <div class="field"><label for="fcuDias">Dias de funcionamento por mês</label><input type="number" id="fcuDias" min="1" max="31" step="1"></div>
+              </div>
+              <div class="cf-acoes" style="justify-content:space-between;">
+                <button type="button" class="btn btn-ghost" id="btnFcuNovo">+ Adicionar custo</button>
+                <button type="button" class="btn" id="btnFcuSalvar">Salvar custos</button>
+              </div>
+              <div class="toast" id="toastFcu"></div>
+            </div>
+            <div class="hv-resumo fp-kpis" id="fcuKpis"></div>
+            <div class="card table-scroll rel-bloco">
+              <div class="rel-bloco-titulo">Para onde vai o dinheiro de cada venda</div>
+              <p class="dv-ajuda">Últimos 30 dias, pelos pedidos registrados e importados.</p>
+              <div class="fcu-barra" id="fcuBarra"></div>
+              <table><thead><tr><th>Custo</th><th>Valor</th><th>% do faturamento</th><th>Por pedido</th></tr></thead><tbody id="fcuVariaveis"></tbody></table>
+            </div>
+          </div>
+
+          <!-- Canais e taxas -->
+          <div id="foodCanais" style="display:none;">
+            <div class="card dados-card">
+              <h3>Canais de venda e taxas</h3>
+              <p class="dv-ajuda">As taxas abaixo são <b>exemplos</b>. Cada plataforma cobra conforme o plano e o contrato da sua loja: <b>confira no seu contrato</b> e ajuste os valores para o lucro ficar certo.</p>
+              <p class="dv-ajuda"><b>Promoções no cálculo:</b> marcado, o desconto ou cupom do pedido sai do seu bolso e reduz a venda. Desmarcado, a promoção é paga pela plataforma e você recebe o preço cheio. <b>Outros custos:</b> qualquer cobrança fixa por pedido que não está nas outras colunas.</p>
+            </div>
+            <div class="card table-scroll">
+              <table class="fcanais-tabela">
+                <thead><tr><th>Canal</th><th>Comissão (%)</th><th>Taxa de pagamento (%)</th><th>Taxa adicional por pedido (R$)</th><th>Custo de entrega por pedido (R$)</th><th>Outros custos por pedido (R$)</th><th title="Marcado: o desconto/promoção reduz o que você recebe. Desmarcado: a promoção é paga (subsidiada) pela plataforma.">Promoções no cálculo</th><th>Entrega?</th><th>Ativo</th><th>Em R$ 79,90 fica</th><th></th></tr></thead>
+                <tbody id="fcanaisTabela"></tbody>
+              </table>
+              <div class="cf-acoes" style="justify-content:space-between;">
+                <button type="button" class="btn btn-ghost" id="btnCanalNovo">+ Adicionar canal</button>
+                <button type="button" class="btn" id="btnCanaisSalvar">Salvar taxas</button>
+              </div>
+            </div>
+            <div class="toast" id="toastCanais"></div>
+          </div>
+
+          <!-- Configuração -->
+          <div id="foodConfig" style="display:none;">
+            <div class="card dados-card">
+              <h3>Tipo de negócio</h3>
+              <p class="dv-ajuda">Ajusta os textos e as categorias sugeridas no cardápio. O MGA Food funciona para qualquer negócio de alimentação.</p>
+              <div class="fcfg-tipos" id="fcfgTipos"></div>
+            </div>
+            <div class="card dados-card">
+              <h3>Metas de margem</h3>
+              <p class="dv-ajuda">Define as cores do lucro: 🟢 boa · 🟡 atenção · 🔴 baixa.</p>
+              <div class="prod-grid">
+                <div class="field"><label for="fcfgVerde">🟢 Margem boa a partir de (%)</label><input type="number" id="fcfgVerde" min="0" max="100" step="1"></div>
+                <div class="field"><label for="fcfgAmarelo">🟡 Atenção a partir de (%)</label><input type="number" id="fcfgAmarelo" min="0" max="100" step="1"></div>
+              </div>
+              <div class="cf-acoes" style="justify-content:flex-start;"><button type="button" class="btn" id="btnFcfgSalvar">Salvar configuração</button></div>
+              <div class="toast" id="toastFcfg"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" id="panel-financeiro">
+          <!-- Oculto: a navegação é pelo menu lateral -->
+          <div class="subtabs subtabs-ocultas" id="subtabsFin" aria-hidden="true">
+            <button class="stab active" data-tab="dashboard">Dashboard</button>
+            <button class="stab" data-tab="lista">Lançamentos</button>
+            <button class="stab" data-tab="contas">Contas</button>
+            <button class="stab" data-tab="fluxo">Fluxo</button>
+            <button class="stab" data-tab="dre">DRE</button>
+            <button class="stab" data-tab="recorrencias">Recorrências</button>
+            <button class="stab" data-tab="integracoes">Integrações</button>
+            <button class="stab" data-tab="config">Configuração</button>
+          </div>
+
+          <!-- Dashboard financeiro -->
+          <div id="finDashboard">
+            <div class="dash-head">
+              <div>
+                <h2 class="dash-titulo">💰 Dashboard Financeiro</h2>
+                <p class="dash-sub" id="fdSub"></p>
+              </div>
+              <div class="dash-head-acoes">
+                <div class="seg" id="fdPeriodo" role="group" aria-label="Período">
+                  <button type="button" data-p="mes" class="active">Este mês</button>
+                  <button type="button" data-p="anterior">Mês passado</button>
+                  <button type="button" data-p="30">30 dias</button>
+                  <button type="button" data-p="ano">Este ano</button>
+                </div>
+                <button type="button" class="btn btn-ghost" data-ir="fin/despesas" data-novo="1">+ Despesa</button>
+                <button type="button" class="btn" data-ir="fin/receitas" data-novo="1">+ Receita</button>
+              </div>
+            </div>
+            <div class="hv-resumo fp-kpis" id="fdKpis"></div>
+            <div class="rel-grid">
+              <div class="card rel-bloco">
+                <div class="rel-bloco-titulo">Fluxo de caixa</div>
+                <p class="dv-ajuda">Entradas e saídas realizadas por dia.</p>
+                <div class="fd-fluxo" id="fdFluxo"></div>
+              </div>
+              <div class="card table-scroll rel-bloco">
+                <div class="rel-bloco-titulo">Vencimentos</div>
+                <p class="dv-ajuda">Atrasados e próximos 7 dias.</p>
+                <table><thead><tr><th>Vencimento</th><th>Descrição</th><th>Tipo</th><th>Valor</th></tr></thead><tbody id="fdVenc"></tbody></table>
+              </div>
+            </div>
+            <div class="rel-grid">
+              <div class="card table-scroll rel-bloco">
+                <div class="rel-bloco-titulo">Receitas por origem</div>
+                <table><thead><tr><th>Origem</th><th>Lançamentos</th><th>Valor</th><th>%</th></tr></thead><tbody id="fdOrigens"></tbody></table>
+              </div>
+              <div class="card table-scroll rel-bloco">
+                <div class="rel-bloco-titulo">Despesas por categoria</div>
+                <table><thead><tr><th>Categoria</th><th>Lançamentos</th><th>Valor</th><th>%</th></tr></thead><tbody id="fdCategorias"></tbody></table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Receitas / Despesas -->
+          <div id="finLista" style="display:none;">
+            <div class="dash-head">
+              <div><h2 class="dash-titulo" id="flTitulo">Receitas</h2><p class="dash-sub" id="flSub"></p></div>
+              <div class="dash-head-acoes"><button type="button" class="btn" id="btnFlNovo">+ Nova receita</button></div>
+            </div>
+            <div class="card prod-form" id="flForm" style="display:none;">
+              <h3 id="flFormTitulo">Nova receita</h3>
+              <div class="prod-grid">
+                <div class="field span-2"><label for="flDescricao">Descrição *</label><input type="text" id="flDescricao" placeholder="Ex: Conta de energia"></div>
+                <div class="field"><label for="flValor">Valor (R$) *</label><input type="text" id="flValor" inputmode="decimal" placeholder="0,00"></div>
+                <div class="field"><label for="flCategoria">Categoria</label><select id="flCategoria"></select></div>
+                <div class="field"><label for="flData">Data (competência)</label><input type="date" id="flData"></div>
+                <div class="field"><label for="flStatus">Status</label><select id="flStatus"><option value="pago">Pago</option><option value="pendente">Pendente</option></select></div>
+                <div class="field" id="flVencBox"><label for="flVencimento">Vencimento</label><input type="date" id="flVencimento"></div>
+                <div class="field"><label for="flForma">Forma</label><select id="flForma"><option>PIX</option><option>Dinheiro</option><option>Débito</option><option>Crédito</option><option>Boleto</option><option>Transferência</option></select></div>
+                <div class="field"><label for="flPessoa" id="flPessoaLabel">Cliente</label><input type="text" id="flPessoa" placeholder="Opcional"></div>
+                <div class="field span-2"><label for="flObs">Observação</label><input type="text" id="flObs" placeholder="Opcional"></div>
+              </div>
+              <label class="fe-atualizar" id="flRepetirBox"><input type="checkbox" id="flRepetir"> Repetir todo mês (cria uma recorrência)</label>
+              <p class="prod-dica" id="flAviso"></p>
+              <div class="prod-erro" id="flErro"></div>
+              <div class="cf-acoes">
+                <button type="button" class="btn btn-ghost" id="btnFlCancelar">Cancelar</button>
+                <button type="button" class="btn" id="btnFlSalvar">Salvar</button>
+              </div>
+            </div>
+            <div class="cad-toolbar prod-toolbar fl-filtros">
+              <input type="text" class="search" id="flBusca" placeholder="Buscar descrição, cliente, fornecedor...">
+              <input type="date" id="flIni" aria-label="Data inicial"><input type="date" id="flFim" aria-label="Data final">
+              <select id="flFiltroStatus"><option value="">Todos os status</option><option value="pago">Pagos / recebidos</option><option value="pendente">Pendentes</option></select>
+              <select id="flFiltroCategoria"></select>
+              <select id="flFiltroOrigem"><option value="">Todas as origens</option><option value="Manual">Manual</option><option value="PDV">PDV</option><option value="Food">Food</option><option value="Estoque">Estoque</option><option value="Recorrência">Recorrência</option></select>
+            </div>
+            <div class="card table-scroll">
+              <table>
+                <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Origem</th><th>Forma</th><th>Status</th><th>Valor</th><th></th></tr></thead>
+                <tbody id="flTabela"></tbody>
+                <tfoot><tr><td colspan="6" id="flTotalRotulo">Total</td><td id="flTotal" class="nowrap"></td><td></td></tr></tfoot>
+              </table>
+            </div>
+            <div class="toast" id="toastFl"></div>
+          </div>
+
+          <!-- Contas a pagar / a receber -->
+          <div id="finContas" style="display:none;">
+            <div class="dash-head">
+              <div><h2 class="dash-titulo" id="fcpTitulo">Contas a pagar</h2><p class="dash-sub" id="fcpSub"></p></div>
+              <div class="dash-head-acoes">
+                <div class="seg" id="fcpFiltro" role="group" aria-label="Vencimento">
+                  <button type="button" data-f="hoje">Hoje</button>
+                  <button type="button" data-f="7">7 dias</button>
+                  <button type="button" data-f="30">30 dias</button>
+                  <button type="button" data-f="atrasadas">Atrasadas</button>
+                  <button type="button" data-f="todas" class="active">Todas</button>
+                </div>
+                <button type="button" class="btn" id="btnFcpNovo">+ Nova conta</button>
+              </div>
+            </div>
+            <div class="hv-resumo fp-kpis" id="fcpKpis"></div>
+            <div class="card table-scroll">
+              <table>
+                <thead><tr><th>Vencimento</th><th>Descrição</th><th id="fcpColPessoa">Fornecedor</th><th>Categoria</th><th>Origem</th><th>Valor</th><th></th></tr></thead>
+                <tbody id="fcpTabela"></tbody>
+                <tfoot><tr><td colspan="5">Total</td><td id="fcpTotal" class="nowrap"></td><td></td></tr></tfoot>
+              </table>
+            </div>
+            <div class="toast" id="toastFcp"></div>
+          </div>
+
+          <!-- Fluxo de caixa -->
+          <div id="finFluxo" style="display:none;">
+            <div class="dash-head">
+              <div><h2 class="dash-titulo">Fluxo de caixa</h2><p class="dash-sub" id="ffSub"></p></div>
+              <div class="dash-head-acoes">
+                <input type="date" id="ffIni" aria-label="Data inicial"> até <input type="date" id="ffFim" aria-label="Data final">
+                <label class="fe-atualizar" style="margin:0;"><input type="checkbox" id="ffPrevistos" checked> Incluir previstos (pendentes)</label>
+              </div>
+            </div>
+            <div class="hv-resumo fp-kpis" id="ffKpis"></div>
+            <div class="card table-scroll">
+              <table>
+                <thead><tr><th>Data</th><th>Entradas</th><th>Saídas</th><th>Saldo do dia</th><th>Saldo acumulado</th><th></th></tr></thead>
+                <tbody id="ffTabela"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- DRE simplificada -->
+          <div id="finDre" style="display:none;">
+            <div class="dash-head">
+              <div><h2 class="dash-titulo">DRE simplificada</h2><p class="dash-sub">Resultado do período por competência: o que foi vendido e gasto no mês, recebido ou não.</p></div>
+              <div class="dash-head-acoes"><input type="month" id="fdrMes" aria-label="Mês"></div>
+            </div>
+            <div class="card fdr-card"><div id="fdrTabela"></div></div>
+            <p class="dv-ajuda">Compras de mercadoria e de ingredientes não entram como despesa: elas viram estoque. Na DRE entra o <b>custo do que foi vendido</b> (custo dos produtos do PDV e fichas técnicas do Food), assim nada é contado duas vezes.</p>
+          </div>
+
+          <!-- Recorrências -->
+          <div id="finRecorrencias" style="display:none;">
+            <div class="card dados-card">
+              <h3>Lançamentos recorrentes</h3>
+              <p class="dv-ajuda">Aluguel, internet, contador, salários… Cadastre uma vez: o sistema cria os lançamentos dos próximos meses em <b>Contas a pagar</b> (ou a receber) automaticamente.</p>
+              <div class="prod-grid">
+                <div class="field"><label for="frcTipo">Tipo</label><select id="frcTipo"><option value="despesa">Despesa</option><option value="receita">Receita</option></select></div>
+                <div class="field span-2"><label for="frcDescricao">Descrição *</label><input type="text" id="frcDescricao" placeholder="Ex: Aluguel"></div>
+                <div class="field"><label for="frcValor">Valor (R$) *</label><input type="text" id="frcValor" inputmode="decimal" placeholder="0,00"></div>
+                <div class="field"><label for="frcCategoria">Categoria</label><select id="frcCategoria"></select></div>
+                <div class="field"><label for="frcDia">Todo dia</label><input type="number" id="frcDia" min="1" max="31" value="5"></div>
+                <div class="field"><label for="frcInicio">A partir de</label><input type="month" id="frcInicio"></div>
+                <div class="field"><label for="frcFim">Até (opcional)</label><input type="month" id="frcFim"></div>
+                <div class="field"><label for="frcPessoa">Fornecedor / cliente</label><input type="text" id="frcPessoa" placeholder="Opcional"></div>
+              </div>
+              <div class="prod-erro" id="frcErro"></div>
+              <div class="cf-acoes" style="justify-content:flex-start;"><button type="button" class="btn" id="btnFrcSalvar">+ Criar recorrência</button></div>
+              <div class="toast" id="toastFrc"></div>
+            </div>
+            <div class="card table-scroll">
+              <table>
+                <thead><tr><th>Descrição</th><th>Tipo</th><th>Categoria</th><th>Valor</th><th>Repetição</th><th>Próximo</th><th>Status</th><th></th></tr></thead>
+                <tbody id="frcTabela"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Centro de integrações -->
+          <div id="finIntegracoes" style="display:none;">
+            <div class="card dados-card">
+              <h3>🧩 Centro de integrações</h3>
+              <p class="dv-ajuda">Os módulos compartilham os mesmos dados: vendas do PDV e pedidos do Food entram no Financeiro sozinhos, cada um com a sua <b>origem</b> (ex.: "PDV · Venda #1038"). Lançamentos automáticos não são editados aqui — cancele ou devolva na origem e o Financeiro acompanha. Assim nada é lançado duas vezes.</p>
+            </div>
+            <div class="fint-cards" id="fintCards"></div>
+            <div class="card dados-card">
+              <h3>O que enviar para o Financeiro</h3>
+              <div class="fint-opcoes" id="fintOpcoes"></div>
+              <div class="toast" id="toastFint"></div>
+            </div>
+          </div>
+
+          <!-- Configuração do Financeiro -->
+          <div id="finConfig" style="display:none;">
+            <div class="card dados-card">
+              <h3>Saldo inicial</h3>
+              <p class="dv-ajuda">Quanto a empresa tinha em caixa e bancos no dia em que começou a usar o Financeiro. É o ponto de partida do fluxo de caixa.</p>
+              <div class="prod-grid">
+                <div class="field"><label for="fconfSaldo">Saldo inicial (R$)</label><input type="text" id="fconfSaldo" inputmode="decimal" placeholder="0,00"></div>
+                <div class="field"><label for="fconfSaldoData">Em</label><input type="date" id="fconfSaldoData"></div>
+              </div>
+            </div>
+            <div class="card dados-card">
+              <h3>Categorias</h3>
+              <div class="fconf-cats">
+                <div><div class="rel-bloco-titulo">Receitas</div><div class="fconf-lista" id="fconfCatRec"></div><div class="fconf-add"><input type="text" id="fconfNovaRec" placeholder="Nova categoria de receita"><button type="button" class="btn btn-ghost" id="btnFconfAddRec">Adicionar</button></div></div>
+                <div><div class="rel-bloco-titulo">Despesas</div><div class="fconf-lista" id="fconfCatDesp"></div><div class="fconf-add"><input type="text" id="fconfNovaDesp" placeholder="Nova categoria de despesa"><button type="button" class="btn btn-ghost" id="btnFconfAddDesp">Adicionar</button></div></div>
+              </div>
+              <div class="cf-acoes" style="justify-content:flex-start;"><button type="button" class="btn" id="btnFconfSalvar">Salvar configuração</button></div>
+              <div class="toast" id="toastFconf"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Módulos contratados (área do administrador MGA) -->
+        <section class="panel" id="panel-modulos">
+          <div class="dash-head">
+            <div><h2 class="dash-titulo">🧩 Módulos e plano</h2><p class="dash-sub">Um único MGA Gestão: o cliente assina só os módulos que precisa. Módulo desativado some do menu.</p></div>
+          </div>
+          <div class="card mod-plano" id="modPlano"></div>
+          <div class="mod-cards" id="modCards"></div>
+          <div class="card dados-card">
+            <h3>Planos sugeridos</h3>
+            <p class="dv-ajuda">Um clique para aplicar a combinação.</p>
+            <div class="mod-sugestoes" id="modSugestoes"></div>
+          </div>
+          <div class="card dados-card">
+            <h3>Preços e descontos (administrador)</h3>
+            <div class="prod-grid" id="modPrecos"></div>
+            <div class="prod-grid" style="margin-top:10px;">
+              <div class="field"><label for="modSenha">Senha do administrador *</label><input type="password" id="modSenha" placeholder="Senha do supervisor" autocomplete="off"></div>
+            </div>
+            <div class="prod-erro" id="modErro"></div>
+            <div class="cf-acoes" style="justify-content:flex-start;"><button type="button" class="btn" id="btnModSalvar">Salvar plano</button></div>
+            <div class="toast" id="toastMod"></div>
+          </div>
+        </section>
+
+        <section class="panel" id="panel-helpdesk">
+          <div class="subtabs" style="margin-bottom:16px;" id="subtabsHelpdesk">
+            <button class="stab active" data-tab="visao">Visão geral</button>
+            <button class="stab" data-tab="cadastro">Cadastro</button>
+          </div>
+          <div id="helpdeskVisao">
+            <div class="card ph-card">
+              <div class="ph-ic">🎫</div>
+              <h3>MGA Help Desk</h3>
+              <p>Chamados, prioridade, SLA e base de conhecimento para o suporte aos seus clientes.</p>
+              <div class="ph-tags"><span>Chamados</span><span>SLA</span><span>Prioridade</span><span>Base de conhecimento</span></div>
+            </div>
+          </div>
+          <div id="helpdeskCadastro" style="display:none;"><div id="cad-helpdesk"></div></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+  <script>
+    // Ao entrar no sistema, sempre começa pela tela de boas-vindas
+    abrirBoasVindas();
+
+    const avatar = document.getElementById('avatarUsuario');
+    avatar.textContent = usuarioAtual.slice(0, 2).toUpperCase();
+    avatar.title = usuarioAtual;
+
+    const logoutButton = document.getElementById('btnLogout');
+    logoutButton.addEventListener('click', () => {
+      registrarAuditoria('Sistema', 'Saiu do sistema');
+      window.location.href = 'login.html';
+    });
+  </script>
+</body>
+</html>
