@@ -125,8 +125,17 @@
       ${opcoes.map(([v, nome]) => html`<button type="button" key=${v} className=${v === valor ? 'active' : ''} aria-pressed=${v === valor} onClick=${() => onChange(v)}>${nome}</button>`)}
     </div>`;
 
+  // Adicionais de um item já gravado ("Ao ponto, Bacon") e de um item ainda no carrinho
+  const adicionaisTxt = i => (i.adicionais || []).map(a => a.nome).join(', ');
+  function rotuloCarrinho(p, i){
+    const t = i.tamanhoId && (p.tamanhos || []).find(x => x.id === i.tamanhoId);
+    const opcoes = (p.gruposAdicionais || []).map(D.grupoAdicionalPorId).filter(Boolean).flatMap(g => g.opcoes).filter(o => (i.adicionais || []).includes(o.id));
+    return {nome: p.nome + (t ? ` (${t.nome})` : ''), extras: opcoes.map(o => o.nome).join(', ')};
+  }
+  const montado = i => !!(i.tamanhoId || (i.adicionais || []).length);
+
   const confirmar = msg => window.confirm(msg);
   const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
 
-  window.RestUI = {html, D, useDados, useAviso, Cabecalho, Busca, Campo, CampoValor, StatusAtivo, Acoes, FormCard, Modal, Tabela, Segmentos, confirmar, plural, telas: {}};
+  window.RestUI = {html, D, useDados, useAviso, Cabecalho, Busca, Campo, CampoValor, StatusAtivo, Acoes, FormCard, Modal, Tabela, Segmentos, confirmar, plural, adicionaisTxt, rotuloCarrinho, montado, telas: {}};
 })();

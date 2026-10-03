@@ -58,7 +58,13 @@
             <//>
             ${f.tipo === 'ENTRADA' && html`
               <${Campo} rotulo=${`Custo unitário (R$)${p ? ` por ${p.unidade}` : ''}`}><${CampoValor} valor=${f.custo} onChange=${v => setF(x => ({...x, custo: v}))} /><//>
-              <${Campo} rotulo="Fornecedor / nota (opcional)" largo><input type="text" value=${f.documento} maxLength="80" placeholder="Ex.: Distribuidora X · NF 1234" onInput=${set('documento')} /><//>`}
+              <${Campo} rotulo="Fornecedor (opcional)">
+                <select value=${f.fornecedorId} onChange=${set('fornecedorId')}>
+                  <option value="">—</option>
+                  ${D.fornecedores().filter(x => x.ativo).sort(porNome).map(x => html`<option key=${x.id} value=${x.id}>${x.nome}</option>`)}
+                </select>
+              <//>
+              <${Campo} rotulo="Nota fiscal / observação (opcional)"><input type="text" value=${f.documento} maxLength="80" placeholder="Ex.: NF 1234" onInput=${set('documento')} /><//>`}
             ${f.tipo === 'SAIDA' && html`
               <${Campo} rotulo="Motivo" largo><input type="text" list="est-motivos" value=${f.motivo} maxLength="80" placeholder="Ex.: Perda / quebra" onInput=${set('motivo')} /><//>`}
             ${f.tipo === 'AJUSTE' && html`
@@ -104,6 +110,116 @@
       <//>`;
   }
 
+  // ---- Compra: nota do fornecedor com vários itens e, se quiser, uma conta a pagar ----
+  const linhaCompra = () => ({key: 'k' + Math.random().toString(36).slice(2, 9), produtoId: '', quantidade: '', custo: ''});
+  function JanelaCompra({onFechar, aviso, tentar}){
+    const [f, setF] = useState({fornecedorId: '', documento: '', conta: false, vencimento: D.hojeISO(), itens: [linhaCompra()]});
+    const controlados = D.produtos().filter(p => p.controlaEstoque && p.ativo).sort(porNome);
+    const mudar = (key, k, v) => setF(x => ({...x, itens: x.itens.map(i => {
+      if (i.key !== key) return i;
+      const novo = {...i, [k]: v};
+      // Ao escolher o produto, sugere o último custo
+      if (k === 'produtoId' && !i.custo) { const p = D.produtoPorId(v); if (p?.custo) novo.custo = D.valorBR(p.custo); }
+      return novo;
+    })}));
+    const total = f.itens.reduce((s, i) => s + (D.lerValor(i.quantidade) || 0) * (D.lerValor(i.custo) || 0), 0);
+    const podeConta = D.podeAcessar('financeiro');
+    const confirmar = () => {
+      if (tentar(() => D.compraEstoque({...f, conta: podeConta && f.conta ? {vencimento: f.vencimento} : null}),
+        r => `Compra registrada: ${plural(r.itens, 'item', 'itens')}, ${D.moedaBR(r.total)}${podeConta && f.conta ? ' · conta a pagar lançada' : ''}.`)) onFechar();
+    };
+    return html`
+      <${Modal} titulo="Compra (entrada de mercadoria)" onFechar=${onFechar}>
+        <form className="rest-compra" onSubmit=${e => { e.preventDefault(); confirmar(); }}>
+          <div className="form-grid">
+            <${Campo} rotulo="Fornecedor (opcional)">
+              <select value=${f.fornecedorId} onChange=${e => setF({...f, fornecedorId: e.target.value})}>
+                <option value="">—</option>${D.fornecedores().filter(x => x.ativo).sort(porNome).map(x => html`<option key=${x.id} value=${x.id}>${x.nome}</option>`)}
+              </select>
+            <//>
+            <${Campo} rotulo="Nota fiscal / observação"><input type="text" maxLength="80" value=${f.documento} placeholder="Ex.: NF 1234" onInput=${e => setF({...f, documento: e.target.value})} /><//>
+          </div>
+          <div className="rest-compra-cab"><span>Produto</span><span>Quantidade</span><span>Custo unit. (R$)</span><span>Total</span><span></span></div>
+          ${f.itens.map(i => {
+            const p = D.produtoPorId(i.produtoId);
+            return html`<div key=${i.key} className="rest-linha-edit rest-compra-linha">
+              <select value=${i.produtoId} aria-label="Produto" onChange=${e => mudar(i.key, 'produtoId', e.target.value)}>
+                <option value="">Escolha...</option>${controlados.map(x => html`<option key=${x.id} value=${x.id}>${x.nome}${x.tipo === 'INSUMO' ? ' (insumo)' : ''}</option>`)}
+              </select>
+              <input type="text" inputMode="decimal" value=${i.quantidade} placeholder=${p ? p.unidade : 'Qtd'} aria-label="Quantidade" onInput=${e => mudar(i.key, 'quantidade', e.target.value)} />
+              <input type="text" inputMode="decimal" value=${i.custo} placeholder="0,00" aria-label="Custo unitário" onInput=${e => mudar(i.key, 'custo', e.target.value)} />
+              <b className="rest-num">${D.moedaBR((D.lerValor(i.quantidade) || 0) * (D.lerValor(i.custo) || 0))}</b>
+              <button type="button" className="rest-car-rm" aria-label="Tirar item" disabled=${f.itens.length === 1} onClick=${() => setF(x => ({...x, itens: x.itens.filter(y => y.key !== i.key)}))}>✕</button>
+            </div>`;
+          })}
+          <button type="button" className="rest-link" onClick=${() => setF(x => ({...x, itens: [...x.itens, linhaCompra()]}))}>+ Adicionar item</button>
+          <p className="rest-est-previa">Total da compra: <b>${D.moedaBR(total)}</b> · o custo médio de cada produto é atualizado.</p>
+          ${podeConta && html`
+            <label className="rest-check rest-no-caixa"><input type="checkbox" checked=${f.conta} onChange=${e => setF({...f, conta: e.target.checked})} /> Lançar uma conta a pagar com o total</label>
+            ${f.conta && html`<div className="form-grid"><${Campo} rotulo="Vencimento"><input type="date" value=${f.vencimento} onChange=${e => setF({...f, vencimento: e.target.value})} /><//></div>`}`}
+          ${aviso}
+          <div className="cf-acoes">
+            <button type="button" className="btn btn-ghost" onClick=${onFechar}>Cancelar</button>
+            <button type="submit" className="btn">Registrar compra</button>
+          </div>
+        </form>
+      <//>`;
+  }
+
+  // ---- Produção: faz o produto pela ficha técnica (sai insumo, entra produto) ----
+  function JanelaProducao({produtoId, onFechar, aviso, tentar}){
+    const [qtd, setQtd] = useState('');
+    const [obs, setObs] = useState('');
+    const p = D.produtoPorId(produtoId);
+    const n = D.lerValor(qtd) || 0;
+    const confirmar = () => { if (tentar(() => D.produzir({produtoId, quantidade: qtd, obs}), m => `Produzido ${D.qtdBR(m.quantidade)} ${m.unidade} de "${m.produto}". Saldo: ${D.qtdBR(m.saldo)}.`)) onFechar(); };
+    return html`
+      <${Modal} titulo=${`Produzir · ${p.nome}`} onFechar=${onFechar}>
+        <form onSubmit=${e => { e.preventDefault(); confirmar(); }}>
+          <div className="form-grid">
+            <${Campo} rotulo=${`Quantidade a produzir (${p.unidade})`}><input type="text" inputMode="decimal" value=${qtd} placeholder="0" onInput=${e => setQtd(e.target.value)} /><//>
+            <${Campo} rotulo="Observação (opcional)"><input type="text" maxLength="80" value=${obs} placeholder="Ex.: lote da manhã" onInput=${e => setObs(e.target.value)} /><//>
+          </div>
+          <table className="rest-producao-tab"><thead><tr><th>Insumo</th><th className="rest-num">Usa</th><th className="rest-num">Tem</th></tr></thead>
+            <tbody>${p.ficha.map(c => {
+              const ins = D.produtoPorId(c.produtoId), usa = c.quantidade * n, falta = ins && ins.controlaEstoque && usa > ins.estoque + 0.0001;
+              return html`<tr key=${c.produtoId}><td>${ins?.nome || '?'}</td><td className=${'rest-num' + (falta ? ' mov-neg' : '')}>${D.qtdBR(usa)} ${ins?.unidade || ''}</td><td className="rest-num">${ins?.controlaEstoque ? `${D.qtdBR(ins.estoque)} ${ins.unidade}` : 'sem controle'}</td></tr>`;
+            })}</tbody></table>
+          ${aviso}
+          <div className="cf-acoes">
+            <button type="button" className="btn btn-ghost" onClick=${onFechar}>Cancelar</button>
+            <button type="submit" className="btn">Produzir</button>
+          </div>
+        </form>
+      <//>`;
+  }
+
+  // ---- Zerar estoque (todos ou por categoria), com motivo ----
+  function JanelaZerar({onFechar, aviso, tentar}){
+    const [f, setF] = useState({grupoId: '', motivo: ''});
+    const alvo = D.produtos().filter(p => p.controlaEstoque && Number(p.estoque) !== 0 && (!f.grupoId || p.grupoId === f.grupoId));
+    const confirmar = () => {
+      if (!window.confirm(`Zerar o estoque de ${plural(alvo.length, 'produto', 'produtos')}? Cada um ganha um ajuste no histórico.`)) return;
+      if (tentar(() => D.zerarEstoque(f), n => `Estoque zerado em ${plural(n, 'produto', 'produtos')}.`)) onFechar();
+    };
+    return html`
+      <${Modal} titulo="Zerar estoque" onFechar=${onFechar}>
+        <p className="dv-ajuda">Deixa o saldo em zero (por exemplo, antes de um inventário completo). Fica tudo registrado nas movimentações.</p>
+        <div className="form-grid">
+          <${Campo} rotulo="Categoria">
+            <select value=${f.grupoId} onChange=${e => setF({...f, grupoId: e.target.value})}><option value="">Todas</option>${D.grupos().map(g => html`<option key=${g.id} value=${g.id}>${g.nome}</option>`)}</select>
+          <//>
+          <${Campo} rotulo="Motivo"><input type="text" maxLength="80" value=${f.motivo} placeholder="Ex.: inventário anual" onInput=${e => setF({...f, motivo: e.target.value})} /><//>
+        </div>
+        <p className="rest-est-previa">${plural(alvo.length, 'produto com saldo', 'produtos com saldo')} ${f.grupoId ? 'nesta categoria' : 'no total'}.</p>
+        ${aviso}
+        <div className="cf-acoes">
+          <button type="button" className="btn btn-ghost" onClick=${onFechar}>Cancelar</button>
+          <button type="button" className="btn btn-perigo" disabled=${!alvo.length} onClick=${confirmar}>Zerar estoque</button>
+        </div>
+      <//>`;
+  }
+
   // ---- Posição do estoque ----
   function TelaPosicao({params, ir}){
     useDados();
@@ -114,6 +230,7 @@
     const [inativos, setInativos] = useState(false);
     const [mov, setMov] = useState(null);
     const [config, setConfig] = useState(null);
+    const [janela, setJanela] = useState(null); // {tipo: 'compra' | 'zerar' | 'producao', produtoId}
     const todos = D.produtos().filter(p => inativos || p.ativo);
     const controlados = todos.filter(p => p.controlaEstoque);
     const repor = controlados.filter(D.estoqueBaixo), zerados = controlados.filter(semEstoque);
@@ -124,7 +241,7 @@
       .filter(p => !busca || D.norm(p.nome + ' ' + p.codigo).includes(b))
       .sort((x, y) => filtro === 'repor' ? (x.estoque - (x.estoqueMinimo || 0)) - (y.estoque - (y.estoqueMinimo || 0)) || porNome(x, y)
         : (D.grupoPorId(x.grupoId)?.ordem || 0) - (D.grupoPorId(y.grupoId)?.ordem || 0) || porNome(x, y));
-    const abrir = (tipo, p) => setMov({tipo, produtoId: p?.id || '', quantidade: '', custo: p?.custo ? D.valorBR(p.custo) : '', documento: '', motivo: '',
+    const abrir = (tipo, p) => setMov({tipo, produtoId: p?.id || '', quantidade: '', custo: p?.custo ? D.valorBR(p.custo) : '', documento: '', fornecedorId: '', motivo: '',
       conta: false, vencimento: D.hojeISO()});
     const configurar = (p, controla = p.controlaEstoque) => setConfig({produtoId: p.id, controla, minimo: p.estoqueMinimo ? D.qtdBR(p.estoqueMinimo) : ''});
 
@@ -135,7 +252,8 @@
     return html`
       <${Cabecalho} titulo="Posição do estoque" sub="A venda finalizada baixa o estoque sozinha; a venda cancelada devolve">
         <button type="button" className="btn btn-ghost" onClick=${() => ir('estoque/movimentos')}>Movimentações</button>
-        <button type="button" className="btn" onClick=${() => abrir('ENTRADA')} disabled=${!controlados.length} title=${controlados.length ? '' : 'Nenhum produto controla estoque'}>+ Entrada de mercadoria</button>
+        <button type="button" className="btn btn-ghost" onClick=${() => setJanela({tipo: 'zerar'})} disabled=${!controlados.length}>Zerar estoque</button>
+        <button type="button" className="btn" onClick=${() => setJanela({tipo: 'compra'})} disabled=${!controlados.length} title=${controlados.length ? 'Nota com vários itens' : 'Nenhum produto controla estoque'}>+ Compra</button>
       <//>
       ${aviso}
       <div className="rest-kpis-mini">
@@ -175,18 +293,22 @@
                 <button type="button" className="rest-acao-baixa" onClick=${() => abrir('ENTRADA', p)}>Entrada</button>
                 <button type="button" className="rest-acao-estorno" onClick=${() => abrir('SAIDA', p)}>Saída</button>
                 <button type="button" className="rest-acao-estorno" onClick=${() => abrir('AJUSTE', p)} title="Informar a quantidade contada">Ajuste</button>
+                ${(p.ficha || []).length > 0 && html`<button type="button" className="rest-acao-estorno" onClick=${() => setJanela({tipo: 'producao', produtoId: p.id})} title="Produzir pela ficha técnica">Produzir</button>`}
               <//>`
             : html`<${Acoes} nome=${p.nome}><button type="button" className="rest-acao-estorno" onClick=${() => configurar(p, true)}>Controlar</button><//>`}</td>
         </tr>`)}
       <//>
       ${mov && html`<${JanelaMovimento} inicial=${mov} onFechar=${() => setMov(null)} aviso=${aviso} tentar=${tentar} />`}
-      ${config && html`<${JanelaConfig} inicial=${config} onFechar=${() => setConfig(null)} aviso=${aviso} tentar=${tentar} />`}`;
+      ${config && html`<${JanelaConfig} inicial=${config} onFechar=${() => setConfig(null)} aviso=${aviso} tentar=${tentar} />`}
+      ${janela?.tipo === 'compra' && html`<${JanelaCompra} onFechar=${() => setJanela(null)} aviso=${aviso} tentar=${tentar} />`}
+      ${janela?.tipo === 'zerar' && html`<${JanelaZerar} onFechar=${() => setJanela(null)} aviso=${aviso} tentar=${tentar} />`}
+      ${janela?.tipo === 'producao' && html`<${JanelaProducao} produtoId=${janela.produtoId} onFechar=${() => setJanela(null)} aviso=${aviso} tentar=${tentar} />`}`;
   }
 
   // ---- Movimentações ----
   const PERIODOS = [['hoje', 'Hoje'], ['7d', '7 dias'], ['mes', 'Este mês'], ['tudo', 'Tudo']];
   const LIMITE = 300; // linhas mostradas de uma vez
-  const BADGE = {ENTRADA: 'b-ok', SAIDA: 'rest-b-vencida', AJUSTE: 'rest-b-aberta', VENDA: 'rest-b-venda', ESTORNO: 'b-wait'};
+  const BADGE = {ENTRADA: 'b-ok', SAIDA: 'rest-b-vencida', AJUSTE: 'rest-b-aberta', VENDA: 'rest-b-venda', ESTORNO: 'b-wait', PRODUCAO: 'rest-b-producao'};
   function TelaMovimentos({params, ir}){
     useDados();
     const [periodo, setPeriodo] = useState(params.p ? 'tudo' : 'mes');

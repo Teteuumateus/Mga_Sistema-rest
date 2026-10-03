@@ -139,6 +139,14 @@
     (function(){
       const D = window.RestDados;
       const $ = id => document.getElementById(id);
+      // Nome da empresa (Configurações › Empresa) no lugar de MGA; "Restaurante" vira a assinatura do sistema
+      const marca = D.nomeMarca();
+      if (marca !== 'MGA') {
+        document.querySelectorAll('.brand-copy h1, .mini-text h1').forEach(h => { h.textContent = marca; h.classList.toggle('marca-longa', marca.length > 9); });
+        document.querySelectorAll('.brand-copy span, .mini-text span').forEach(s => { s.textContent = 'com MGA Restaurante'; });
+        document.querySelector('.mini-brand')?.setAttribute('aria-label', marca);
+        document.title = marca + ' | Entrar';
+      }
       // Já logado (ex.: "lembrar-me"): vai direto para o sistema
       if (D.sessaoAtual()) { location.replace('mga-sistema.html'); return; }
 

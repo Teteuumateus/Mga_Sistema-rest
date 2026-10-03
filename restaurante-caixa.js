@@ -72,6 +72,8 @@
         ${cx.valorContado != null && html`
           ${linha('Valor contado', D.moedaBR(cx.valorContado))}
           ${linha('Diferença', Math.abs(cx.diferenca) < 0.001 ? 'Sem diferença' : `${cx.diferenca > 0 ? 'Sobra' : 'Falta'} de ${D.moedaBR(Math.abs(cx.diferenca))}`, Math.abs(cx.diferenca) < 0.001 ? 'rest-rf-ok' : 'rest-rf-dif')}
+          ${(cx.conferencia || []).filter(c => c.tipo !== 'DINHEIRO').map(c => linha(`${c.nome}: conferido ${D.moedaBR(c.contado)} (esperado ${D.moedaBR(c.esperado)})`,
+            Math.abs(c.diferenca) < 0.001 ? 'Confere' : `${c.diferenca > 0 ? 'Sobra' : 'Falta'} de ${D.moedaBR(Math.abs(c.diferenca))}`, Math.abs(c.diferenca) < 0.001 ? 'rest-rf-ok' : 'rest-rf-dif'))}
           ${cx.obsFechamento && linha('Motivo', cx.obsFechamento, 'rest-rf-nota')}`}
         <p className="rest-rf-rodape">Saldo final = inicial + vendas em dinheiro + suprimentos + recebimentos em dinheiro − sangrias − estornos e pagamentos em dinheiro. PIX e cartões não ficam na gaveta.</p>
       </div>`;
@@ -82,7 +84,7 @@
     let alvo = document.getElementById('rest-impressao');
     if (!alvo) { alvo = document.createElement('div'); alvo.id = 'rest-impressao'; document.body.appendChild(alvo); }
     const raiz = ReactDOM.createRoot(alvo);
-    raiz.render(html`<div className="rest-impressao-folha"><h1>MGA Restaurante · Fechamento de caixa</h1><${ResumoFechamento} r=${r} cx=${cx} />
+    raiz.render(html`<div className="rest-impressao-folha"><${window.RestUI.CabecalhoEmpresa} /><h1>${cx.status === 'ABERTO' ? 'Resumo parcial do caixa (caixa aberto)' : 'Fechamento de caixa'}</h1><${ResumoFechamento} r=${r} cx=${cx} />
       <p className="rest-rf-rodape">Impresso em ${new Date().toLocaleString('pt-BR')} por ${D.usuario()}</p>
       <div className="rest-assinaturas"><span>Operador</span><span>Conferente</span></div></div>`);
     document.body.classList.add('rest-imprimindo');
@@ -111,15 +113,18 @@
       <${AbrirCaixa} onAberto=${() => {}} />`;
 
     const r = D.resumoCaixa(cx.id);
-    const salvarMov = () => { if (tentar(() => D.movimentarCaixa(mov.tipo, mov), m => `${NOMES_MOV[m.tipo]} de ${D.moedaBR(m.valor)} registrada.`)) setMov(null); };
+    const salvarMov = () => { if (tentar(() => D.movimentarCaixa(mov.tipo, {...mov, contaBancariaId: mov.contaBancariaId || null}), m => `${NOMES_MOV[m.tipo]} de ${D.moedaBR(m.valor)} registrada.`)) setMov(null); };
     const contado = fechando ? D.lerValor(fechando.contado) : NaN;
     const diferenca = Number.isFinite(contado) ? Math.round((contado - r.saldoDinheiro) * 100) / 100 : null;
-    const fechar = () => { const c = tentar(() => D.fecharCaixa({valorContado: fechando.contado, obs: fechando.obs})); if (c) { setFechando(null); setFechado(c); } };
+    const fechar = () => { const c = tentar(() => D.fecharCaixa({valorContado: fechando.contado, obs: fechando.obs, conferencia: fechando.conferencia || {}})); if (c) { setFechando(null); setFechado(c); } };
+    // Diferença nas outras formas também pede o motivo
+    const difOutras = fechando && ['PIX', 'DEBITO', 'CREDITO', 'OUTROS'].some(t => { const c = D.lerValor(fechando.conferencia?.[t]); return Number.isFinite(c) && Math.abs(c - r.esperado[t]) > 0.004; });
     const movs = r.movimentos.filter(m => m.tipo !== 'ABERTURA').slice().reverse();
     return html`
       <${Cabecalho} titulo=${`Caixa #${cx.numero}`} sub=${`Operador: ${cx.operador} · aberto em ${dataHora(cx.abertura)}`}>
         <button type="button" className="btn btn-ghost" onClick=${() => setMov({tipo: 'SUPRIMENTO', valor: '', motivo: ''})}>+ Suprimento</button>
         <button type="button" className="btn btn-ghost" onClick=${() => setMov({tipo: 'SANGRIA', valor: '', motivo: ''})}>− Sangria</button>
+        <button type="button" className="btn btn-ghost" title="Resumo do caixa até agora (leitura parcial)" onClick=${() => imprimirFechamento(cx)}>🖨️ Imprimir parcial</button>
         <button type="button" className="btn" onClick=${() => ir('vendas/pdv')}>Nova venda</button>
         <button type="button" className="btn btn-perigo" onClick=${() => setFechando({contado: '', obs: ''})}>Fechar caixa</button>
       <//>
@@ -167,6 +172,11 @@
             <${Campo} rotulo="Valor (R$)"><${CampoValor} valor=${mov.valor} onChange=${v => setMov(m => ({...m, valor: v}))} /><//>
             <${Campo} rotulo="Motivo"><input type="text" value=${mov.motivo} maxLength="100" placeholder=${mov.tipo === 'SANGRIA' ? 'Ex.: depósito no banco' : 'Ex.: troco extra'} onInput=${e => setMov({...mov, motivo: e.target.value})}
               onKeyDown=${e => { if (e.key === 'Enter') salvarMov(); }} /><//>
+            ${D.podeAcessar('financeiro') && D.contasBancarias().some(c => c.ativo) && html`<${Campo} rotulo=${mov.tipo === 'SANGRIA' ? 'Levar para a conta (opcional)' : 'Tirado da conta (opcional)'} largo>
+              <select value=${mov.contaBancariaId || ''} onChange=${e => setMov({...mov, contaBancariaId: e.target.value})}>
+                <option value="">—</option>${D.contasBancarias().filter(c => c.ativo).map(c => html`<option key=${c.id} value=${c.id}>${c.nome}</option>`)}
+              </select>
+            <//>`}
           </div>
           ${aviso}
           <div className="cf-acoes">
@@ -181,11 +191,24 @@
             <div className="form-grid">
               <${Campo} rotulo="Dinheiro contado na gaveta (R$)"><${CampoValor} valor=${fechando.contado} onChange=${v => setFechando(f => ({...f, contado: v}))} /><//>
             </div>
+            ${['PIX', 'DEBITO', 'CREDITO', 'OUTROS'].some(t => r.esperado[t] > 0) && html`
+              <div className="rest-conferencia">
+                <b>Conferir as outras formas <small>opcional · pelo extrato da maquininha e do banco</small></b>
+                ${['PIX', 'DEBITO', 'CREDITO', 'OUTROS'].filter(t => r.esperado[t] > 0).map(t => {
+                  const c = D.lerValor(fechando.conferencia?.[t]), dif = Number.isFinite(c) ? Math.round((c - r.esperado[t]) * 100) / 100 : null;
+                  return html`<div key=${t} className="rest-conf-linha">
+                    <span>${D.TIPOS_FORMA[t]}<small>esperado ${D.moedaBR(r.esperado[t])}</small></span>
+                    <input type="text" inputMode="decimal" placeholder="conferido" aria-label=${'Conferido em ' + D.TIPOS_FORMA[t]} value=${fechando.conferencia?.[t] || ''}
+                      onInput=${e => setFechando(f => ({...f, conferencia: {...(f.conferencia || {}), [t]: e.target.value}}))} />
+                    <b className=${dif === null ? 'rest-cod' : Math.abs(dif) < 0.005 ? 'mov-pos' : 'mov-neg'}>${dif === null ? '—' : Math.abs(dif) < 0.005 ? '✓ confere' : `${dif > 0 ? 'sobra' : 'falta'} ${D.moedaBR(Math.abs(dif))}`}</b>
+                  </div>`;
+                })}
+              </div>`}
             <div className=${'rest-diferenca ' + (diferenca === null ? '' : Math.abs(diferenca) < 0.001 ? 'ok' : diferenca > 0 ? 'sobra' : 'falta')}>
-              ${diferenca === null ? 'Conte o dinheiro e informe o valor acima.' : Math.abs(diferenca) < 0.001 ? '✓ Confere com o saldo esperado.'
-                : `${diferenca > 0 ? 'Sobra' : 'Falta'} de ${D.moedaBR(Math.abs(diferenca))} em relação ao esperado (${D.moedaBR(r.saldoDinheiro)}).`}
+              ${diferenca === null ? 'Conte o dinheiro e informe o valor acima.' : Math.abs(diferenca) < 0.001 ? '✓ O dinheiro confere com o esperado.'
+                : `Dinheiro: ${diferenca > 0 ? 'sobra' : 'falta'} de ${D.moedaBR(Math.abs(diferenca))} em relação ao esperado (${D.moedaBR(r.saldoDinheiro)}).`}
             </div>
-            ${diferenca !== null && Math.abs(diferenca) > 0.001 && html`
+            ${diferenca !== null && (Math.abs(diferenca) > 0.001 || difOutras) && html`
               <div className="field"><label htmlFor="fcObs">Motivo da diferença</label><input id="fcObs" type="text" maxLength="150" value=${fechando.obs} onInput=${e => setFechando({...fechando, obs: e.target.value})} /></div>`}
             ${aviso}
           </div>
@@ -248,7 +271,7 @@
         <div className="rest-venda-det">
           <p className="dv-ajuda">${v.tipo === 'MESA' ? `Mesa ${v.mesa}` : D.TIPOS_VENDA[v.tipo]} · ${dataHora(v.finalizadaEm || v.data)} · operador ${v.operador}${v.clienteId ? ` · cliente ${D.clientePorId(v.clienteId)?.nome || '—'}` : ''}</p>
           ${v.status === 'CANCELADA' && html`<p className="toast rest-toast toast-erro">Cancelada em ${dataHora(v.canceladaEm)}${v.canceladaPor ? ` por ${v.canceladaPor}` : ''}: ${v.motivoCancelamento}</p>`}
-          <table><tbody>${v.itens.map(i => html`<tr key=${i.id}><td>${String(i.quantidade).replace('.', ',')}× ${i.nome}${i.observacao ? html`<small className="history-date">${i.observacao}</small>` : null}</td>
+          <table><tbody>${v.itens.map(i => html`<tr key=${i.id}><td>${String(i.quantidade).replace('.', ',')}× ${i.nome}${i.adicionais?.length ? html`<small className="history-date">+ ${window.RestUI.adicionaisTxt(i)}</small>` : null}${i.promocao ? html`<small className="history-date">🏷️ ${i.promocao}</small>` : null}${i.observacao ? html`<small className="history-date">${i.observacao}</small>` : null}</td>
             <td className="nowrap">${D.moedaBR(i.quantidade * i.precoUnitario - (i.desconto || 0))}</td></tr>`)}</tbody></table>
           <div className="rest-rf">
             <div className="rest-rf-linha"><span>Subtotal</span><b>${D.moedaBR(t.itens)}</b></div>
@@ -268,6 +291,7 @@
         </div>
         <div className="cf-acoes">
           <button type="button" className="btn btn-ghost" onClick=${onFechar}>Fechar</button>
+          ${v.status === 'FINALIZADA' && html`<button type="button" className="btn btn-ghost" onClick=${() => window.RestUI.impressao.cupom(v)}>🖨️ Reimprimir cupom</button>`}
           ${v.status === 'FINALIZADA' && (cancelando
             ? html`<button type="button" className="btn btn-perigo" onClick=${cancelar}>Confirmar cancelamento</button>`
             : html`<button type="button" className="btn btn-perigo" onClick=${() => setCancelando(true)}>Cancelar venda</button>`)}

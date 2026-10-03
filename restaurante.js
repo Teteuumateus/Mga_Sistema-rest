@@ -23,22 +23,25 @@
   const MENU = [
     {rota: 'dashboard', nome: 'Dashboard', ic: '📊', modulo: 'dashboard'},
     {grupo: 'cad', nome: 'Cadastros', ic: '🗂️', modulo: 'cadastros', itens: [
-      ['cad/produtos', 'Produtos'], ['cad/grupos', 'Categorias'], ['cad/mesas', 'Mesas'], ['cad/clientes', 'Clientes'], ['cad/entregadores', 'Entregadores'],
+      ['cad/produtos', 'Produtos'], ['cad/grupos', 'Categorias'], ['cad/adicionais', 'Adicionais e etapas', null, 'Ponto da carne, extras, acompanhamentos...'],
+      ['cad/promocoes', 'Promoções', null, 'Preço especial por dia e horário'], ['cad/embalagens', 'Embalagens', null, 'Cobradas por item no delivery'], ['cad/mesas', 'Mesas'], ['cad/clientes', 'Clientes'], ['cad/fornecedores', 'Fornecedores'],
+      ['cad/funcionarios', 'Funcionários'], ['cad/entregadores', 'Entregadores'], ['cad/regioes', 'Regiões de entrega', null, 'Cidades, bairros e taxa de entrega'], ['cad/aplicativos', 'Aplicativos de delivery', null, 'iFood, 99Food... com a comissão de cada um'],
       ['cad/formas', 'Formas de pagamento'], ['cad/usuarios', 'Usuários', 'configuracoes']]},
     // Vendas: Mesas (salão) e Delivery (WhatsApp/telefone) no topo; depois balcão e caixa.
     // Cada item: [rota, nome, módulo (se diferente do grupo), dica]
     {grupo: 'vendas', nome: 'Vendas', ic: '🧾', modulo: 'vendas', itens: [
       ['mesas', 'Mesas', 'mesas', 'Vendas das mesas do salão'],
       ['delivery', 'Delivery', 'delivery', 'Pedidos feitos pelo WhatsApp ou por telefone'],
-      ['vendas/pdv', 'Venda balcão'], ['vendas/caixa', 'Caixa'], ['vendas/lista', 'Vendas realizadas'], ['vendas/caixas', 'Caixas anteriores']]},
+      ['vendas/pdv', 'Venda balcão'], ['vendas/cozinha', 'Fila de produção', 'cozinha', 'O que a cozinha tem para preparar'], ['vendas/caixa', 'Caixa'], ['vendas/lista', 'Vendas realizadas'], ['vendas/caixas', 'Caixas anteriores']]},
     {grupo: 'est', nome: 'Estoque', ic: '📦', modulo: 'estoque', itens: [['estoque', 'Posição do estoque'], ['estoque/movimentos', 'Movimentações']]},
-    {grupo: 'fin', nome: 'Financeiro', ic: '💰', modulo: 'financeiro', itens: [['fin/pagar', 'Contas a pagar'], ['fin/receber', 'Contas a receber'], ['fin/categorias', 'Categorias financeiras']]},
-    {rota: 'relatorios', nome: 'Relatórios', ic: '📈', modulo: 'relatorios'},
-    {grupo: 'config', nome: 'Configurações', ic: '⚙️', modulo: 'configuracoes', itens: [['config/restaurante', 'Restaurante'], ['config/auditoria', 'Auditoria'], ['config/dados', 'Dados do sistema']]}
+    {grupo: 'fin', nome: 'Financeiro', ic: '💰', modulo: 'financeiro', itens: [['fin/pagar', 'Contas a pagar'], ['fin/receber', 'Contas a receber'], ['fin/contas', 'Contas bancárias'],
+      ['fin/extrato', 'Movimento de conta', null, 'Extrato, lançamentos e transferências'], ['fin/categorias', 'Categorias financeiras']]},
+    {grupo: 'rel', nome: 'Relatórios', ic: '📈', modulo: 'relatorios', itens: [['rel/vendas', 'Vendas'], ['rel/produtos', 'Produtos'], ['rel/cardapio', 'Engenharia de cardápio', null, 'CMV: o que vende e o que dá lucro'],
+      ['rel/caixa', 'Caixa'], ['rel/delivery', 'Delivery'], ['rel/financeiro', 'Financeiro (DRE)', 'financeiro', 'Resultado, contas, sangrias e mês a mês']]},
+    {grupo: 'config', nome: 'Configurações', ic: '⚙️', modulo: 'configuracoes', itens: [['config/restaurante', 'Restaurante'], ['config/empresa', 'Empresa'], ['config/impressao', 'Impressão'], ['config/auditoria', 'Auditoria'], ['config/dados', 'Dados do sistema']]}
   ];
-  const EM_BREVE = {
-    relatorios: {nome: 'Relatórios', ic: '📈', fase: 6, texto: 'Vendas, caixa, delivery e produtos por período, operador e forma de pagamento.'}
-  };
+  // Seções ainda em desenvolvimento: {rota: {nome, ic, fase, texto}} (aparecem com o selo "fase N")
+  const EM_BREVE = {};
   const ROTAS = {};
   MENU.forEach(m => m.itens
     ? m.itens.forEach(([r, n, mod, dica]) => { ROTAS[r] = {titulo: `${m.nome} › ${n}`, modulo: mod || m.modulo, grupo: m.grupo, dica}; })
@@ -91,7 +94,9 @@
       .filter(m => m.itens ? m.itens.length : D.podeAcessar(m.modulo));
     return html`
       <aside className="sidebar" id="sidebar">
-        <button type="button" className="brand" onClick=${() => ir('dashboard')} title="Ir para o Dashboard"><span className="dot"></span>MGA</button>
+        <button type="button" className="brand" onClick=${() => ir('dashboard')} title=${`${D.nomeMarca()} · ir para o Dashboard`}>
+          <span className="dot"></span><span className=${'brand-nome' + (D.nomeMarca().length > 20 ? ' longo muito-longo' : D.nomeMarca().length > 9 ? ' longo' : '')}>${D.nomeMarca()}</span>
+        </button>
         <nav className="nav" aria-label="Menu principal">
           ${visiveis.map(m => m.itens
             ? html`<div key=${m.grupo} className=${'nav-grupo' + (aberto === m.grupo ? '' : ' recolhido') + (ROTAS[rota]?.grupo === m.grupo ? ' grupo-ativo' : '')}>
@@ -109,9 +114,40 @@
               </button>`)}
         </nav>
         <button type="button" className="logout-btn" onClick=${sair}><span className="ic">↪</span>Sair</button>
-        <div className="sidebar-foot">MGA Restaurante<br />v3.0 · 100% Web</div>
+        <div className="sidebar-foot">MGA Tecnologia<br />v3.0 · 100% Web</div>
       </aside>`;
   }
+
+  // ---- Atalhos da barra superior: achar mesa pelo número e abrir Mesas, Delivery e Balcão ----
+  // "5" acha a mesa "05"; ocupada abre o pedido, livre abre a janela para abrir a mesa
+  function Atalhos(){
+    const [busca, setBusca] = useState('');
+    const [erro, setErro] = useState(false);
+    const podeMesas = D.podeAcessar('mesas'), podeDelivery = D.podeAcessar('delivery'), podeVendas = D.podeAcessar('vendas');
+    const procurar = e => {
+      e.preventDefault();
+      const t = busca.trim().toUpperCase();
+      if (!t) return;
+      const m = D.mesas().find(x => x.ativo && (x.numero === t || x.numero === t.padStart(2, '0')));
+      if (!m) { setErro(true); return; }
+      const v = D.vendaDaMesa(m.id);
+      setBusca('');
+      v ? ir('mesas/pedido', {id: v.id}) : ir('mesas', {abrir: m.id});
+    };
+    const atalho = (rotulo, ic, rota) => html`<button type="button" className="rest-atalho" title=${rotulo} onClick=${() => ir(rota)}><span aria-hidden="true">${ic}</span><span className="rest-atalho-txt">${rotulo}</span></button>`;
+    return html`
+      <div className="rest-atalhos">
+        ${podeMesas && html`<form className=${'rest-busca-mesa' + (erro ? ' erro' : '')} onSubmit=${procurar} role="search">
+          <input type="search" inputMode="numeric" value=${busca} placeholder="Mesa nº" aria-label="Abrir mesa pelo número" title=${erro ? 'Mesa não encontrada' : 'Digite o número da mesa e tecle Enter'}
+            onInput=${e => { setBusca(e.target.value); setErro(false); }} />
+        </form>`}
+        ${podeMesas && atalho('Mesas', '🍽️', 'mesas')}
+        ${podeDelivery && atalho('Delivery', '🛵', 'delivery')}
+        ${podeVendas && atalho('Balcão', '🧾', 'vendas/pdv')}
+      </div>`;
+  }
+  // Tempo desde a abertura do caixa: "há 25 min", "há 1 h 38 min"
+  const haQuanto = iso => { const min = Math.max(0, Math.floor((Date.now() - new Date(iso)) / 60000)); return min < 60 ? `há ${min} min` : `há ${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')} min`; };
 
   // ---- Barra superior: título, saudação, status do caixa e operador ----
   function BarraSuperior({rota}){
@@ -135,8 +171,9 @@
           <button type="button" className=${'rest-caixa ' + (cx ? 'aberto' : 'fechado')} disabled=${!podeCaixa} onClick=${() => ir('vendas/caixa')}
             title=${cx ? `Caixa #${cx.numero} · operador ${cx.operador} · aberto em ${desde}` : 'Nenhum caixa aberto'}>
             <span className="rest-caixa-ponto" aria-hidden="true"></span>${cx ? 'Caixa aberto' : 'Caixa fechado'}
-            ${cx && html`<small>#${cx.numero} · ${cx.operador.split(' ')[0]} · desde ${desde}</small>`}
+            ${cx && html`<small>#${cx.numero} · ${cx.operador.split(' ')[0]} · aberto ${haQuanto(cx.abertura)}</small>`}
           </button>
+          <${Atalhos} />
           <${BotaoTema} />
           <div className="who" title=${`${u.nome} (${u.login}) · ${D.PERFIS[u.perfil].nome}`}>
             <span className="rest-who-txt"><b>${u.nome}</b><small>${D.PERFIS[u.perfil].nome}</small></span>
@@ -175,13 +212,13 @@
       window.addEventListener('hashchange', mudou);
       return () => window.removeEventListener('hashchange', mudou);
     }, []);
-    useEffect(() => { document.title = `MGA | ${ROTAS[rota].titulo}`; }, [rota]);
+    useEffect(() => { document.title = `${D.nomeMarca()} | ${ROTAS[rota].titulo}`; }, [rota, D.nomeMarca()]);
     // Usuário desativado ou sessão encerrada durante o uso
     if (!D.sessaoAtual()) { location.replace('login.html'); return null; }
     const Tela = window.RestUI.telas[rota];
     return html`
       <${MenuLateral} rota=${rota} aberto=${aberto} setAberto=${setAberto} />
-      <div className=${'main' + (['vendas/pdv', 'mesas/pedido', 'delivery/novo'].includes(rota) ? ' rest-main-pdv' : '')}>
+      <div className=${'main' + (['vendas/pdv', 'mesas/pedido', 'delivery/novo'].includes(rota) ? ' rest-main-pdv' : '') + (rota === 'vendas/cozinha' ? ' rest-main-cozinha' : '')}>
         <${BarraSuperior} rota=${rota} />
         <main className="content">
           ${!pode(rota) ? html`<${SemAcesso} rota=${rota} />` : Tela ? html`<${Tela} key=${rota} params=${params} ir=${ir} />` : html`<${TelaEmBreve} rota=${rota} />`}

@@ -18,22 +18,24 @@
     const excluir = g => { if (confirmar(`Excluir a categoria "${g.nome}"?`)) tentar(() => D.excluirGrupo(g.id), `Categoria "${g.nome}" excluída.`); };
     return html`
       <${Cabecalho} titulo="Categorias" sub=${`${plural(D.grupos().length, 'categoria', 'categorias')} · aparecem como botões no PDV`}>
-        <button type="button" className="btn" onClick=${() => setForm({id: null, nome: '', ativo: true})}>+ Nova categoria</button>
+        <button type="button" className="btn" onClick=${() => setForm({id: null, nome: '', ativo: true, cozinha: true})}>+ Nova categoria</button>
       <//>
       ${aviso}
       ${form && html`
         <${FormCard} titulo=${form.id ? 'Editar categoria' : 'Nova categoria'} onSalvar=${salvar} onCancelar=${() => setForm(null)}>
           <${Campo} rotulo="Nome da categoria"><input type="text" value=${form.nome} maxLength="60" placeholder="Ex.: Pizzas" onInput=${e => setForm({...form, nome: e.target.value})} /><//>
           <label className="rest-check"><input type="checkbox" checked=${form.ativo} onChange=${e => setForm({...form, ativo: e.target.checked})} /> Ativa (aparece no PDV)</label>
+          <label className="rest-check" title="Os itens desta categoria aparecem na Fila de produção"><input type="checkbox" checked=${form.cozinha !== false} onChange=${e => setForm({...form, cozinha: e.target.checked})} /> Vai para a cozinha (fila de produção)</label>
         <//>`}
       <div className="cad-toolbar"><${Busca} valor=${busca} onChange=${setBusca} placeholder="Buscar categoria..." /></div>
-      <${Tabela} colunas=${['Categoria', 'Produtos', 'Status']} vazio=${busca ? 'Nenhuma categoria encontrada.' : 'Nenhuma categoria cadastrada.'}>
+      <${Tabela} colunas=${['Categoria', 'Produtos', 'Cozinha', 'Status']} vazio=${busca ? 'Nenhuma categoria encontrada.' : 'Nenhuma categoria cadastrada.'}>
         ${lista.map(g => {
           const prods = D.produtosDoGrupo(g.id), ativos = prods.filter(p => p.ativo).length;
           return html`<tr key=${g.id} className=${g.ativo ? '' : 'rest-inativo'}>
             <td><b>${g.nome}</b></td>
             <td><button type="button" className="rest-link" onClick=${() => ir('cad/produtos', {grupo: g.id})} title="Ver os produtos desta categoria">
               ${plural(prods.length, 'produto', 'produtos')}${prods.length !== ativos ? ` (${ativos} ativos)` : ''} →</button></td>
+            <td>${g.cozinha !== false ? '👨‍🍳 Sim' : html`<span className="rest-cod">Não</span>`}</td>
             <td>${g.ativo ? html`<span className="badge b-ok">Ativa</span>` : html`<span className="badge b-wait">Inativa</span>`}</td>
             <td><${Acoes} nome=${g.nome} onEditar=${() => setForm({id: g.id, nome: g.nome, ativo: g.ativo})} onExcluir=${() => excluir(g)} /></td>
           </tr>`;
@@ -68,7 +70,10 @@
   const pctBR = v => v.toLocaleString('pt-BR', {maximumFractionDigits: 1}) + '%';
 
   // ---- Produtos (cadastro completo) ----
-  const PRODUTO_VAZIO = {id: null, codigo: '', nome: '', grupoId: '', preco: '', custo: '', estoque: '', estoqueMinimo: '', controlaEstoque: false, unidade: 'UN', foto: '', descricao: '', ativo: true};
+  const PRODUTO_VAZIO = {id: null, codigo: '', nome: '', grupoId: '', preco: '', custo: '', estoque: '', estoqueMinimo: '', controlaEstoque: false, unidade: 'UN', foto: '', descricao: '', ativo: true,
+    tipo: 'VENDA', tamanhos: [], gruposAdicionais: [], ficha: []};
+  // Linhas editáveis (tamanhos e ficha técnica) com chave estável para o React
+  const linhaKey = () => 'k' + Math.random().toString(36).slice(2, 9);
   function TelaProdutos({params}){
     const grupoInicial = params.grupo;
     useDados();
@@ -76,18 +81,27 @@
     const [busca, setBusca] = useState('');
     const [grupo, setGrupo] = useState(grupoInicial || '');
     const [inativos, setInativos] = useState(false);
+    const [tipo, setTipo] = useState('');
     const [form, setForm] = useState(null);
     useEffect(() => { if (grupoInicial !== undefined) setGrupo(grupoInicial || ''); }, [grupoInicial]);
     const grupos = D.grupos();
     const todos = D.produtos();
     const lista = todos
-      .filter(p => (!grupo || p.grupoId === grupo) && (inativos || p.ativo))
+      .filter(p => (!grupo || p.grupoId === grupo) && (inativos || p.ativo) && (!tipo || (p.tipo || 'VENDA') === tipo))
       .filter(p => !busca || D.norm(p.nome + ' ' + p.codigo + ' ' + (p.descricao || '')).includes(D.norm(busca)))
       .sort((a, b) => (D.grupoPorId(a.grupoId)?.ordem || 0) - (D.grupoPorId(b.grupoId)?.ordem || 0) || a.nome.localeCompare(b.nome, 'pt-BR'));
     const nInativos = todos.filter(p => !p.ativo).length;
     const num = v => v === '' || v == null ? '' : D.valorBR(v);
     const novo = () => setForm({...PRODUTO_VAZIO, codigo: D.proximoCodigo(), grupoId: grupo || grupos.find(g => g.ativo)?.id || ''});
-    const editar = p => setForm({...PRODUTO_VAZIO, ...p, preco: num(p.preco), custo: p.custo ? num(p.custo) : '', estoque: D.qtdBR(p.estoque), estoqueMinimo: p.estoqueMinimo ? D.qtdBR(p.estoqueMinimo) : ''});
+    const editar = p => setForm({...PRODUTO_VAZIO, ...p, preco: num(p.preco), custo: p.custo ? num(p.custo) : '', estoque: D.qtdBR(p.estoque), estoqueMinimo: p.estoqueMinimo ? D.qtdBR(p.estoqueMinimo) : '',
+      tamanhos: (p.tamanhos || []).map(t => ({...t, key: t.id, preco: num(t.preco)})), gruposAdicionais: [...(p.gruposAdicionais || [])],
+      ficha: (p.ficha || []).map(c => ({...c, key: linhaKey(), quantidade: D.qtdBR(c.quantidade)}))});
+    // Tamanhos e ficha técnica: adicionar, mudar e tirar linhas
+    const mudarLinha = (lista, key, k, v) => setForm(f => ({...f, [lista]: f[lista].map(x => x.key === key ? {...x, [k]: v} : x)}));
+    const tirarLinha = (lista, key) => setForm(f => ({...f, [lista]: f[lista].filter(x => x.key !== key)}));
+    const insumo = form?.tipo === 'INSUMO';
+    const custoFicha = form ? form.ficha.reduce((s, c) => s + (D.lerValor(c.quantidade) || 0) * D.custoProduto(D.produtoPorId(c.produtoId)), 0) : 0;
+    const usaveis = form ? D.produtos().filter(x => x.id !== form.id && (x.tipo === 'INSUMO' || x.controlaEstoque)).sort((a, b) => (a.tipo === 'INSUMO' ? 0 : 1) - (b.tipo === 'INSUMO' ? 0 : 1) || a.nome.localeCompare(b.nome, 'pt-BR')) : [];
     const salvar = () => { if (tentar(() => D.salvarProduto(form, form.id), p => form.id ? `Produto "${p.nome}" atualizado.` : `Produto "${p.nome}" cadastrado (cód. ${p.codigo}).`)) setForm(null); };
     const excluir = p => { if (confirmar(`Excluir o produto "${p.nome}"?`)) tentar(() => D.excluirProduto(p.id), `Produto "${p.nome}" excluído.`); };
     const alternar = p => tentar(() => D.salvarProduto({...p, ativo: !p.ativo}, p.id), `"${p.nome}" ${p.ativo ? 'desativado' : 'ativado'}.`);
@@ -95,7 +109,7 @@
       const f = e.target.files[0]; e.target.value = '';
       if (f) lerFoto(f).then(foto => setForm(x => ({...x, foto})), err => mostrar(err.message, true));
     };
-    const m = form && margem(D.lerValor(form.preco), D.lerValor(form.custo));
+    const m = form && margem(D.lerValor(form.preco), form.ficha.length ? custoFicha : D.lerValor(form.custo));
     const valor = k => html`<input type="text" inputMode="decimal" value=${form[k]} placeholder="0,00" onInput=${e => setForm({...form, [k]: e.target.value})}
       onBlur=${() => { const v = D.lerValor(form[k]); if (Number.isFinite(v)) setForm(f => ({...f, [k]: D.valorBR(v)})); }} />`;
     return html`
@@ -123,16 +137,56 @@
               ${grupos.map(g => html`<option key=${g.id} value=${g.id}>${g.nome}${g.ativo ? '' : ' (inativa)'}</option>`)}
             </select>
           <//>
-          <${Campo} rotulo="Preço de venda (R$)">${valor('preco')}<//>
-          <${Campo} rotulo=${'Custo (R$)' + (m != null ? ` · margem ${pctBR(m)}` : '')}>${valor('custo')}<//>
+          <${Campo} rotulo="Tipo">
+            <select value=${form.tipo} onChange=${e => setForm({...form, tipo: e.target.value, controlaEstoque: e.target.value === 'INSUMO' || form.controlaEstoque})}>
+              <option value="VENDA">Produto de venda (aparece no cardápio)</option>
+              <option value="INSUMO">Insumo (só estoque e ficha técnica)</option>
+            </select>
+          <//>
+          ${!insumo && html`<${Campo} rotulo=${form.tamanhos.length ? 'Preço (vem dos tamanhos)' : 'Preço de venda (R$)'}>${form.tamanhos.length
+            ? html`<input type="text" readOnly value=${(() => { const v = Math.min(...form.tamanhos.map(t => D.lerValor(t.preco) || Infinity)); return Number.isFinite(v) ? 'a partir de ' + D.moedaBR(v) : 'informe os preços abaixo'; })()} />` : valor('preco')}<//>`}
+          ${form.ficha.length ? html`<${Campo} rotulo=${'Custo pela ficha técnica' + (m != null && !insumo ? ` · margem ${pctBR(m)}` : '')}><input type="text" readOnly value=${D.moedaBR(custoFicha)} /><//>`
+            : html`<${Campo} rotulo=${'Custo (R$)' + (m != null && !insumo ? ` · margem ${pctBR(m)}` : '')}>${valor('custo')}<//>`}
           <${Campo} rotulo="Unidade">
             <select value=${form.unidade} onChange=${e => setForm({...form, unidade: e.target.value})}>${D.UNIDADES.map(u => html`<option key=${u}>${u}</option>`)}</select>
           <//>
-          <label className="rest-check" title="Para bebidas e itens comprados prontos: a venda finalizada baixa o saldo"><input type="checkbox" checked=${form.controlaEstoque} onChange=${e => setForm({...form, controlaEstoque: e.target.checked})} /> Controlar estoque</label>
+          ${!insumo && html`<label className="rest-check" title="Para bebidas e itens comprados prontos: a venda finalizada baixa o saldo"><input type="checkbox" checked=${form.controlaEstoque} onChange=${e => setForm({...form, controlaEstoque: e.target.checked})} /> Controlar estoque</label>`}
           ${form.controlaEstoque && html`
             <${Campo} rotulo=${form.id ? 'Estoque atual' : 'Estoque inicial'}><input type="text" inputMode="decimal" value=${form.estoque} placeholder="0" onInput=${e => setForm({...form, estoque: e.target.value})} /><//>
             <${Campo} rotulo="Estoque mínimo (alerta)"><input type="text" inputMode="decimal" value=${form.estoqueMinimo} placeholder="0" onInput=${e => setForm({...form, estoqueMinimo: e.target.value})} /><//>`}
           <${Campo} rotulo="Descrição" largo><input type="text" value=${form.descricao} maxLength="200" placeholder="Ingredientes, tamanho, observações para o atendente" onInput=${e => setForm({...form, descricao: e.target.value})} /><//>
+          ${!insumo && html`<fieldset className="rest-bloco rest-largo">
+            <legend>Tamanhos <small>opcional · ex.: P, M, G ou 300 ml, 500 ml, cada um com o seu preço</small></legend>
+            ${form.tamanhos.map(t => html`<div key=${t.key} className="rest-linha-edit">
+              <input type="text" value=${t.nome} maxLength="20" placeholder="Nome (ex.: Grande)" aria-label="Nome do tamanho" onInput=${e => mudarLinha('tamanhos', t.key, 'nome', e.target.value)} />
+              <input type="text" inputMode="decimal" value=${t.preco} placeholder="Preço" aria-label="Preço do tamanho" onInput=${e => mudarLinha('tamanhos', t.key, 'preco', e.target.value)} />
+              <button type="button" className="rest-car-rm" aria-label="Tirar tamanho" onClick=${() => tirarLinha('tamanhos', t.key)}>✕</button>
+            </div>`)}
+            <button type="button" className="rest-link" onClick=${() => setForm({...form, tamanhos: [...form.tamanhos, {key: linhaKey(), nome: '', preco: ''}]})}>+ Adicionar tamanho</button>
+          </fieldset>
+          <fieldset className="rest-bloco rest-largo">
+            <legend>Adicionais e etapas <small>o atendente escolhe ao vender · cadastre em Cadastros › Adicionais e etapas</small></legend>
+            ${D.adicionais().length ? html`<div className="rest-bloco-checks">${D.adicionais().map(g => html`<label key=${g.id} className="rest-check">
+              <input type="checkbox" checked=${form.gruposAdicionais.includes(g.id)} onChange=${() => setForm({...form, gruposAdicionais: form.gruposAdicionais.includes(g.id) ? form.gruposAdicionais.filter(x => x !== g.id) : [...form.gruposAdicionais, g.id]})} />
+              ${g.nome}${g.min ? ' (obrigatório)' : ''}${g.ativo ? '' : ' · inativo'}</label>`)}</div>`
+              : html`<p className="dv-ajuda">Nenhum grupo cadastrado ainda.</p>`}
+          </fieldset>`}
+          <fieldset className="rest-bloco rest-largo">
+            <legend>Ficha técnica <small>opcional · insumos usados para fazer 1 ${form.unidade}; a venda baixa os insumos e o custo sai da ficha</small></legend>
+            ${form.ficha.map(c => {
+              const comp = D.produtoPorId(c.produtoId);
+              return html`<div key=${c.key} className="rest-linha-edit rest-linha-ficha">
+                <select value=${c.produtoId} aria-label="Insumo" onChange=${e => mudarLinha('ficha', c.key, 'produtoId', e.target.value)}>
+                  <option value="">Escolha o insumo...</option>
+                  ${usaveis.map(x => html`<option key=${x.id} value=${x.id}>${x.nome}${x.tipo === 'INSUMO' ? '' : ' (produto)'}</option>`)}
+                </select>
+                <input type="text" inputMode="decimal" value=${c.quantidade} placeholder="Qtd" aria-label="Quantidade" onInput=${e => mudarLinha('ficha', c.key, 'quantidade', e.target.value)} />
+                <span className="rest-cod">${comp ? `${comp.unidade} · ${D.moedaBR((D.lerValor(c.quantidade) || 0) * D.custoProduto(comp))}` : ''}</span>
+                <button type="button" className="rest-car-rm" aria-label="Tirar da ficha" onClick=${() => tirarLinha('ficha', c.key)}>✕</button>
+              </div>`;
+            })}
+            <button type="button" className="rest-link" onClick=${() => setForm({...form, ficha: [...form.ficha, {key: linhaKey(), produtoId: '', quantidade: ''}]})}>+ Adicionar insumo</button>
+          </fieldset>
           <label className="rest-check"><input type="checkbox" checked=${form.ativo} onChange=${e => setForm({...form, ativo: e.target.checked})} /> Ativo (aparece no PDV)</label>
         <//>`}
       <div className="rest-chips" role="group" aria-label="Filtrar por categoria">
@@ -143,20 +197,27 @@
       </div>
       <div className="cad-toolbar">
         <${Busca} valor=${busca} onChange=${setBusca} placeholder="Buscar por nome, código ou descrição..." />
+        <select className="rest-select" value=${tipo} onChange=${e => setTipo(e.target.value)} aria-label="Tipo">
+          <option value="">Produtos e insumos</option><option value="VENDA">Só produtos de venda</option><option value="INSUMO">Só insumos</option>
+        </select>
         <label className="rest-check"><input type="checkbox" checked=${inativos} onChange=${e => setInativos(e.target.checked)} /> Mostrar inativos</label>
       </div>
       <${Tabela} colunas=${['Cód.', 'Produto', 'Categoria', 'Preço', 'Custo', 'Estoque', 'Status']} vazio=${busca || grupo ? 'Nenhum produto encontrado com esse filtro.' : 'Nenhum produto cadastrado.'}>
         ${lista.map(p => {
-          const mg = margem(p.preco, p.custo);
+          const mg = margem(p.preco, D.custoProduto(p));
           return html`<tr key=${p.id} className=${p.ativo ? '' : 'rest-inativo'}>
             <td className="nowrap rest-cod">${p.codigo}</td>
             <td><div className="rest-prod-cel">
               ${p.foto ? html`<img className="rest-prod-mini" src=${p.foto} alt="" />` : html`<span className="rest-prod-mini rest-prod-sem" aria-hidden="true">🍽️</span>`}
-              <div><b>${p.nome}</b>${p.descricao ? html`<small className="history-date">${p.descricao}</small>` : null}</div>
+              <div><b>${p.nome}</b>${p.tipo === 'INSUMO' ? html` <span className="badge rest-b-venda">insumo</span>` : null}
+                ${(() => { const tags = [(p.tamanhos || []).length && `${p.tamanhos.length} tamanhos`, (p.gruposAdicionais || []).length && `${p.gruposAdicionais.length} grupo${p.gruposAdicionais.length === 1 ? '' : 's'} de adicionais`,
+                  (p.ficha || []).length && 'ficha técnica', D.precoBase(p).promo && `🏷️ ${D.precoBase(p).promo.nome}`].filter(Boolean);
+                  return tags.length ? html`<small className="history-date">${tags.join(' · ')}</small>` : null; })()}
+                ${p.descricao ? html`<small className="history-date">${p.descricao}</small>` : null}</div>
             </div></td>
             <td>${D.grupoPorId(p.grupoId)?.nome || '—'}</td>
-            <td className="nowrap"><b>${D.moedaBR(p.preco)}</b></td>
-            <td className="nowrap">${p.custo ? html`${D.moedaBR(p.custo)}<small className="history-date">margem ${pctBR(mg)}</small>` : html`<span className="rest-cod">—</span>`}</td>
+            <td className="nowrap">${p.tipo === 'INSUMO' ? html`<span className="rest-cod">—</span>` : html`${(p.tamanhos || []).length ? html`<small className="rest-cod">a partir de </small>` : null}<b>${D.moedaBR(p.preco)}</b>`}</td>
+            <td className="nowrap">${D.custoProduto(p) ? html`${D.moedaBR(D.custoProduto(p))}${p.tipo !== 'INSUMO' && mg != null ? html`<small className="history-date">margem ${pctBR(mg)}${(p.ficha || []).length ? ' · pela ficha' : ''}</small>` : null}` : html`<span className="rest-cod">—</span>`}</td>
             <td className="nowrap">${p.controlaEstoque
               ? html`<span className=${D.estoqueBaixo(p) ? 'rest-est-alerta' : ''}>${D.qtdBR(p.estoque)}</span> <small className="rest-cod">${p.unidade}</small>`
               : html`<span className="rest-cod" title="Não controla estoque">—</span>`}</td>

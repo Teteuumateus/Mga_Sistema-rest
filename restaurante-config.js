@@ -5,7 +5,7 @@
   'use strict';
   if (!window.RestUI) return;
   const {useState, useRef} = React;
-  const {html, D, useDados, useAviso, Cabecalho, Busca, Modal, Segmentos, confirmar, plural} = window.RestUI;
+  const {html, D, useDados, useAviso, Cabecalho, Busca, Campo, Modal, Segmentos, confirmar, plural} = window.RestUI;
 
   // ---- Auditoria: quem fez o quê e quando ----
   const PERIODOS = [['hoje', 'Hoje'], ['7', '7 dias'], ['30', '30 dias'], ['todos', 'Tudo']];
@@ -154,7 +154,7 @@
       ${aviso}
       <form className="card rest-config-form" onSubmit=${salvar}>
         <div className="form-grid">
-          <div className="field"><label htmlFor="cfNome">Nome do restaurante</label><input id="cfNome" type="text" maxLength="60" value=${form.nome} onInput=${e => setForm({...form, nome: e.target.value})} /></div>
+          <div className="field"><label htmlFor="cfNome">Nome da empresa (aparece no menu)</label><input id="cfNome" type="text" maxLength="60" value=${form.nome} onInput=${e => setForm({...form, nome: e.target.value})} /></div>
           <div className="field"><label htmlFor="cfTaxa">Taxa de serviço (%)</label><input id="cfTaxa" type="text" inputMode="decimal" value=${form.taxaServico} onInput=${e => setForm({...form, taxaServico: e.target.value})} /></div>
         </div>
         <label className="rest-check"><input type="checkbox" checked=${form.servicoPadrao} onChange=${e => setForm({...form, servicoPadrao: e.target.checked})} /> Incluir a taxa automaticamente nas mesas (dá para tirar em cada mesa)</label>
@@ -170,5 +170,90 @@
       </form>`;
   }
 
-  Object.assign(window.RestUI.telas, {'config/auditoria': TelaAuditoria, 'config/dados': TelaDados, 'config/restaurante': TelaRestaurante});
+  // ---- Empresa: dados que saem nos cupons, no fechamento de caixa e nos relatórios ----
+  function TelaEmpresa(){
+    useDados();
+    const {el: aviso, tentar} = useAviso();
+    const c = D.config();
+    const [form, setForm] = useState({nome: c.nome, ...c.empresa});
+    const campo = (k, rotulo, extra = {}) => html`<${Campo} rotulo=${rotulo} largo=${extra.largo}>
+      <input type="text" value=${form[k]} maxLength=${extra.max || 80} placeholder=${extra.ph || ''} inputMode=${extra.modo || null}
+        onInput=${e => setForm({...form, [k]: extra.mascara ? extra.mascara(e.target.value) : e.target.value})} />
+    <//>`;
+    const salvar = e => { e.preventDefault(); tentar(() => D.salvarEmpresa(form), 'Dados da empresa salvos. O nome já aparece no menu, e os dados saem nas próximas impressões.'); };
+    // Prévia do cabeçalho com o que está digitado (sem salvar)
+    const previa = [form.nome, [form.razaoSocial && form.razaoSocial !== form.nome && form.razaoSocial, form.cnpj && `CNPJ ${form.cnpj}`, form.ie && `IE ${form.ie}`].filter(Boolean).join(' · '),
+      [[form.endereco, form.numero].filter(Boolean).join(', '), form.bairro, [form.cidade, form.uf].filter(Boolean).join('/')].filter(Boolean).join(' · '),
+      [form.telefone && `Tel. ${form.telefone}`, form.email].filter(Boolean).join(' · ')].filter(Boolean);
+    return html`
+      <${Cabecalho} titulo="Empresa" sub="Nome e dados do restaurante: aparecem no menu, no login, nos cupons, no fechamento de caixa e nos relatórios" />
+      ${aviso}
+      <form className="card rest-config-form" onSubmit=${salvar}>
+        <div className="form-grid">
+          ${campo('nome', 'Nome da empresa (aparece no menu)', {max: 60, ph: 'Ex.: Cantina da Praça'})}
+          ${campo('razaoSocial', 'Razão social', {max: 100})}
+          ${campo('cnpj', 'CNPJ', {modo: 'numeric', ph: '00.000.000/0000-00', mascara: D.mascaraCnpj})}
+          ${campo('ie', 'Inscrição estadual', {max: 20, ph: 'ou ISENTO'})}
+          ${campo('telefone', 'Telefone / WhatsApp', {modo: 'tel', ph: '(11) 3333-4444', mascara: D.mascaraTelefone})}
+          ${campo('email', 'E-mail')}
+        </div>
+        <h3 className="rest-form-titulo rest-config-sub">Endereço</h3>
+        <div className="form-grid">
+          ${campo('cep', 'CEP', {modo: 'numeric', ph: '00000-000', mascara: D.mascaraCep})}
+          ${campo('endereco', 'Endereço', {largo: true, max: 100, ph: 'Rua, avenida...'})}
+          ${campo('numero', 'Número', {max: 10})}
+          ${campo('bairro', 'Bairro', {max: 60})}
+          ${campo('cidade', 'Cidade', {max: 60})}
+          <${Campo} rotulo="UF">
+            <select value=${form.uf} onChange=${e => setForm({...form, uf: e.target.value})}><option value="">—</option>${D.UFS.map(u => html`<option key=${u}>${u}</option>`)}</select>
+          <//>
+        </div>
+        <h3 className="rest-form-titulo rest-config-sub">Como sai no cupom</h3>
+        <div className="rest-previa-cupom">${previa.map((l, k) => k ? html`<span key=${k}>${l}</span>` : html`<b key=${k}>${l}</b>`)}</div>
+        <div className="rest-form-acoes"><button type="submit" className="btn">Salvar</button></div>
+      </form>`;
+  }
+
+  // ---- Impressão: bobina, impressões automáticas e rodapé do cupom ----
+  function TelaImpressao(){
+    useDados();
+    const {el: aviso, tentar} = useAviso();
+    const c = D.config().impressao;
+    const [form, setForm] = useState({...c, viasComanda: String(c.viasComanda)});
+    const salvar = e => { e.preventDefault(); tentar(() => D.salvarImpressao(form), 'Configuração de impressão salva.'); };
+    const marca = (k, rotulo, ajuda) => html`<label className="rest-check"><input type="checkbox" checked=${form[k]} onChange=${e => setForm({...form, [k]: e.target.checked})} /> <span>${rotulo}<small className="history-date">${ajuda}</small></span></label>`;
+    return html`
+      <${Cabecalho} titulo="Impressão" sub="Cupom da venda, comanda da cozinha, conferência de conta e pedido para entrega">
+        <button type="button" className="btn btn-ghost" onClick=${() => window.RestUI.impressao.teste()}>🖨️ Imprimir teste</button>
+      <//>
+      ${aviso}
+      <form className="card rest-config-form" onSubmit=${salvar}>
+        <div className="form-grid">
+          <${Campo} rotulo="Papel da impressora">
+            <select value=${form.largura} onChange=${e => setForm({...form, largura: e.target.value})}>
+              <option value="80">Bobina 80 mm (térmica comum)</option>
+              <option value="58">Bobina 58 mm (térmica pequena)</option>
+            </select>
+          <//>
+          <${Campo} rotulo="Vias da comanda da cozinha">
+            <select value=${form.viasComanda} onChange=${e => setForm({...form, viasComanda: e.target.value})}>${['1', '2', '3'].map(n => html`<option key=${n} value=${n}>${n} via${n === '1' ? '' : 's'}</option>`)}</select>
+          <//>
+          <${Campo} rotulo="Mensagem no fim do cupom" largo><input type="text" maxLength="120" value=${form.rodape} onInput=${e => setForm({...form, rodape: e.target.value})} /><//>
+        </div>
+        <h3 className="rest-form-titulo rest-config-sub">Imprimir automaticamente</h3>
+        <div className="rest-config-marcas">
+          <div className="field rest-cupom-modo"><label htmlFor="cfCupom">Cupom ao concluir a venda <small className="history-date">venda balcão finalizada, conta da mesa fechada e conferência ao pedir a conta</small></label>
+            <select id="cfCupom" value=${form.cupomModo} onChange=${e => setForm({...form, cupomModo: e.target.value})}>
+              ${Object.entries(D.MODOS_CUPOM).map(([k, n]) => html`<option key=${k} value=${k}>${n}</option>`)}
+            </select></div>
+          ${marca('comandaAuto', 'Comanda da cozinha ao lançar o pedido', 'Balcão finalizado, mesa ao sair da comanda (só os itens novos) e delivery gravado (com o pedido para entrega)')}
+        </div>
+        <p className="dv-ajuda">Sem as opções automáticas, os botões 🖨️ ficam no PDV, na mesa, no delivery e em Vendas realizadas.
+          O navegador sempre abre a janela de impressão. Para imprimir direto, sem a janela, abra o Chrome com a opção <code>--kiosk-printing</code> e deixe a térmica como impressora padrão.</p>
+        <div className="rest-form-acoes"><button type="submit" className="btn">Salvar</button></div>
+      </form>`;
+  }
+
+  Object.assign(window.RestUI.telas, {'config/auditoria': TelaAuditoria, 'config/dados': TelaDados, 'config/restaurante': TelaRestaurante,
+    'config/empresa': TelaEmpresa, 'config/impressao': TelaImpressao});
 })();

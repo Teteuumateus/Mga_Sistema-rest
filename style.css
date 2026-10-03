@@ -974,7 +974,8 @@ body.app-mode {
 }
 
 #appShell .field input,
-#appShell .field select {
+#appShell .field select,
+#appShell .field textarea {
   width: 100%;
   min-width: 0;
   height: 42px;
@@ -988,7 +989,8 @@ body.app-mode {
 }
 
 #appShell .field input:focus,
-#appShell .field select:focus {
+#appShell .field select:focus,
+#appShell .field textarea:focus {
   border-color: #3693f5;
   box-shadow: 0 0 0 3px rgba(31, 144, 255, 0.12);
 }
@@ -1296,6 +1298,7 @@ body.app-mode {
 
 [data-theme="dark"] #appShell .search,
 [data-theme="dark"] #appShell .field input,
+[data-theme="dark"] #appShell .field textarea,
 [data-theme="dark"] #appShell .field select {
   background: #0f1828;
   border-color: #2a3a56;
@@ -1325,3 +1328,7 @@ body.app-mode {
 [data-theme="dark"] #appShell .row-actions .del { color: #f87171; }
 [data-theme="dark"] #appShell .conferencia-box { background: #141e30; border: 1px solid #223049; }
 [data-theme="dark"] #appShell .conferencia-box h3 { color: #eef3fa; border-bottom-color: #223049; }
+
+/* Login: nome da empresa longo no lugar de MGA */
+.brand-copy h1.marca-longa,
+.mini-text h1.marca-longa { font-size: clamp(1.8rem, 2vw, 2.4rem); letter-spacing: -1px; line-height: 1.05; overflow-wrap: anywhere; }

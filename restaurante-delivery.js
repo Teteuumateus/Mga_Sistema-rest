@@ -86,14 +86,16 @@
             ${v.modo === 'ENTREGAR' && html`<span>${endereco(v)}${e.cidade ? ' · ' + e.cidade : ''}${e.cep ? ' · CEP ' + e.cep : ''}</span>`}
             ${e.referencia && html`<span>Referência: ${e.referencia}</span>`}
           </div>
-          <table><tbody>${v.itens.map(i => html`<tr key=${i.id}><td>${qtdBR(i.quantidade)}× ${i.nome}${i.observacao ? html`<small className="history-date">📝 ${i.observacao}</small>` : null}</td>
+          <table><tbody>${v.itens.map(i => html`<tr key=${i.id}><td>${qtdBR(i.quantidade)}× ${i.nome}${i.adicionais?.length ? html`<small className="history-date">+ ${window.RestUI.adicionaisTxt(i)}</small>` : null}${i.observacao ? html`<small className="history-date">📝 ${i.observacao}</small>` : null}</td>
             <td className="nowrap">${D.moedaBR(i.quantidade * i.precoUnitario - (i.desconto || 0))}</td></tr>`)}</tbody></table>
           <div className="rest-rf">
             <div className="rest-rf-linha"><span>Produtos</span><b>${D.moedaBR(t.itens)}</b></div>
             ${t.desconto > 0 && html`<div className="rest-rf-linha rest-rf-neg"><span>Desconto</span><b>− ${D.moedaBR(t.desconto)}</b></div>`}
             ${t.acrescimo > 0 && html`<div className="rest-rf-linha rest-rf-pos"><span>Acréscimo</span><b>+ ${D.moedaBR(t.acrescimo)}</b></div>`}
             ${t.entrega > 0 && html`<div className="rest-rf-linha rest-rf-pos"><span>Taxa de entrega</span><b>+ ${D.moedaBR(t.entrega)}</b></div>`}
+            ${t.embalagem > 0 && html`<div className="rest-rf-linha rest-rf-pos"><span>Embalagens</span><b>+ ${D.moedaBR(t.embalagem)}</b></div>`}
             <div className="rest-rf-linha rest-rf-total"><span>Total</span><b>${D.moedaBR(t.total)}</b></div>
+            ${v.aplicativo && html`<div className="rest-rf-linha rest-rf-nota"><span>Pedido pelo ${v.aplicativo.nome}</span><b>comissão ${String(v.aplicativo.comissao).replace('.', ',')}%</b></div>`}
             ${t.pago > 0 && html`<div className="rest-rf-linha"><span>Já pago</span><b>${D.moedaBR(t.pago)}</b></div>`}
             ${v.formaPrevistaId && html`<div className="rest-rf-linha rest-rf-nota"><span>Pagamento previsto</span><b>${D.formaPorId(v.formaPrevistaId)?.nome}${v.trocoPara ? ` · troco para ${D.moedaBR(v.trocoPara)}` : ''}${v.levarMaquina ? ' · levar máquina' : ''}</b></div>`}
           </div>
@@ -107,6 +109,8 @@
         </div>
         <div className="cf-acoes">
           <button type="button" className="btn btn-ghost" onClick=${onFechar}>Fechar</button>
+          ${v.status !== 'CANCELADA' && html`<button type="button" className="btn btn-ghost" onClick=${() => window.RestUI.impressao.comanda(v, {todos: true})}>🖨️ Comanda</button>
+            <button type="button" className="btn btn-ghost" onClick=${() => window.RestUI.impressao.entrega(v)}>🖨️ ${v.modo === 'RETIRAR' ? 'Cupom' : 'Cupom de entrega'}</button>`}
           ${v.status === 'ABERTA' && (motivo === null
             ? html`<button type="button" className="btn btn-perigo" onClick=${() => setMotivo('')}>Cancelar pedido</button>`
             : html`<button type="button" className="btn btn-perigo" onClick=${cancelar}>Confirmar cancelamento</button>`)}
@@ -172,7 +176,7 @@
         return html`<li key=${v.id} className=${'rest-pedido ' + (v.status === 'ABERTA' ? D.tempoPedido(v).faixa : v.status === 'CANCELADA' ? 'cancelado' : 'entregue')}>
           <div className="rest-pedido-tempo">${v.status === 'ABERTA' ? html`<${Tempo} v=${v} />` : html`<span className="rest-tempo">${v.status === 'CANCELADA' ? 'Cancelado' : `${D.tempoPedido(v).min} min`}</span>`}
             <small>#${v.numero} · ${hora(v.data)}</small></div>
-          <div className="rest-pedido-cliente"><b>${v.entrega.nome}</b><span>${endereco(v)}</span><small>${v.entrega.telefone}${v.entrega.referencia ? ' · ' + v.entrega.referencia : ''}</small></div>
+          <div className="rest-pedido-cliente"><b>${v.entrega.nome}${v.aplicativo ? html` <span className="badge rest-b-aberta">${v.aplicativo.nome}</span>` : null}</b><span>${endereco(v)}</span><small>${v.entrega.telefone}${v.entrega.referencia ? ' · ' + v.entrega.referencia : ''}</small></div>
           <div className="rest-pedido-pag"><b>${D.moedaBR(t.total)}</b>
             <small>${t.restante <= 0.001 && v.status === 'ABERTA' ? '✓ pago' : f ? f.nome : 'pagamento na entrega'}${v.trocoPara ? ` · troco p/ ${D.moedaBR(v.trocoPara)}` : ''}${v.levarMaquina ? ' · levar máquina' : ''}</small></div>
           <div className="rest-pedido-status"><span className=${'badge ' + (v.status === 'CANCELADA' ? 'rest-b-vencida' : PILULA[v.statusDelivery])}>${v.status === 'CANCELADA' ? 'Cancelado' : nomeStatus(v)}</span>
@@ -202,29 +206,36 @@
       trocoPara: '', levarMaquina: true, obs: '', salvarCliente: true});
     const [achado, setAchado] = useState(null);
     const [erro, setErro] = useState('');
-    const set = (k, val) => setF(x => ({...x, [k]: val}));
+    // Taxa pela região do bairro (Cadastros › Regiões de entrega), até a pessoa digitar outra taxa
+    const temRegioes = D.regioes().some(r => r.ativo);
+    const comTaxa = x => x.taxaManual || !temRegioes ? x : {...x, taxaEntrega: D.valorBR(D.regiaoDoBairro(x.bairro, x.cidade)?.taxa ?? D.config().taxaEntrega)};
+    const set = (k, val) => setF(x => k === 'taxaEntrega' ? {...x, taxaEntrega: val, taxaManual: true} : comTaxa({...x, [k]: val}));
+    const regiao = f.modo === 'ENTREGAR' && D.regiaoDoBairro(f.bairro, f.cidade);
+    const bairrosRegioes = [...new Set(D.regioes().filter(r => r.ativo).flatMap(r => r.bairros))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
     // Telefone com DDD completo: puxa o cadastro do cliente
     const mudarTelefone = val => {
       const tel = D.mascaraTelefone(val);
       const c = D.clientePorTelefone(tel);
       setAchado(c);
-      setF(x => c ? {...x, telefone: tel, nome: c.nome || '', cep: c.cep || '', endereco: c.endereco || '', numero: c.numero || '', complemento: c.complemento || '',
-        bairro: c.bairro || '', cidade: c.cidade || '', referencia: c.referencia || ''} : {...x, telefone: tel});
+      setF(x => c ? comTaxa({...x, telefone: tel, nome: c.nome || '', cep: c.cep || '', endereco: c.endereco || '', numero: c.numero || '', complemento: c.complemento || '',
+        bairro: c.bairro || '', cidade: c.cidade || '', referencia: c.referencia || ''}) : {...x, telefone: tel});
     };
     const forma = D.formaPorId(f.formaPrevistaId);
     const taxa = f.modo === 'ENTREGAR' ? (D.lerValor(f.taxaEntrega) || 0) : 0;
-    const total = r2(totalProdutos + taxa);
+    const embalagem = D.taxaEmbalagemDe(rascunho.itens);
+    const total = r2(totalProdutos + taxa + embalagem);
+    const apps = D.aplicativos().filter(a => a.ativo);
     const salvar = () => {
       try {
-        const v = D.registrarDelivery({tipo, itens: rascunho.itens.map(i => ({produtoId: i.produtoId, quantidade: i.quantidade, observacao: i.observacao})),
+        const v = D.registrarDelivery({tipo, itens: rascunho.itens.map(i => ({produtoId: i.produtoId, quantidade: i.quantidade, observacao: i.observacao, tamanhoId: i.tamanhoId, adicionais: i.adicionais})),
           cliente: f, modo: f.modo, agendadoPara: f.agendadoPara, taxaEntrega: f.taxaEntrega, formaPrevistaId: f.formaPrevistaId,
-          trocoPara: forma?.tipo === 'DINHEIRO' ? f.trocoPara : '', levarMaquina: f.levarMaquina, obs: f.obs, salvarCliente: f.salvarCliente});
+          trocoPara: forma?.tipo === 'DINHEIRO' ? f.trocoPara : '', levarMaquina: f.levarMaquina, obs: f.obs, salvarCliente: f.salvarCliente, aplicativoId: f.aplicativoId || null});
         onSalvo(v);
       } catch (e) { setErro(e.regra ? e.message : 'Erro inesperado: ' + e.message); if (!e.regra) console.error(e); }
     };
     const campo = (k, rotulo, extra = {}) => html`<div className=${'field' + (extra.largo ? ' rest-largo' : '')}><label htmlFor=${'de-' + k}>${rotulo}</label>
       <input id=${'de-' + k} type="text" value=${f[k]} maxLength=${extra.max || 120} placeholder=${extra.ph || ''} inputMode=${extra.modo || 'text'}
-        onInput=${e => set(k, extra.mascara ? extra.mascara(e.target.value) : e.target.value)} /></div>`;
+        onInput=${e => set(k, extra.mascara ? extra.mascara(e.target.value) : e.target.value)} list=${extra.lista || null} />${extra.depois || null}</div>`;
     return html`
       <${Modal} titulo=${`Dados ${tipo === 'ENCOMENDA' ? 'da encomenda' : 'do delivery'} · ${D.moedaBR(total)}`} onFechar=${onFechar}>
         <div className="rest-dados-delivery" onKeyDown=${e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); salvar(); } }}>
@@ -243,10 +254,16 @@
               ${campo('endereco', 'Endereço', {largo: true, ph: 'Rua, avenida...'})}
               ${campo('numero', 'Número', {max: 10})}
               ${campo('complemento', 'Complemento', {ph: 'Apto, bloco'})}
-              ${campo('bairro', 'Bairro', {max: 60})}
+              ${campo('bairro', 'Bairro', {max: 60, lista: 'bairros-regioes', depois: temRegioes && f.bairro ? html`<small className=${regiao ? 'rest-achado' : 'rest-fora-regiao'}>${regiao
+                ? `✓ Região ${regiao.nome}${regiao.tempo ? ` · cerca de ${regiao.tempo} min` : ''}` : 'Fora das regiões cadastradas: taxa padrão'}</small>` : null})}
+              <datalist id="bairros-regioes">${bairrosRegioes.map(x => html`<option key=${x} value=${x} />`)}</datalist>
               ${campo('cidade', 'Cidade', {max: 60})}
               ${campo('referencia', 'Referência', {largo: true, ph: 'Ponto de referência'})}
               <div className="field"><label htmlFor="de-taxa">Taxa de entrega (R$)</label><input id="de-taxa" type="text" inputMode="decimal" value=${f.taxaEntrega} onInput=${e => set('taxaEntrega', e.target.value)} /></div>`}
+            ${apps.length > 0 && html`<div className="field"><label htmlFor="de-app">Pedido por</label>
+              <select id="de-app" value=${f.aplicativoId || ''} onChange=${e => set('aplicativoId', e.target.value)}>
+                <option value="">WhatsApp / telefone (direto)</option>${apps.map(a => html`<option key=${a.id} value=${a.id}>${a.nome}${a.comissao ? ` · ${String(a.comissao).replace('.', ',')}%` : ''}</option>`)}
+              </select></div>`}
             <div className="field"><label htmlFor="de-forma">Pagamento</label>
               <select id="de-forma" value=${f.formaPrevistaId} onChange=${e => set('formaPrevistaId', e.target.value)}>${ativos.map(x => html`<option key=${x.id} value=${x.id}>${x.nome}</option>`)}</select></div>
             ${forma?.tipo === 'DINHEIRO' && html`<div className="field"><label htmlFor="de-troco">Troco para (R$)</label><input id="de-troco" type="text" inputMode="decimal" placeholder="sem troco" value=${f.trocoPara} onInput=${e => set('trocoPara', e.target.value)} /></div>`}
@@ -257,6 +274,7 @@
           <div className="rest-rf">
             <div className="rest-rf-linha"><span>Produtos</span><b>${D.moedaBR(totalProdutos)}</b></div>
             ${taxa > 0 && html`<div className="rest-rf-linha rest-rf-pos"><span>Taxa de entrega</span><b>+ ${D.moedaBR(taxa)}</b></div>`}
+            ${embalagem > 0 && html`<div className="rest-rf-linha rest-rf-pos"><span>Embalagens</span><b>+ ${D.moedaBR(embalagem)}</b></div>`}
             <div className="rest-rf-linha rest-rf-total"><span>Total</span><b>${D.moedaBR(total)}</b></div>
           </div>
           ${erro && html`<div className="toast rest-toast toast-erro" role="alert">${erro}</div>`}
@@ -278,12 +296,13 @@
     const [obsAberta, setObsAberta] = useState(null);
     const refBusca = useRef(null);
     const setRasc = x => { setR(x); gravarRascunho(x); };
-    const linhas = r.itens.map(i => ({...i, p: D.produtoPorId(i.produtoId)})).filter(i => i.p);
-    const total = r2(linhas.reduce((s, i) => s + i.quantidade * i.p.preco, 0));
-    const adicionar = (p, q) => {
+    const linhas = r.itens.map(i => ({...i, p: D.produtoPorId(i.produtoId)})).filter(i => i.p).map(i => ({...i, preco: D.precoItem(i.p, i), rot: window.RestUI.rotuloCarrinho(i.p, i)}));
+    const total = r2(linhas.reduce((s, i) => s + i.quantidade * i.preco, 0));
+    const adicionar = (p, q, opcoes = {}) => {
       if (!(q > 0)) { mostrar('Quantidade inválida.', true); return false; }
-      const igual = r.itens.find(i => i.produtoId === p.id && !i.observacao);
-      setRasc({...r, itens: igual ? r.itens.map(i => i === igual ? {...i, quantidade: r2(i.quantidade + q)} : i) : [...r.itens, {key: Date.now() + Math.random(), produtoId: p.id, quantidade: r2(q), observacao: ''}]});
+      const novo = {key: Date.now() + Math.random(), produtoId: p.id, quantidade: r2(q), observacao: opcoes.observacao || '', tamanhoId: opcoes.tamanhoId || null, adicionais: opcoes.adicionais || []};
+      const igual = !window.RestUI.montado(novo) && !novo.observacao && r.itens.find(i => i.produtoId === p.id && !i.observacao && !window.RestUI.montado(i));
+      setRasc({...r, itens: igual ? r.itens.map(i => i === igual ? {...i, quantidade: r2(i.quantidade + q)} : i) : [...r.itens, novo]});
       return true;
     };
     const mudarQtd = (key, q) => setRasc({...r, itens: r.itens.map(i => i.key === key ? {...i, quantidade: r2(Math.max(q, 0))} : i).filter(i => i.quantidade > 0)});
@@ -312,7 +331,7 @@
             ${linhas.length > 0 && html`<button type="button" className="rest-link" onClick=${() => { if (confirmar('Limpar o pedido?')) setRasc({itens: []}); }}>Limpar</button>`}</div>
           <ul className="rest-car-itens">
             ${linhas.length ? linhas.map(i => html`<li key=${i.key}>
-              <div className="rest-car-linha"><span className="rest-car-nome">${i.p.nome}<small>${D.moedaBR(i.p.preco)} un.</small></span><b>${D.moedaBR(i.quantidade * i.p.preco)}</b></div>
+              <div className="rest-car-linha"><span className="rest-car-nome">${i.rot.nome}${i.rot.extras ? html`<small className="rest-car-extras">+ ${i.rot.extras}</small>` : null}<small>${D.moedaBR(i.preco)} un.</small></span><b>${D.moedaBR(i.quantidade * i.preco)}</b></div>
               <div className="rest-car-acoes">
                 <button type="button" aria-label="Diminuir" onClick=${() => mudarQtd(i.key, i.quantidade - 1)}>−</button>
                 <span className="rest-qtd-txt">${qtdBR(i.quantidade)}</span>
@@ -330,7 +349,7 @@
         </aside>
       </div>
       ${dados && html`<${DadosEntrega} tipo=${tipo} rascunho=${r} totalProdutos=${total} onFechar=${() => setDados(false)}
-        onSalvo=${v => { setRasc({itens: []}); ir('delivery', {aba: tipo === 'ENCOMENDA' ? 'encomenda' : 'delivery', ok: v.numero}); }} />`}`;
+        onSalvo=${v => { setRasc({itens: []}); window.RestUI.impressao.aposDelivery(v); ir('delivery', {aba: tipo === 'ENCOMENDA' ? 'encomenda' : 'delivery', ok: v.numero}); }} />`}`;
   }
 
   window.RestUI.rascunhoDelivery = gravarRascunho;

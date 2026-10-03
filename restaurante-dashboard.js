@@ -188,4 +188,6 @@
   }
 
   window.RestUI.telas.dashboard = TelaDashboard;
+  // Usados também pelos Relatórios
+  window.RestUI.graficos = {Grafico, Dica, useTema, moedaCurta, pct};
 })();

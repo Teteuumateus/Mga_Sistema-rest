@@ -8,6 +8,9 @@
 // Tudo fica no localStorage com o prefixo "mga_" (entra no backup):
 //   restUsuarios, restFormas, restGrupos, restProdutos, restEntregadores, restCaixas,
 //   restMovCaixa, restVendas, restSeq, restContas, restCategorias, restMovEstoque,
+//   restFornecedores, restFuncionarios, restRegioes, restConfig (com empresa e impressão),
+//   restAdicionais (adicionais e etapas), restPromocoes, restAplicativos, restEmbalagens,
+//   restContasBancarias, restMovConta (extrato das contas bancárias),
 //   clientes (com bairro, CEP, cidade e complemento), auditoria
 //
 // Regras gerais:
@@ -33,18 +36,28 @@
   // Movimentos que entram (+) ou saem (−) do caixa
   const MOV_ENTRADA = ['SUPRIMENTO', 'RECEBIMENTO'], MOV_SAIDA = ['SANGRIA', 'ESTORNO', 'PAGAMENTO'];
   const VEICULOS = ['Moto', 'Bicicleta', 'Carro', 'A pé'];
+  const CARGOS = ['Gerente', 'Caixa', 'Garçom', 'Cozinheiro(a)', 'Auxiliar de cozinha', 'Pizzaiolo', 'Chapeiro', 'Atendente', 'Entregador', 'Serviços gerais'];
+  const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
+  // Dados da empresa (aparecem nas impressões) e preferências de impressão
+  const EMPRESA_PADRAO = {razaoSocial: '', cnpj: '', ie: '', telefone: '', email: '', cep: '', endereco: '', numero: '', bairro: '', cidade: '', uf: ''};
+  const IMPRESSAO_PADRAO = {largura: '80', cupomModo: 'NAO', comandaAuto: false, viasComanda: 1, rodape: 'Obrigado pela preferência! Volte sempre.'};
+  const MODOS_CUPOM = {NAO: 'Não imprimir', PERGUNTAR: 'Perguntar se quer imprimir', SEMPRE: 'Imprimir sempre'};
   const UNIDADES = ['UN', 'KG', 'G', 'L', 'ML', 'PCT', 'CX', 'DZ', 'PORÇÃO'];
   // Estoque: tipos de movimento e motivos sugeridos para a saída manual
-  const TIPOS_MOV_ESTOQUE = {ENTRADA: 'Entrada', SAIDA: 'Saída', AJUSTE: 'Ajuste de inventário', VENDA: 'Venda', ESTORNO: 'Venda cancelada'};
+  const TIPOS_MOV_ESTOQUE = {ENTRADA: 'Entrada', SAIDA: 'Saída', AJUSTE: 'Ajuste de inventário', VENDA: 'Venda', ESTORNO: 'Venda cancelada', PRODUCAO: 'Produção'};
+  // Produto de venda aparece no cardápio; insumo (pão, carne, molho...) só existe no estoque e na ficha técnica
+  const TIPOS_PRODUTO = {VENDA: 'Produto de venda', INSUMO: 'Insumo'};
+  const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
   const MOTIVOS_SAIDA = ['Perda / quebra', 'Produto vencido', 'Consumo interno', 'Cortesia', 'Devolução ao fornecedor'];
   // ---- Usuários: perfis e módulos que cada um acessa (o administrador ajusta por usuário) ----
-  const MODULOS = {cadastros: 'Cadastros', financeiro: 'Financeiro', estoque: 'Estoque', vendas: 'Vendas / PDV e caixa', mesas: 'Mesas',
+  const MODULOS = {cadastros: 'Cadastros', financeiro: 'Financeiro', estoque: 'Estoque', vendas: 'Vendas / PDV e caixa', mesas: 'Mesas', cozinha: 'Fila de produção (cozinha)',
     delivery: 'Delivery', relatorios: 'Relatórios', configuracoes: 'Configurações'};
   const PERFIS = {
     ADMIN: {nome: 'Administrador', modulos: Object.keys(MODULOS)},
-    GERENTE: {nome: 'Gerente', modulos: ['vendas', 'relatorios', 'financeiro', 'estoque', 'mesas', 'delivery']},
-    CAIXA: {nome: 'Operador / Caixa', modulos: ['vendas', 'mesas', 'delivery']},
-    GARCOM: {nome: 'Garçom', modulos: ['mesas']}
+    GERENTE: {nome: 'Gerente', modulos: ['vendas', 'relatorios', 'financeiro', 'estoque', 'mesas', 'delivery', 'cozinha']},
+    CAIXA: {nome: 'Operador / Caixa', modulos: ['vendas', 'mesas', 'delivery', 'cozinha']},
+    GARCOM: {nome: 'Garçom', modulos: ['mesas']},
+    COZINHA: {nome: 'Cozinha', modulos: ['cozinha']}
   };
   // Financeiro: contas a pagar (despesas) e a receber
   const TIPOS_CONTA = {PAGAR: 'A pagar', RECEBER: 'A receber'};
@@ -139,7 +152,15 @@
     gravar('restProdutos', produtos);
   }
   let entregadores = ler('restEntregadores', []);
-  let config = Object.assign({nome: 'Meu Restaurante', taxaServico: 10, servicoPadrao: true, taxaEntrega: 0, entregaVerde: 20, entregaAmarelo: 40}, ler('restConfig', {}));
+  const NOME_PADRAO = 'Meu Restaurante';
+  let config = Object.assign({nome: NOME_PADRAO, taxaServico: 10, servicoPadrao: true, taxaEntrega: 0, entregaVerde: 20, entregaAmarelo: 40}, ler('restConfig', {}));
+  config.empresa = {...EMPRESA_PADRAO, ...(config.empresa || {})};
+  config.impressao = {...IMPRESSAO_PADRAO, ...(config.impressao || {})};
+  // Versão anterior guardava só "cupom automático" (sim/não)
+  if ('cupomAuto' in config.impressao) { config.impressao.cupomModo = config.impressao.cupomAuto ? 'SEMPRE' : config.impressao.cupomModo; delete config.impressao.cupomAuto; }
+  let fornecedores = ler('restFornecedores', []);
+  let funcionarios = ler('restFuncionarios', []);
+  let regioes = ler('restRegioes', []);
   let mesas = ler('restMesas', null);
   if (!Array.isArray(mesas)) {
     mesas = Array.from({length: 12}, (_, k) => ({id: novoId('ms'), numero: String(k + 1).padStart(2, '0'), descricao: '', lugares: 4, ativo: true}));
@@ -155,7 +176,17 @@
     if (p.custo === undefined) Object.assign(p, {custo: 0, estoque: 0, unidade: 'UN', foto: '', descricao: ''});
     // Antes do módulo Estoque: quem já tinha saldo informado passa a controlar
     if (p.controlaEstoque === undefined) Object.assign(p, {controlaEstoque: Number(p.estoque) !== 0, estoqueMinimo: 0});
+    // Cardápio: tamanhos, adicionais/etapas e ficha técnica (insumos usados por unidade)
+    if (p.tipo === undefined) Object.assign(p, {tipo: 'VENDA', tamanhos: [], gruposAdicionais: [], ficha: []});
   });
+  // Categoria vai para a fila de produção da cozinha (bebidas, em geral, não)
+  grupos.forEach(g => { if (g.cozinha === undefined) g.cozinha = !/bebida/i.test(g.nome); });
+  let adicionais = ler('restAdicionais', []);
+  let aplicativos = ler('restAplicativos', []);
+  let contasBancarias = ler('restContasBancarias', []);
+  let movConta = ler('restMovConta', []);
+  let embalagens = ler('restEmbalagens', []);
+  let promocoes = ler('restPromocoes', []);
   let caixas = ler('restCaixas', []);
   let movCaixa = ler('restMovCaixa', []);
   let vendas = ler('restVendas', []);
@@ -179,12 +210,24 @@
   function salvar(...chaves){
     const mapa = {restGrupos: grupos, restProdutos: produtos, restEntregadores: entregadores, restUsuarios: usuarios, restFormas: formas,
       restCaixas: caixas, restMovCaixa: movCaixa, restVendas: vendas, restSeq: seq, clientes: listaClientes(),
-      restContas: contas, restCategorias: categorias, restMesas: mesas, restConfig: config, restMovEstoque: movEstoque};
+      restContas: contas, restCategorias: categorias, restMesas: mesas, restConfig: config, restMovEstoque: movEstoque,
+      restFornecedores: fornecedores, restFuncionarios: funcionarios, restRegioes: regioes, restAdicionais: adicionais, restPromocoes: promocoes,
+      restAplicativos: aplicativos, restEmbalagens: embalagens, restContasBancarias: contasBancarias, restMovConta: movConta};
     chaves.forEach(k => gravar(k, mapa[k]));
     versao++;
     ouvintes.forEach(fn => fn(versao));
   }
   const erro = msg => { const e = new Error(msg); e.regra = true; throw e; };
+  if (typeof window.addEventListener === 'function') window.addEventListener('storage', e => {
+    if (!e.key || !e.key.startsWith('mga_') || e.newValue === null) return;
+    const novo = ler(e.key.slice(4), null);
+    const trocar = {restVendas: v => { vendas = v; }, restProdutos: v => { produtos = v; }, restCaixas: v => { caixas = v; }, restMovCaixa: v => { movCaixa = v; },
+      restContas: v => { contas = v; }, restMovEstoque: v => { movEstoque = v; }, restMesas: v => { mesas = v; }, restSeq: v => { seq = v; }}[e.key.slice(4)];
+    if (!trocar || novo === null) return;
+    trocar(novo);
+    versao++;
+    ouvintes.forEach(fn => fn(versao));
+  });
 
   // =====================================================================
   // ---- Usuários, login e permissões ----
@@ -345,17 +388,19 @@
     const gIgual = grupos.find(g => g.id !== id && norm(g.nome) === norm(nome));
     if (gIgual) erro(`Já existe a categoria "${gIgual.nome}".`);
     const ativo = dados.ativo !== false;
+    const cozinha = dados.cozinha !== false;
     const g = id && grupoPorId(id);
     if (g) {
       const alteracoes = [];
       if (g.nome !== nome) alteracoes.push({campo: 'Nome', antes: g.nome, depois: nome});
       if (g.ativo !== ativo) alteracoes.push({campo: 'Ativo', antes: g.ativo ? 'Sim' : 'Não', depois: ativo ? 'Sim' : 'Não'});
-      Object.assign(g, {nome, ativo});
+      if (g.cozinha !== cozinha) alteracoes.push({campo: 'Vai para a cozinha', antes: g.cozinha ? 'Sim' : 'Não', depois: cozinha ? 'Sim' : 'Não'});
+      Object.assign(g, {nome, ativo, cozinha});
       if (alteracoes.length) auditar(`Categoria "${nome}" editada`, {alteracoes});
       salvar('restGrupos');
       return g;
     }
-    const novo = {id: novoId('g'), nome, ordem: grupos.reduce((m, x) => Math.max(m, x.ordem || 0), 0) + 1, ativo};
+    const novo = {id: novoId('g'), nome, ordem: grupos.reduce((m, x) => Math.max(m, x.ordem || 0), 0) + 1, ativo, cozinha};
     grupos.push(novo);
     auditar(`Categoria "${nome}" cadastrada`);
     salvar('restGrupos');
@@ -376,16 +421,58 @@
   const produtoVendido = id => vendas.some(v => v.itens.some(i => i.produtoId === id));
   const LIMITE_FOTO = 250000; // ~180 KB de imagem: a tela reduz a foto antes de salvar
   const proximoCodigo = () => { let n = seq.produto + 1; while (produtos.some(p => p.codigo === String(n).padStart(3, '0'))) n++; return String(n).padStart(3, '0'); };
+  // Tamanhos (P/M/G, 300 ml/500 ml...): cada um com o próprio preço
+  function lerTamanhos(lista){
+    const t = (Array.isArray(lista) ? lista : []).filter(x => txt(x.nome) || txt(x.preco))
+      .map(x => ({id: x.id || novoId('tm'), nome: txt(x.nome), preco: r2(lerValor(x.preco))}));
+    t.forEach(x => {
+      if (!x.nome) erro('Informe o nome de cada tamanho.');
+      if (!(x.preco > 0)) erro(`Informe o preço do tamanho "${x.nome}".`);
+    });
+    const rep = t.find((x, k) => t.findIndex(y => norm(y.nome) === norm(x.nome)) !== k);
+    if (rep) erro(`O tamanho "${rep.nome}" está repetido.`);
+    return t;
+  }
+  // Ficha técnica: insumos (ou outros produtos) usados para fazer uma unidade
+  function lerFicha(lista, id){
+    const f = (Array.isArray(lista) ? lista : []).filter(x => x.produtoId).map(x => ({produtoId: x.produtoId, quantidade: r3(lerValor(x.quantidade))}));
+    f.forEach(x => {
+      const c = produtoPorId(x.produtoId);
+      if (!c) erro('Item da ficha técnica não encontrado.');
+      if (id && c.id === id) erro(`"${c.nome}" não pode entrar na própria ficha técnica.`);
+      if (id && usaNaFicha(c, id)) erro(`"${c.nome}" já usa este produto na ficha técnica dele: a ficha ficaria circular.`);
+      if (!(x.quantidade > 0)) erro(`Informe a quantidade de "${c.nome}" na ficha técnica.`);
+    });
+    if (f.some((x, k) => f.findIndex(y => y.produtoId === x.produtoId) !== k)) erro('Um item aparece duas vezes na ficha técnica.');
+    return f;
+  }
+  // Evita ficha circular (A usa B, B usa A)
+  function usaNaFicha(p, alvoId, visitados = new Set()){
+    if (!p || visitados.has(p.id)) return false;
+    visitados.add(p.id);
+    return (p.ficha || []).some(c => c.produtoId === alvoId || usaNaFicha(produtoPorId(c.produtoId), alvoId, visitados));
+  }
+  // Custo de uma unidade: pela ficha técnica (soma dos insumos) ou o custo cadastrado
+  function custoProduto(p, nivel = 0){
+    if (!p) return 0;
+    if (!(p.ficha || []).length || nivel > 5) return p.custo || 0;
+    return r2(p.ficha.reduce((s, c) => s + c.quantidade * custoProduto(produtoPorId(c.produtoId), nivel + 1), 0));
+  }
   function salvarProduto(dados, id){
     const nome = txt(dados.nome);
-    const preco = r2(lerValor(dados.preco));
+    const tipo = dados.tipo === 'INSUMO' ? 'INSUMO' : 'VENDA';
+    const tamanhos = tipo === 'VENDA' ? lerTamanhos(dados.tamanhos) : [];
+    // Com tamanhos, o preço "a partir de" é o do menor tamanho
+    if (tamanhos.length) dados = {...dados, preco: Math.min(...tamanhos.map(t => t.preco))};
+    const preco = tipo === 'INSUMO' && txt(dados.preco) === '' ? 0 : r2(lerValor(dados.preco));
     const custo = txt(dados.custo) === '' ? 0 : r2(lerValor(dados.custo));
     const estoque = txt(dados.estoque) === '' ? 0 : lerValor(dados.estoque);
     const estoqueMinimo = txt(dados.estoqueMinimo) === '' ? 0 : lerValor(dados.estoqueMinimo);
     const codigo = txt(dados.codigo).toUpperCase();
     if (!nome) erro('Informe o nome do produto.');
     if (!grupoPorId(dados.grupoId)) erro('Escolha a categoria do produto.');
-    if (!Number.isFinite(lerValor(dados.preco)) || preco <= 0) erro('Informe um preço de venda maior que R$ 0,00.');
+    if (tipo === 'VENDA' && (!Number.isFinite(lerValor(dados.preco)) || preco <= 0)) erro('Informe um preço de venda maior que R$ 0,00.');
+    if (!Number.isFinite(preco) || preco < 0) erro('Preço inválido.');
     if (!Number.isFinite(custo) || custo < 0) erro('Custo inválido.');
     if (!Number.isFinite(estoque)) erro('Estoque inválido.');
     if (!Number.isFinite(estoqueMinimo) || estoqueMinimo < 0) erro('Estoque mínimo inválido.');
@@ -397,19 +484,25 @@
     if (pIgual) erro(`Já existe o produto "${pIgual.nome}" (cód. ${pIgual.codigo}).`);
     const cIgual = codigo && produtos.find(p => p.id !== id && p.codigo === codigo);
     if (cIgual) erro(`O código ${codigo} já é do produto "${cIgual.nome}".`);
-    const controlaEstoque = !!dados.controlaEstoque;
+    const controlaEstoque = tipo === 'INSUMO' || !!dados.controlaEstoque; // insumo sempre tem estoque
+    const ficha = lerFicha(dados.ficha, id);
+    const gruposAdic = tipo === 'VENDA' ? (Array.isArray(dados.gruposAdicionais) ? dados.gruposAdicionais : []).filter(g => grupoAdicionalPorId(g)) : [];
     const campos = {codigo, nome, preco, custo, unidade, grupoId: dados.grupoId, foto, descricao: txt(dados.descricao), ativo: dados.ativo !== false,
-      controlaEstoque, estoqueMinimo: controlaEstoque ? r3(estoqueMinimo) : 0};
+      controlaEstoque, estoqueMinimo: controlaEstoque ? r3(estoqueMinimo) : 0, tipo, tamanhos, gruposAdicionais: gruposAdic, ficha};
     const saldo = r3(estoque);
     const p = id && produtoPorId(id);
     const moeda = v => 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',');
     if (p) {
       if (!campos.codigo) campos.codigo = p.codigo;
       const fmt = {preco: moeda, custo: moeda, grupoId: v => grupoPorId(v)?.nome || '—', ativo: v => v ? 'Sim' : 'Não', foto: v => v ? 'com foto' : 'sem foto',
-        controlaEstoque: v => v ? 'Sim' : 'Não'};
-      const rotulo = {codigo: 'Código', nome: 'Nome', preco: 'Preço', custo: 'Custo', unidade: 'Unidade', grupoId: 'Categoria', foto: 'Foto', descricao: 'Descrição', ativo: 'Ativo',
-        controlaEstoque: 'Controla estoque', estoqueMinimo: 'Estoque mínimo'};
-      const alteracoes = Object.keys(rotulo).filter(k => (p[k] ?? '') !== (campos[k] ?? ''))
+        controlaEstoque: v => v ? 'Sim' : 'Não', tipo: v => TIPOS_PRODUTO[v] || '—',
+        tamanhos: v => (v || []).map(t => `${t.nome} ${moeda(t.preco)}`).join(', ') || '—',
+        gruposAdicionais: v => (v || []).map(g => grupoAdicionalPorId(g)?.nome || '?').join(', ') || '—',
+        ficha: v => (v || []).map(c => `${qtdBR(c.quantidade)} ${produtoPorId(c.produtoId)?.unidade || ''} ${produtoPorId(c.produtoId)?.nome || '?'}`).join(', ') || '—'};
+      const rotulo = {codigo: 'Código', nome: 'Nome', tipo: 'Tipo', preco: 'Preço', custo: 'Custo', unidade: 'Unidade', grupoId: 'Categoria', foto: 'Foto', descricao: 'Descrição', ativo: 'Ativo',
+        controlaEstoque: 'Controla estoque', estoqueMinimo: 'Estoque mínimo', tamanhos: 'Tamanhos', gruposAdicionais: 'Adicionais e etapas', ficha: 'Ficha técnica'};
+      const igual = (a, b) => typeof a === 'object' || typeof b === 'object' ? JSON.stringify(a ?? []) === JSON.stringify(b ?? []) : (a ?? '') === (b ?? '');
+      const alteracoes = Object.keys(rotulo).filter(k => !igual(p[k], campos[k]))
         .map(k => ({campo: rotulo[k], antes: (fmt[k] || String)(p[k] ?? '—'), depois: (fmt[k] || String)(campos[k] ?? '—')}));
       Object.assign(p, campos);
       // Saldo mudado no cadastro também fica no histórico do estoque (ajuste)
@@ -434,6 +527,8 @@
   function excluirProduto(id){
     const p = produtoPorId(id);
     if (!p) return;
+    const usa = produtos.find(x => (x.ficha || []).some(c => c.produtoId === id));
+    if (usa) erro(`"${p.nome}" está na ficha técnica de "${usa.nome}". Tire da ficha antes de excluir.`);
     if (produtoVendido(id)) erro(`"${p.nome}" já aparece em vendas e não pode ser excluído. Desative-o para tirar do cardápio.`);
     produtos.splice(produtos.indexOf(p), 1);
     auditar(`Produto "${p.nome}" excluído`);
@@ -469,21 +564,23 @@
     return r2((saldo * atual + qtd * custoEntrada) / (saldo + qtd));
   }
   // Entrada de mercadoria (compra). Com conta, lança também a conta a pagar ao fornecedor.
-  function entradaEstoque({produtoId, quantidade, custo, documento, conta = null}){
+  function entradaEstoque({produtoId, quantidade, custo, documento, fornecedorId = null, conta = null}){
     exigir('estoque');
     const p = produtoComEstoque(produtoId);
     const qtd = lerQtd(quantidade);
     const custoUn = txt(custo) === '' ? 0 : r2(lerValor(custo));
     if (!Number.isFinite(custoUn) || custoUn < 0) erro('Custo unitário inválido.');
+    const forn = fornecedorId ? fornecedorPorId(fornecedorId) || erro('Fornecedor não encontrado.') : null;
     if (conta) {
       exigir('financeiro');
       if (!(custoUn > 0)) erro('Informe o custo unitário para lançar a conta a pagar.');
-      salvarConta({tipo: 'PAGAR', descricao: `Compra: ${qtdBR(qtd)} ${p.unidade} ${p.nome}${txt(documento) ? ` (${txt(documento)})` : ''}`,
-        categoria: categorias.PAGAR.includes('Fornecedores') ? 'Fornecedores' : categorias.PAGAR[0], valor: r2(qtd * custoUn), vencimento: conta.vencimento, obs: ''});
+      salvarConta({tipo: 'PAGAR', descricao: `Compra: ${qtdBR(qtd)} ${p.unidade} ${p.nome}${forn ? ` · ${forn.nome}` : ''}${txt(documento) ? ` (${txt(documento)})` : ''}`,
+        categoria: categorias.PAGAR.includes('Fornecedores') ? 'Fornecedores' : categorias.PAGAR[0], valor: r2(qtd * custoUn), vencimento: conta.vencimento,
+        fornecedorId: forn?.id || null, obs: ''});
     }
     const custoAntes = p.custo || 0;
     p.custo = custoMedio(p, qtd, custoUn);
-    const m = lancarEstoque(p, 'ENTRADA', qtd, {custoUnitario: custoUn || null, motivo: txt(documento)});
+    const m = lancarEstoque(p, 'ENTRADA', qtd, {custoUnitario: custoUn || null, fornecedorId: forn?.id || null, motivo: [forn?.nome, txt(documento)].filter(Boolean).join(' · ')});
     auditar(`Entrada de ${qtdBR(qtd)} ${p.unidade} de "${p.nome}" — saldo ${qtdBR(m.saldo)}`,
       {detalhe: [txt(documento), custoUn && `custo ${moedaBR(custoUn)}/${p.unidade}`, p.custo !== custoAntes && `custo médio ${moedaBR(custoAntes)} → ${moedaBR(p.custo)}`].filter(Boolean).join(' · ')});
     salvar('restProdutos', 'restMovEstoque');
@@ -531,11 +628,74 @@
     return p;
   }
   // Venda finalizada: baixa os itens dos produtos controlados (um movimento por produto)
+  // Quanto de cada produto controlado sai do estoque: o próprio produto (se controla estoque)
+  // ou, se ele é feito na hora com ficha técnica, os insumos da ficha
+  function consumoDe(p, qtd, acumulado, nivel = 0){
+    if (!p || nivel > 5) return;
+    if (p.controlaEstoque) { acumulado[p.id] = r3((acumulado[p.id] || 0) + qtd); return; }
+    (p.ficha || []).forEach(c => consumoDe(produtoPorId(c.produtoId), qtd * c.quantidade, acumulado, nivel + 1));
+  }
   function baixarEstoqueVenda(v){
     const porProduto = {};
-    v.itens.forEach(i => { const p = produtoPorId(i.produtoId); if (p?.controlaEstoque) porProduto[p.id] = r3((porProduto[p.id] || 0) + i.quantidade); });
+    v.itens.forEach(i => consumoDe(produtoPorId(i.produtoId), i.quantidade, porProduto));
     Object.entries(porProduto).forEach(([id, qtd]) => lancarEstoque(produtoPorId(id), 'VENDA', -qtd, {vendaId: v.id, motivo: `${nomeVenda(v)}${v.tipo === 'BALCAO' ? '' : ` (venda #${v.numero})`}`}));
     v.estoqueBaixado = true;
+  }
+  // Produção: faz um produto com ficha técnica (ex.: molho, massa) — sai insumo, entra o produto
+  function produzir({produtoId, quantidade, obs}){
+    exigir('estoque');
+    const p = produtoComEstoque(produtoId);
+    if (!(p.ficha || []).length) erro(`"${p.nome}" não tem ficha técnica. Cadastre os insumos no produto antes de produzir.`);
+    const qtd = lerQtd(quantidade);
+    const consumo = {};
+    p.ficha.forEach(c => consumoDe(produtoPorId(c.produtoId), qtd * c.quantidade, consumo));
+    const faltando = Object.entries(consumo).map(([id, q]) => produtoPorId(id)).find(x => r3(x.estoque) < r3(consumo[x.id]) - 0.0001);
+    if (faltando) erro(`Falta ${faltando.nome}: precisa de ${qtdBR(consumo[faltando.id])} ${faltando.unidade}, há ${qtdBR(faltando.estoque)}.`);
+    const lote = novoId('lt');
+    const custoLote = r2(Object.entries(consumo).reduce((s, [id, q]) => s + q * (produtoPorId(id).custo || 0), 0));
+    Object.entries(consumo).forEach(([id, q]) => lancarEstoque(produtoPorId(id), 'PRODUCAO', -q, {lote, motivo: `Usado na produção de ${qtdBR(qtd)} ${p.unidade} de ${p.nome}`}));
+    const custoAntes = p.custo || 0;
+    p.custo = custoMedio(p, qtd, r2(custoLote / qtd));
+    const m = lancarEstoque(p, 'PRODUCAO', qtd, {lote, custoUnitario: r2(custoLote / qtd), motivo: txt(obs) || 'Produção'});
+    auditar(`Produção de ${qtdBR(qtd)} ${p.unidade} de "${p.nome}" — saldo ${qtdBR(m.saldo)}`,
+      {detalhe: Object.entries(consumo).map(([id, q]) => `${qtdBR(q)} ${produtoPorId(id).unidade} ${produtoPorId(id).nome}`).join(', ') + (p.custo !== custoAntes ? ` · custo ${moedaBR(custoAntes)} → ${moedaBR(p.custo)}` : '')});
+    salvar('restProdutos', 'restMovEstoque');
+    return m;
+  }
+  // Compra (nota com vários itens): uma entrada por item e, se pedir, uma única conta a pagar
+  function compraEstoque({fornecedorId = null, documento = '', itens = [], conta = null}){
+    exigir('estoque');
+    const forn = fornecedorId ? fornecedorPorId(fornecedorId) || erro('Fornecedor não encontrado.') : null;
+    const linhas = itens.filter(i => i.produtoId).map(i => ({p: produtoComEstoque(i.produtoId), qtd: lerQtd(i.quantidade, `a quantidade de ${produtoPorId(i.produtoId)?.nome || 'um item'}`),
+      custo: txt(i.custo) === '' ? 0 : r2(lerValor(i.custo))}));
+    if (!linhas.length) erro('Adicione ao menos um item à compra.');
+    if (linhas.some(l => !Number.isFinite(l.custo) || l.custo < 0)) erro('Custo unitário inválido.');
+    if (linhas.some((l, k) => linhas.findIndex(x => x.p.id === l.p.id) !== k)) erro('Um produto aparece duas vezes na compra. Some as quantidades numa linha só.');
+    const total = r2(linhas.reduce((s, l) => s + l.qtd * l.custo, 0));
+    if (conta) {
+      exigir('financeiro');
+      if (!(total > 0)) erro('Informe os custos para lançar a conta a pagar.');
+      salvarConta({tipo: 'PAGAR', descricao: `Compra${forn ? ` · ${forn.nome}` : ''}${txt(documento) ? ` (${txt(documento)})` : ''} — ${linhas.length} ${linhas.length === 1 ? 'item' : 'itens'}`,
+        categoria: categorias.PAGAR.includes('Fornecedores') ? 'Fornecedores' : categorias.PAGAR[0], valor: total, vencimento: conta.vencimento, fornecedorId: forn?.id || null, obs: ''});
+    }
+    const lote = novoId('cp');
+    const motivo = [forn?.nome, txt(documento)].filter(Boolean).join(' · ') || 'Compra';
+    linhas.forEach(l => { l.p.custo = custoMedio(l.p, l.qtd, l.custo); lancarEstoque(l.p, 'ENTRADA', l.qtd, {lote, custoUnitario: l.custo || null, fornecedorId: forn?.id || null, motivo}); });
+    auditar(`Compra registrada — ${linhas.length} ${linhas.length === 1 ? 'item' : 'itens'}, ${moedaBR(total)}`,
+      {detalhe: `${motivo} · ` + linhas.map(l => `${qtdBR(l.qtd)} ${l.p.unidade} ${l.p.nome}`).join(', ')});
+    salvar('restProdutos', 'restMovEstoque');
+    return {itens: linhas.length, total};
+  }
+  // Zerar estoque (todos os produtos controlados ou só de uma categoria): um ajuste para cada um
+  function zerarEstoque({grupoId = '', motivo = ''} = {}){
+    exigir('estoque');
+    if (txt(motivo).length < 3) erro('Informe o motivo (ex.: inventário anual, troca de cardápio).');
+    const alvo = produtos.filter(p => p.controlaEstoque && r3(p.estoque) !== 0 && (!grupoId || p.grupoId === grupoId));
+    if (!alvo.length) erro('Nenhum produto com saldo para zerar.');
+    alvo.forEach(p => lancarEstoque(p, 'AJUSTE', -r3(p.estoque), {motivo: `Estoque zerado: ${txt(motivo)}`}));
+    auditar(`Estoque zerado em ${alvo.length} produto${alvo.length === 1 ? '' : 's'}${grupoId ? ` da categoria ${grupoPorId(grupoId)?.nome}` : ''}`, {detalhe: txt(motivo)});
+    salvar('restProdutos', 'restMovEstoque');
+    return alvo.length;
   }
   // Venda cancelada depois de finalizada: devolve exatamente o que foi baixado
   function devolverEstoqueVenda(v, motivo){
@@ -546,6 +706,218 @@
     });
     v.estoqueBaixado = false;
   }
+
+  // =====================================================================
+  // ---- Adicionais e etapas ----
+  // Grupo de opções escolhidas ao vender o produto. Com mínimo ≥ 1 vira uma etapa obrigatória
+  // (ex.: "Ponto da carne": escolha 1); com mínimo 0 é adicional opcional (ex.: "Extras", até 3).
+  const grupoAdicionalPorId = id => adicionais.find(g => g.id === id);
+  function salvarGrupoAdicional(d, id){
+    const inteiro = v => txt(v) === '' ? 0 : Math.round(Number(v));
+    const g = {nome: txt(d.nome), min: inteiro(d.min), max: inteiro(d.max), ativo: d.ativo !== false,
+      opcoes: (Array.isArray(d.opcoes) ? d.opcoes : []).filter(o => txt(o.nome) || txt(o.preco))
+        .map(o => ({id: o.id || novoId('ao'), nome: txt(o.nome), preco: txt(o.preco) === '' ? 0 : r2(lerValor(o.preco)), ativo: o.ativo !== false}))};
+    if (!g.nome) erro('Informe o nome do grupo (ex.: Ponto da carne, Extras).');
+    if (!g.opcoes.length) erro('Cadastre ao menos uma opção.');
+    g.opcoes.forEach(o => { if (!o.nome) erro('Informe o nome de cada opção.'); if (!Number.isFinite(o.preco) || o.preco < 0) erro(`Preço inválido em "${o.nome}".`); });
+    const rep = g.opcoes.find((x, k) => g.opcoes.findIndex(y => norm(y.nome) === norm(x.nome)) !== k);
+    if (rep) erro(`A opção "${rep.nome}" está repetida.`);
+    if (!(g.min >= 0) || !(g.max >= 0)) erro('Mínimo e máximo: números a partir de 0.');
+    if (g.max && g.max < g.min) erro('O máximo precisa ser maior ou igual ao mínimo (0 = sem limite).');
+    if (g.min > g.opcoes.filter(o => o.ativo).length) erro('O mínimo passa do número de opções ativas.');
+    const igual = adicionais.find(x => x.id !== id && norm(x.nome) === norm(g.nome));
+    if (igual) erro(`Já existe o grupo "${igual.nome}".`);
+    const existente = id && grupoAdicionalPorId(id);
+    const resumo = x => `${x.opcoes.map(o => o.nome + (o.preco ? ` +${moedaBR(o.preco)}` : '')).join(', ')} · escolha ${x.min}${x.max ? ` a ${x.max}` : ' ou mais'}`;
+    if (existente) {
+      const antes = resumo(existente);
+      Object.assign(existente, g);
+      auditar(`Adicionais "${g.nome}" editado`, antes !== resumo(existente) ? {alteracoes: [{campo: 'Opções', antes, depois: resumo(existente)}]} : undefined);
+      salvar('restAdicionais');
+      return existente;
+    }
+    const novo = {id: novoId('ad'), ...g};
+    adicionais.push(novo);
+    auditar(`Adicionais "${g.nome}" cadastrado`, {detalhe: resumo(novo)});
+    salvar('restAdicionais');
+    return novo;
+  }
+  function excluirGrupoAdicional(id){
+    const g = grupoAdicionalPorId(id);
+    if (!g) return;
+    const n = produtos.filter(p => (p.gruposAdicionais || []).includes(id)).length;
+    if (n) erro(`"${g.nome}" está em ${n} produto${n === 1 ? '' : 's'}. Tire dos produtos ou desative o grupo.`);
+    adicionais.splice(adicionais.indexOf(g), 1);
+    auditar(`Adicionais "${g.nome}" excluído`);
+    salvar('restAdicionais');
+  }
+
+  // ---- Promoções: preço especial por dia da semana, horário e período ----
+  const promocaoPorId = id => promocoes.find(x => x.id === id);
+  const horaValida = v => /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
+  function salvarPromocao(d, id){
+    const x = {nome: txt(d.nome), alvo: d.alvo === 'CATEGORIA' ? 'CATEGORIA' : 'PRODUTO', ids: Array.isArray(d.ids) ? d.ids.filter(Boolean) : [],
+      tipo: d.tipo === 'PRECO' ? 'PRECO' : 'PERCENTUAL', valor: r2(lerValor(d.valor)), dias: (Array.isArray(d.dias) ? d.dias : []).map(Number).filter(n => n >= 0 && n <= 6).sort(),
+      horaIni: txt(d.horaIni), horaFim: txt(d.horaFim), de: txt(d.de), ate: txt(d.ate), ativo: d.ativo !== false};
+    if (!x.nome) erro('Informe o nome da promoção (ex.: Happy hour).');
+    if (!x.ids.length) erro(x.alvo === 'PRODUTO' ? 'Escolha ao menos um produto.' : 'Escolha ao menos uma categoria.');
+    if (x.ids.some(i => !(x.alvo === 'PRODUTO' ? produtoPorId(i) : grupoPorId(i)))) erro('Produto ou categoria não encontrado.');
+    if (!(x.valor > 0)) erro(x.tipo === 'PRECO' ? 'Informe o preço promocional.' : 'Informe o desconto em %.');
+    if (x.tipo === 'PERCENTUAL' && x.valor >= 100) erro('O desconto precisa ser menor que 100%.');
+    if (x.tipo === 'PRECO' && x.alvo !== 'PRODUTO') erro('Preço fixo só vale para produtos escolhidos (para categoria, use desconto em %).');
+    if ((x.horaIni || x.horaFim) && !(horaValida(x.horaIni) && horaValida(x.horaFim) && x.horaIni !== x.horaFim)) erro('Horário: informe início e fim diferentes (HH:MM).');
+    if ((x.de && !dataValida(x.de)) || (x.ate && !dataValida(x.ate))) erro('Período inválido.');
+    if (x.de && x.ate && x.ate < x.de) erro('O fim do período é antes do início.');
+    const existente = id && promocaoPorId(id);
+    if (existente) {
+      Object.assign(existente, x);
+      auditar(`Promoção "${x.nome}" editada (${x.ativo ? 'ativa' : 'inativa'})`, {detalhe: descreverPromocao(existente)});
+      salvar('restPromocoes');
+      return existente;
+    }
+    const nova = {id: novoId('pr'), ...x};
+    promocoes.push(nova);
+    auditar(`Promoção "${x.nome}" cadastrada`, {detalhe: descreverPromocao(nova)});
+    salvar('restPromocoes');
+    return nova;
+  }
+  function excluirPromocao(id){
+    const x = promocaoPorId(id);
+    if (!x) return;
+    promocoes.splice(promocoes.indexOf(x), 1);
+    auditar(`Promoção "${x.nome}" excluída`);
+    salvar('restPromocoes');
+  }
+  // "20% · Seg, Ter · 18:00–20:00 · até 31/12/2026"
+  function descreverPromocao(x){
+    return [x.tipo === 'PRECO' ? `por ${moedaBR(x.valor)}` : `${String(x.valor).replace('.', ',')}% de desconto`,
+      x.dias.length && x.dias.length < 7 ? x.dias.map(dd => DIAS_SEMANA[dd]).join(', ') : 'todos os dias',
+      x.horaIni && `${x.horaIni}–${x.horaFim}`, x.de && `de ${dataBR(x.de)}`, x.ate && `até ${dataBR(x.ate)}`].filter(Boolean).join(' · ');
+  }
+  const hhmm = d => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  // Promoção que vale agora para o produto (a que deixa mais barato)
+  function promocoesVigentes(p, quando = new Date()){
+    const dia = quando.getDay(), hm = hhmm(quando), data = diaISO(quando);
+    return promocoes.filter(x => x.ativo && (x.alvo === 'PRODUTO' ? x.ids.includes(p.id) : x.ids.includes(p.grupoId))
+      && (!x.dias.length || x.dias.includes(dia)) && (!x.de || data >= x.de) && (!x.ate || data <= x.ate)
+      && (!x.horaIni || (x.horaIni < x.horaFim ? hm >= x.horaIni && hm < x.horaFim : hm >= x.horaIni || hm < x.horaFim)));
+  }
+  // Preço da unidade (sem adicionais): tamanho escolhido e a melhor promoção do momento
+  function precoBase(p, tamanhoId, quando = new Date()){
+    const t = tamanhoId ? (p.tamanhos || []).find(x => x.id === tamanhoId) : null;
+    const tabela = t ? t.preco : p.preco;
+    let melhor = {preco: tabela, promo: null};
+    promocoesVigentes(p, quando).forEach(x => {
+      const v = x.tipo === 'PRECO' ? (t ? null : x.valor) : r2(tabela * (1 - x.valor / 100));
+      if (v !== null && v < melhor.preco) melhor = {preco: r2(v), promo: x};
+    });
+    return {tabela, ...melhor};
+  }
+  // Confere tamanho e adicionais escolhidos (mínimo/máximo de cada etapa)
+  function opcoesDoItem(p, {tamanhoId = null, adicionais: escolhidos = []} = {}){
+    const tamanho = tamanhoId ? (p.tamanhos || []).find(x => x.id === tamanhoId) : null;
+    if ((p.tamanhos || []).length && !tamanho) erro(`Escolha o tamanho de "${p.nome}".`);
+    const lista = [];
+    (p.gruposAdicionais || []).map(grupoAdicionalPorId).filter(g => g && g.ativo).forEach(g => {
+      const deste = g.opcoes.filter(o => o.ativo && escolhidos.includes(o.id));
+      if (deste.length < g.min) erro(`${p.nome} · ${g.nome}: escolha ${g.max === g.min ? g.min : `pelo menos ${g.min}`} opç${g.min === 1 ? 'ão' : 'ões'}.`);
+      if (g.max && deste.length > g.max) erro(`${p.nome} · ${g.nome}: no máximo ${g.max} opç${g.max === 1 ? 'ão' : 'ões'}.`);
+      deste.forEach(o => lista.push({grupo: g.nome, nome: o.nome, preco: o.preco}));
+    });
+    if (escolhidos.length > lista.length) erro(`Algum adicional escolhido não vale para "${p.nome}".`);
+    return {tamanho, adicionais: lista};
+  }
+  // Preço unitário que a tela mostra no carrinho (o mesmo que a venda grava)
+  function precoItem(p, opcoes = {}){
+    const base = precoBase(p, opcoes.tamanhoId).preco;
+    const extra = (p.gruposAdicionais || []).map(grupoAdicionalPorId).filter(g => g && g.ativo)
+      .flatMap(g => g.opcoes.filter(o => o.ativo && (opcoes.adicionais || []).includes(o.id))).reduce((s, o) => s + o.preco, 0);
+    return r2(base + extra);
+  }
+  // =====================================================================
+  // ---- Fila de produção (cozinha): na fila → preparando → pronto → entregue ----
+  const ESTADOS_PREPARO = {FILA: 'Na fila', PREPARANDO: 'Preparando', PRONTO: 'Pronto', ENTREGUE: 'Entregue'};
+  const LIMITE_FILA_H = 18; // pedidos mais antigos que isso saem da fila (esquecidos)
+  function filaProducao(ref = Date.now()){
+    const limite = ref - LIMITE_FILA_H * 3600000;
+    return vendas.filter(v => v.status !== 'CANCELADA' && new Date(v.data).getTime() >= limite)
+      .map(v => ({venda: v, itens: v.itens.filter(i => i.preparo && i.preparo.estado !== 'ENTREGUE')}))
+      .filter(x => x.itens.length);
+  }
+  function moverPreparo(vendaId, itemIds, estado){
+    if (!['cozinha', 'mesas', 'vendas', 'delivery'].some(m => podeAcessar(m))) erro('Seu usuário não tem acesso à fila de produção.');
+    if (!ESTADOS_PREPARO[estado]) erro('Situação inválida.');
+    const v = vendaPorId(vendaId) || erro('Pedido não encontrado.');
+    if (v.status === 'CANCELADA') erro('Este pedido foi cancelado.');
+    const itens = v.itens.filter(i => itemIds.includes(i.id) && i.preparo);
+    if (!itens.length) erro('Nenhum item para mover.');
+    itens.forEach(i => { i.preparo = {...i.preparo, estado, [estado.toLowerCase() + 'Em']: agora(), [estado.toLowerCase() + 'Por']: usuario()}; });
+    // Delivery acompanha a cozinha: começou a preparar → "Em preparação"; tudo pronto → "Pronto"
+    if (ehDelivery(v) && v.status === 'ABERTA') {
+      const daCozinha = v.itens.filter(i => i.preparo);
+      if (estado === 'PREPARANDO' && v.statusDelivery === 'RECEBIDO') marcarStatus(v, 'PREPARANDO');
+      if (daCozinha.every(i => ['PRONTO', 'ENTREGUE'].includes(i.preparo.estado)) && ['RECEBIDO', 'PREPARANDO'].includes(v.statusDelivery)) marcarStatus(v, 'PRONTO');
+    }
+    salvar('restVendas');
+    return itens.length;
+  }
+
+  // ---- Aplicativos de delivery (iFood, 99Food...): comissão para o relatório ----
+  const aplicativoPorId = id => aplicativos.find(a => a.id === id);
+  function salvarAplicativo(d, id){
+    const a = {nome: txt(d.nome), comissao: txt(d.comissao) === '' ? 0 : r2(lerValor(d.comissao)), ativo: d.ativo !== false};
+    if (!a.nome) erro('Informe o nome do aplicativo.');
+    if (!Number.isFinite(a.comissao) || a.comissao < 0 || a.comissao >= 100) erro('Comissão: de 0% a 99%.');
+    const igual = aplicativos.find(x => x.id !== id && norm(x.nome) === norm(a.nome));
+    if (igual) erro(`Já existe o aplicativo "${igual.nome}".`);
+    const existente = id && aplicativoPorId(id);
+    if (existente) { Object.assign(existente, a); auditar(`Aplicativo "${a.nome}" editado (${a.comissao}%)`); salvar('restAplicativos'); return existente; }
+    const novo = {id: novoId('ap'), ...a};
+    aplicativos.push(novo);
+    auditar(`Aplicativo "${a.nome}" cadastrado (${a.comissao}%)`);
+    salvar('restAplicativos');
+    return novo;
+  }
+  function excluirAplicativo(id){
+    const a = aplicativoPorId(id);
+    if (!a) return;
+    if (vendas.some(v => v.aplicativo?.id === id)) erro(`"${a.nome}" já tem pedidos. Desative em vez de excluir.`);
+    aplicativos.splice(aplicativos.indexOf(a), 1);
+    auditar(`Aplicativo "${a.nome}" excluído`);
+    salvar('restAplicativos');
+  }
+
+  // ---- Embalagens (marmita, copo, sacola...): cobradas no delivery por item ----
+  const embalagemPorId = id => embalagens.find(e => e.id === id);
+  function salvarEmbalagem(d, id){
+    const e = {nome: txt(d.nome), preco: txt(d.preco) === '' ? 0 : r2(lerValor(d.preco)), produtoIds: Array.isArray(d.produtoIds) ? d.produtoIds.filter(x => produtoPorId(x)) : [], ativo: d.ativo !== false};
+    if (!e.nome) erro('Informe o nome da embalagem.');
+    if (!Number.isFinite(e.preco) || e.preco < 0) erro('Preço da embalagem inválido.');
+    const igual = embalagens.find(x => x.id !== id && norm(x.nome) === norm(e.nome));
+    if (igual) erro(`Já existe a embalagem "${igual.nome}".`);
+    // Cada produto usa uma embalagem só
+    const outra = embalagens.find(x => x.id !== id && x.produtoIds.some(pid => e.produtoIds.includes(pid)));
+    if (outra) erro(`"${produtoPorId(outra.produtoIds.find(pid => e.produtoIds.includes(pid))).nome}" já usa a embalagem "${outra.nome}".`);
+    const existente = id && embalagemPorId(id);
+    if (existente) { Object.assign(existente, e); auditar(`Embalagem "${e.nome}" editada (${moedaBR(e.preco)})`); salvar('restEmbalagens'); return existente; }
+    const nova = {id: novoId('em'), ...e};
+    embalagens.push(nova);
+    auditar(`Embalagem "${e.nome}" cadastrada (${moedaBR(e.preco)})`);
+    salvar('restEmbalagens');
+    return nova;
+  }
+  function excluirEmbalagem(id){
+    const e = embalagemPorId(id);
+    if (!e) return;
+    embalagens.splice(embalagens.indexOf(e), 1);
+    auditar(`Embalagem "${e.nome}" excluída`);
+    salvar('restEmbalagens');
+  }
+  const embalagemDoProduto = pid => embalagens.find(e => e.ativo && e.produtoIds.includes(pid)) || null;
+  // Soma das embalagens dos itens (quantidade arredondada para cima: 1,5 marmita = 2 embalagens)
+  const taxaEmbalagemDe = itens => r2(itens.reduce((s, i) => { const e = embalagemDoProduto(i.produtoId); return s + (e ? Math.ceil(i.quantidade) * e.preco : 0); }, 0));
+
+  const precisaMontar = p => (p.tamanhos || []).length > 0 || (p.gruposAdicionais || []).some(g => grupoAdicionalPorId(g)?.ativo);
 
   // ---- Clientes (cadastro geral + campos de entrega) ----
   const clientePorId = id => listaClientes().find(c => c.id === id);
@@ -593,6 +965,143 @@
     return dv(9) === Number(d[9]) && dv(10) === Number(d[10]);
   }
   const mascaraCpf = v => digitos(v).slice(0, 11).replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+  function cnpjValido(v){
+    const d = digitos(v);
+    if (d.length !== 14 || /^(\d)\1+$/.test(d)) return false;
+    const dv = n => { let s = 0, p = n - 7; for (let i = 0; i < n; i++) { s += Number(d[i]) * p--; if (p < 2) p = 9; } const r = s % 11; return r < 2 ? 0 : 11 - r; };
+    return dv(12) === Number(d[12]) && dv(13) === Number(d[13]);
+  }
+  const mascaraCnpj = v => digitos(v).slice(0, 14).replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2');
+  // CPF ou CNPJ no mesmo campo (fornecedor pode ser pessoa física)
+  const docValido = v => digitos(v).length === 11 ? cpfValido(v) : cnpjValido(v);
+  const mascaraDoc = v => digitos(v).length <= 11 ? mascaraCpf(v) : mascaraCnpj(v);
+  const emailValido = v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+
+  // ---- Fornecedores ----
+  const fornecedorPorId = id => fornecedores.find(f => f.id === id);
+  const CAMPOS_FORNECEDOR = {nome: 'Nome', documento: 'CPF/CNPJ', telefone: 'Telefone', email: 'E-mail', contato: 'Contato', endereco: 'Endereço', cidade: 'Cidade', obs: 'Observação'};
+  function salvarFornecedor(d, id){
+    const f = {};
+    Object.keys(CAMPOS_FORNECEDOR).forEach(k => { f[k] = txt(d[k]); });
+    f.ativo = d.ativo !== false;
+    if (!f.nome) erro('Informe o nome do fornecedor.');
+    if (f.documento && !docValido(f.documento)) erro('CPF/CNPJ inválido. Confira os números.');
+    if (f.documento && fornecedores.some(x => x.id !== id && digitos(x.documento) === digitos(f.documento))) erro('Já existe um fornecedor com esse CPF/CNPJ.');
+    if (f.telefone && digitos(f.telefone).length < 10) erro('Telefone incompleto (use DDD + número).');
+    if (f.email && !emailValido(f.email)) erro('E-mail inválido.');
+    const igual = fornecedores.find(x => x.id !== id && norm(x.nome) === norm(f.nome));
+    if (igual) erro(`Já existe o fornecedor "${igual.nome}".`);
+    const existente = id && fornecedorPorId(id);
+    if (existente) {
+      const alteracoes = Object.keys(CAMPOS_FORNECEDOR).filter(k => txt(existente[k]) !== f[k]).map(k => ({campo: CAMPOS_FORNECEDOR[k], antes: txt(existente[k]) || '—', depois: f[k] || '—'}));
+      if (existente.ativo !== f.ativo) alteracoes.push({campo: 'Ativo', antes: existente.ativo ? 'Sim' : 'Não', depois: f.ativo ? 'Sim' : 'Não'});
+      Object.assign(existente, f);
+      if (alteracoes.length) auditar(`Fornecedor "${f.nome}" editado`, {alteracoes});
+      salvar('restFornecedores');
+      return existente;
+    }
+    const novo = {id: novoId('fo'), ...f, criadoEm: agora()};
+    fornecedores.push(novo);
+    auditar(`Fornecedor "${f.nome}" cadastrado`, {detalhe: [f.documento, f.telefone].filter(Boolean).join(' · ')});
+    salvar('restFornecedores');
+    return novo;
+  }
+  function excluirFornecedor(id){
+    const f = fornecedorPorId(id);
+    if (!f) return;
+    if (contas.some(c => c.fornecedorId === id) || movEstoque.some(m => m.fornecedorId === id))
+      erro(`"${f.nome}" já tem compras ou contas lançadas e fica no histórico. Desative em vez de excluir.`);
+    fornecedores.splice(fornecedores.indexOf(f), 1);
+    auditar(`Fornecedor "${f.nome}" excluído`);
+    salvar('restFornecedores');
+  }
+
+  // ---- Funcionários (a equipe; diferente de usuário, que é quem entra no sistema) ----
+  const funcionarioPorId = id => funcionarios.find(f => f.id === id);
+  function salvarFuncionario(d, id){
+    const f = {nome: txt(d.nome), cpf: txt(d.cpf), telefone: txt(d.telefone), cargo: txt(d.cargo), admissao: txt(d.admissao),
+      salario: txt(d.salario) === '' ? 0 : r2(lerValor(d.salario)), usuarioId: d.usuarioId || null, obs: txt(d.obs), ativo: d.ativo !== false};
+    if (!f.nome) erro('Informe o nome do funcionário.');
+    if (!f.cargo) erro('Informe o cargo.');
+    if (f.cpf && !cpfValido(f.cpf)) erro('CPF inválido. Confira os números.');
+    if (f.cpf && funcionarios.some(x => x.id !== id && digitos(x.cpf) === digitos(f.cpf))) erro('Já existe um funcionário com esse CPF.');
+    if (f.telefone && digitos(f.telefone).length < 10) erro('Telefone incompleto (use DDD + número).');
+    if (f.admissao && !dataValida(f.admissao)) erro('Data de admissão inválida.');
+    if (!Number.isFinite(f.salario) || f.salario < 0) erro('Salário inválido.');
+    if (f.usuarioId && !usuarioPorId(f.usuarioId)) erro('Usuário não encontrado.');
+    const outro = f.usuarioId && funcionarios.find(x => x.id !== id && x.usuarioId === f.usuarioId);
+    if (outro) erro(`Esse usuário já está ligado a ${outro.nome}.`);
+    const existente = id && funcionarioPorId(id);
+    if (existente) {
+      const rot = {nome: 'Nome', cpf: 'CPF', telefone: 'Telefone', cargo: 'Cargo', admissao: 'Admissão', salario: 'Salário', obs: 'Observação', ativo: 'Ativo'};
+      const fmt = {salario: moedaBR, admissao: dataBR, ativo: v => v ? 'Sim' : 'Não'};
+      const alteracoes = Object.keys(rot).filter(k => (existente[k] ?? '') !== (f[k] ?? ''))
+        .map(k => ({campo: rot[k], antes: (fmt[k] || String)(existente[k] ?? '') || '—', depois: (fmt[k] || String)(f[k]) || '—'}));
+      Object.assign(existente, f);
+      if (alteracoes.length) auditar(`Funcionário "${f.nome}" editado`, {alteracoes});
+      salvar('restFuncionarios');
+      return existente;
+    }
+    const novo = {id: novoId('fu'), ...f, criadoEm: agora()};
+    funcionarios.push(novo);
+    auditar(`Funcionário "${f.nome}" cadastrado (${f.cargo})`);
+    salvar('restFuncionarios');
+    return novo;
+  }
+  function excluirFuncionario(id){
+    const f = funcionarioPorId(id);
+    if (!f) return;
+    funcionarios.splice(funcionarios.indexOf(f), 1);
+    auditar(`Funcionário "${f.nome}" excluído`);
+    salvar('restFuncionarios');
+  }
+
+  // ---- Regiões de entrega: cidade, bairros e taxa (o delivery acha a região pelo bairro) ----
+  const regiaoPorId = id => regioes.find(r => r.id === id);
+  const listaBairros = v => (Array.isArray(v) ? v : String(v ?? '').split(/[,;\n]/)).map(txt).filter(Boolean)
+    .filter((b, k, l) => l.findIndex(x => norm(x) === norm(b)) === k);
+  const mesmaCidade = (a, b) => !txt(a) || !txt(b) || norm(a) === norm(b);
+  function regiaoDoBairro(bairro, cidade){
+    if (!txt(bairro)) return null;
+    return regioes.find(r => r.ativo && mesmaCidade(r.cidade, cidade) && r.bairros.some(b => norm(b) === norm(bairro))) || null;
+  }
+  function salvarRegiao(d, id){
+    const r = {nome: txt(d.nome), cidade: txt(d.cidade), bairros: listaBairros(d.bairros), taxa: txt(d.taxa) === '' ? 0 : r2(lerValor(d.taxa)),
+      tempo: txt(d.tempo) === '' || d.tempo == null ? null : Math.round(Number(d.tempo)), ativo: d.ativo !== false};
+    if (!r.nome) erro('Informe o nome da região.');
+    if (!r.bairros.length) erro('Informe ao menos um bairro (separe por vírgula).');
+    if (!Number.isFinite(r.taxa) || r.taxa < 0) erro('Taxa de entrega inválida.');
+    if (r.tempo !== null && !(r.tempo > 0 && r.tempo <= 600)) erro('Tempo estimado: de 1 a 600 minutos.');
+    const igual = regioes.find(x => x.id !== id && norm(x.nome) === norm(r.nome) && mesmaCidade(x.cidade, r.cidade));
+    if (igual) erro(`Já existe a região "${igual.nome}".`);
+    if (r.ativo) regioes.filter(x => x.id !== id && x.ativo && mesmaCidade(x.cidade, r.cidade)).forEach(x => {
+      const repetido = r.bairros.find(b => x.bairros.some(y => norm(y) === norm(b)));
+      if (repetido) erro(`O bairro "${repetido}" já está na região "${x.nome}".`);
+    });
+    const existente = id && regiaoPorId(id);
+    if (existente) {
+      const alteracoes = [];
+      if (existente.taxa !== r.taxa) alteracoes.push({campo: 'Taxa', antes: moedaBR(existente.taxa), depois: moedaBR(r.taxa)});
+      if (existente.bairros.join(', ') !== r.bairros.join(', ')) alteracoes.push({campo: 'Bairros', antes: existente.bairros.join(', '), depois: r.bairros.join(', ')});
+      if (existente.ativo !== r.ativo) alteracoes.push({campo: 'Ativa', antes: existente.ativo ? 'Sim' : 'Não', depois: r.ativo ? 'Sim' : 'Não'});
+      Object.assign(existente, r);
+      auditar(`Região de entrega "${r.nome}" editada`, alteracoes.length ? {alteracoes} : undefined);
+      salvar('restRegioes');
+      return existente;
+    }
+    const nova = {id: novoId('rg'), ...r};
+    regioes.push(nova);
+    auditar(`Região de entrega "${r.nome}" cadastrada — ${moedaBR(r.taxa)}`, {detalhe: r.bairros.join(', ')});
+    salvar('restRegioes');
+    return nova;
+  }
+  function excluirRegiao(id){
+    const r = regiaoPorId(id);
+    if (!r) return;
+    regioes.splice(regioes.indexOf(r), 1); // os pedidos guardam o nome da região: o histórico não muda
+    auditar(`Região de entrega "${r.nome}" excluída`);
+    salvar('restRegioes');
+  }
   const entregadorPorId = id => entregadores.find(e => e.id === id);
   function salvarEntregador(dados, id){
     const e = {nome: txt(dados.nome), telefone: txt(dados.telefone), cpf: txt(dados.cpf), obs: txt(dados.obs),
@@ -656,7 +1165,7 @@
     return m;
   };
   // Suprimento (põe dinheiro no caixa) e sangria (tira dinheiro do caixa)
-  function movimentarCaixa(tipo, {valor, motivo}){
+  function movimentarCaixa(tipo, {valor, motivo, contaBancariaId = null}){
     exigir('vendas');
     const cx = caixaExigido();
     if (!['SUPRIMENTO', 'SANGRIA'].includes(tipo)) erro('Movimento inválido.');
@@ -664,9 +1173,13 @@
     if (!(v > 0)) erro('Informe um valor maior que R$ 0,00.');
     if (txt(motivo).length < 3) erro(`Informe o motivo ${tipo === 'SANGRIA' ? 'da sangria' : 'do suprimento'}.`);
     if (tipo === 'SANGRIA' && v > resumoCaixa(cx.id).saldoDinheiro + 0.001) erro(`A sangria passa do dinheiro no caixa (${moedaBR(resumoCaixa(cx.id).saldoDinheiro)}).`);
+    if (contaBancariaId) exigir('financeiro');
     const m = lancarMov(cx, tipo, v, 'DINHEIRO', txt(motivo));
-    auditar(`${TIPOS_MOV_CAIXA[tipo]} de ${moedaBR(v)} no caixa #${cx.numero}`, {detalhe: m.descricao});
-    salvar('restMovCaixa');
+    // Sangria vai para a conta (ex.: cofre, depósito no banco); suprimento sai da conta
+    if (contaBancariaId) m.movContaId = lancarConta(contaBancariaId, tipo === 'SANGRIA' ? 'ENTRADA' : 'SAIDA', v,
+      `${TIPOS_MOV_CAIXA[tipo]} do caixa #${cx.numero}: ${m.descricao}`, {origem: 'CAIXA', movCaixaId: m.id}).id;
+    auditar(`${TIPOS_MOV_CAIXA[tipo]} de ${moedaBR(v)} no caixa #${cx.numero}${contaBancariaId ? ` (${tipo === 'SANGRIA' ? 'para' : 'de'} ${contaBancariaPorId(contaBancariaId).nome})` : ''}`, {detalhe: m.descricao});
+    salvar('restMovCaixa', 'restMovConta');
     return m;
   }
   // Panorama do caixa: o que entrou e saiu por forma e o dinheiro que deve estar na gaveta
@@ -694,12 +1207,16 @@
     const abertas = vendas.filter(v => v.caixaId === cx.id && v.status === 'ABERTA');
     r.abertas = {n: abertas.length, consumo: r2(abertas.reduce((s, v) => s + totaisVenda(v).total, 0)), recebido: r2(abertas.reduce((s, v) => s + totaisVenda(v).pago, 0))};
     r.saldoDinheiro = r2(r.inicial + porForma.DINHEIRO + r.recebimentosDinheiro + r.suprimentos - r.sangrias - r.pagamentosDinheiro - r.estornosDinheiro);
+    // O que deve ter entrado em cada forma (cartões e PIX conferidos pelo extrato da maquininha/banco)
+    const naForma = (tipo, forma) => r2(movs.filter(m => m.tipo === tipo && m.forma === forma).reduce((s, m) => s + m.valor, 0));
+    r.esperado = {DINHEIRO: r.saldoDinheiro};
+    ['PIX', 'DEBITO', 'CREDITO', 'OUTROS'].forEach(t => { r.esperado[t] = r2(porForma[t] + naForma('RECEBIMENTO', t) - naForma('PAGAMENTO', t) - naForma('ESTORNO', t)); });
     // Tudo o que o caixa movimentou, em todas as formas (a prazo fica de fora: não entrou dinheiro)
     r.totalGeral = r2(r.inicial + Object.entries(porForma).filter(([t]) => t !== 'PRAZO').reduce((s, [, v]) => s + v, 0)
       + r.recebimentos + r.suprimentos - r.sangrias - r.pagamentos - r.estornos);
     return r;
   }
-  function fecharCaixa({valorContado, obs}){
+  function fecharCaixa({valorContado, obs, conferencia = {}}){
     exigir('vendas');
     const cx = caixaExigido();
     const abertas = vendas.filter(v => v.caixaId === cx.id && v.status === 'ABERTA' && v.tipo !== 'ENCOMENDA');
@@ -709,11 +1226,21 @@
     if (!Number.isFinite(lerValor(valorContado)) || contado < 0) erro('Valor contado inválido.');
     const r = resumoCaixa(cx.id);
     const diferenca = r2(contado - r.saldoDinheiro);
-    if (Math.abs(diferenca) > 0.001 && txt(obs).length < 3) erro(`Há ${diferenca > 0 ? 'sobra' : 'falta'} de ${moedaBR(Math.abs(diferenca))}. Informe o motivo para fechar.`);
+    // Conferência das outras formas (opcional): o que foi informado é comparado ao esperado
+    const conferidas = ['PIX', 'DEBITO', 'CREDITO', 'OUTROS'].filter(t => txt(conferencia[t]) !== '').map(t => {
+      const c = r2(lerValor(conferencia[t]));
+      if (!Number.isFinite(lerValor(conferencia[t])) || c < 0) erro(`Valor conferido inválido em ${TIPOS_FORMA[t]}.`);
+      return {tipo: t, nome: TIPOS_FORMA[t], esperado: r.esperado[t], contado: c, diferenca: r2(c - r.esperado[t])};
+    });
+    const comDiferenca = conferidas.filter(x => Math.abs(x.diferenca) > 0.001);
+    if ((Math.abs(diferenca) > 0.001 || comDiferenca.length) && txt(obs).length < 3)
+      erro(Math.abs(diferenca) > 0.001 ? `Há ${diferenca > 0 ? 'sobra' : 'falta'} de ${moedaBR(Math.abs(diferenca))} no dinheiro. Informe o motivo para fechar.`
+        : `Há diferença em ${comDiferenca.map(x => x.nome).join(', ')}. Informe o motivo para fechar.`);
     const {movimentos, caixa, ...congelado} = r;
-    Object.assign(cx, {status: 'FECHADO', fechamento: agora(), fechadoPor: usuario(), valorContado: contado, diferenca, obsFechamento: txt(obs), resumo: congelado});
+    Object.assign(cx, {status: 'FECHADO', fechamento: agora(), fechadoPor: usuario(), valorContado: contado, diferenca, obsFechamento: txt(obs), resumo: congelado,
+      conferencia: [{tipo: 'DINHEIRO', nome: TIPOS_FORMA.DINHEIRO, esperado: r.saldoDinheiro, contado, diferenca}, ...conferidas]});
     auditar(`Caixa #${cx.numero} fechado — esperado ${moedaBR(r.saldoDinheiro)}, contado ${moedaBR(contado)}${Math.abs(diferenca) > 0.001 ? ` (${diferenca > 0 ? 'sobra' : 'falta'} de ${moedaBR(Math.abs(diferenca))})` : ''}`,
-      {detalhe: txt(obs)});
+      {detalhe: [txt(obs), ...comDiferenca.map(x => `${x.nome}: ${x.diferenca > 0 ? 'sobra' : 'falta'} de ${moedaBR(Math.abs(x.diferenca))}`)].filter(Boolean).join(' · ')});
     salvar('restCaixas');
     return cx;
   }
@@ -734,11 +1261,11 @@
     const legado = forma => r2(v.pagamentos.filter(p => p.forma === forma).reduce((s, p) => s + p.valor, 0));
     const desconto = r2((v.desconto || 0) + legado('DESCONTO')), acrescimo = r2((v.acrescimo || 0) + legado('ACRESCIMO'));
     const servico = v.taxaServico?.ativa ? r2(itens * (v.taxaServico.percentual || 0) / 100) : 0;
-    const entrega = r2(v.taxaEntrega || 0);
-    const total = r2(Math.max(itens - desconto + acrescimo + servico + entrega, 0));
+    const entrega = r2(v.taxaEntrega || 0), embalagem = r2(v.taxaEmbalagem || 0);
+    const total = r2(Math.max(itens - desconto + acrescimo + servico + entrega + embalagem, 0));
     const reais = v.pagamentos.filter(p => !AJUSTES.includes(p.forma));
     const pago = r2(reais.reduce((s, p) => s + p.valor, 0));
-    return {itens, desconto, acrescimo, servico, entrega, total, pago, restante: r2(Math.max(total - pago, 0)), troco: r2(reais.reduce((s, p) => s + (p.troco || 0), 0))};
+    return {itens, desconto, acrescimo, servico, entrega, embalagem, total, pago, restante: r2(Math.max(total - pago, 0)), troco: r2(reais.reduce((s, p) => s + (p.troco || 0), 0))};
   }
   // Aplica um pagamento sobre o restante. Só dinheiro pode passar do restante (gera troco).
   function montarPagamento(restante, formaId, valor){
@@ -751,15 +1278,24 @@
     const aplicado = r2(Math.min(v, restante));
     return {id: novoId('pg'), formaId: f.id, tipo: f.tipo, nome: f.nome, valor: aplicado, recebido: v, troco: r2(v - aplicado), data: agora()};
   }
-  function itemDaVenda(produtoId, quantidade, observacao){
+  // opcoes: {tamanhoId, adicionais: [ids das opções]}; o preço sai do cadastro (tamanho + promoção + adicionais)
+  function itemDaVenda(produtoId, quantidade, observacao, opcoes = {}){
     const p = produtoPorId(produtoId);
     if (!p) erro('Produto não encontrado.');
     if (!p.ativo) erro(`"${p.nome}" está desativado.`);
+    if (p.tipo === 'INSUMO') erro(`"${p.nome}" é insumo e não é vendido.`);
     const qtd = typeof quantidade === 'number' ? quantidade : lerValor(quantidade);
     if (!(qtd > 0)) erro(`Quantidade inválida para "${p.nome}".`);
-    return {id: novoId('i'), produtoId: p.id, codigo: p.codigo, nome: p.nome, quantidade: r2(qtd), precoUnitario: p.preco, custoUnitario: p.custo || 0,
-      desconto: 0, observacao: txt(observacao), pago: false};
+    const {tamanho, adicionais: escolhidos} = opcoesDoItem(p, opcoes);
+    const pr = precoBase(p, tamanho?.id);
+    const extra = r2(escolhidos.reduce((s, o) => s + o.preco, 0));
+    return {id: novoId('i'), produtoId: p.id, codigo: p.codigo, nome: p.nome + (tamanho ? ` (${tamanho.nome})` : ''), quantidade: r2(qtd),
+      precoUnitario: r2(pr.preco + extra), custoUnitario: custoProduto(p), desconto: 0, observacao: txt(observacao), pago: false,
+      ...(tamanho ? {tamanho: tamanho.nome} : {}), ...(escolhidos.length ? {adicionais: escolhidos} : {}),
+      ...(pr.promo ? {promocao: pr.promo.nome, precoTabela: r2(pr.tabela + extra)} : {}),
+      ...(grupoPorId(p.grupoId)?.cozinha !== false ? {preparo: {estado: 'FILA', desde: agora()}} : {})};
   }
+  const opcoesDe = i => ({tamanhoId: i.tamanhoId || null, adicionais: i.adicionais || []});
   // Fecha a venda: confere o pagamento, marca itens pagos e gera conta a receber do que foi a prazo
   function concluir(v){
     const t = totaisVenda(v);
@@ -788,7 +1324,7 @@
     if (!TIPOS_VENDA[tipo]) erro('Tipo de venda inválido.');
     if (!itens.length) erro('Adicione ao menos um produto.');
     if (clienteId && !clientePorId(clienteId)) erro('Cliente não encontrado.');
-    const linhas = itens.map(i => itemDaVenda(i.produtoId, i.quantidade, i.observacao));
+    const linhas = itens.map(i => itemDaVenda(i.produtoId, i.quantidade, i.observacao, opcoesDe(i)));
     const base = r2(linhas.reduce((s, i) => s + i.quantidade * i.precoUnitario, 0));
     const acr = valorAjuste(acrescimo, base), desc = valorAjuste(desconto, base);
     if (desc > base + acr + 0.001) erro('O desconto não pode passar do total da venda.');
@@ -833,9 +1369,9 @@
   const vendaEditavel = v => { if (!v) erro('Venda não encontrada.'); if (v.status !== 'ABERTA') erro(`A venda #${v.numero} está ${STATUS_VENDA[v.status].toLowerCase()}.`); return v; };
   const editavelPor = id => { const v = vendaEditavel(vendaPorId(id)); exigir(moduloDaVenda(v.tipo)); return v; };
   const nomeVenda = v => v.tipo === 'MESA' ? `Mesa ${v.mesa}` : v.tipo === 'BALCAO' ? `Venda #${v.numero}` : `${TIPOS_VENDA[v.tipo]} #${v.numero}`;
-  function adicionarItem(vendaId, produtoId, {quantidade = 1, desconto = 0, observacao = ''} = {}){
+  function adicionarItem(vendaId, produtoId, {quantidade = 1, desconto = 0, observacao = '', tamanhoId = null, adicionais: escolhidos = []} = {}){
     const v = editavelPor(vendaId);
-    const item = itemDaVenda(produtoId, quantidade, observacao);
+    const item = itemDaVenda(produtoId, quantidade, observacao, {tamanhoId, adicionais: escolhidos});
     const desc = r2(lerValor(desconto || 0));
     if (!(desc >= 0) || desc > r2(item.quantidade * item.precoUnitario)) erro('Desconto do item inválido.');
     Object.assign(item, {desconto: desc, adicionadoPor: usuario(), adicionadoEm: agora()});
@@ -847,7 +1383,7 @@
   const itemDe = (v, itemId) => v.itens.find(i => i.id === itemId) || erro('Item não encontrado.');
   // O total não pode ficar abaixo do que já foi pago
   const conferirPago = v => { const t = totaisVenda(v); if (t.pago > t.total + 0.001) erro(`Já foram recebidos ${moedaBR(t.pago)}: o total não pode ficar abaixo disso.`); };
-  function alterarItem(vendaId, itemId, {quantidade, observacao}){
+  function alterarItem(vendaId, itemId, {quantidade, observacao, precoUnitario, desconto}){
     const v = editavelPor(vendaId);
     const i = itemDe(v, itemId);
     if (i.pago) erro(`"${i.nome}" já foi pago e não pode ser alterado.`);
@@ -858,7 +1394,23 @@
       i.quantidade = r2(q);
     }
     if (observacao !== undefined) i.observacao = txt(observacao);
+    if (precoUnitario !== undefined) {
+      const pu = r2(lerValor(precoUnitario));
+      if (!(pu > 0)) erro('Preço unitário inválido.');
+      i.precoUnitario = pu;
+    }
+    if (desconto !== undefined) {
+      const dsc = txt(desconto) === '' ? 0 : r2(lerValor(desconto));
+      if (!(dsc >= 0)) erro('Desconto do item inválido.');
+      i.desconto = dsc;
+    }
+    if (r2(i.desconto || 0) > r2(i.quantidade * i.precoUnitario)) { Object.assign(i, antes); erro('O desconto passa do valor do item.'); }
     try { conferirPago(v); } catch (e) { Object.assign(i, antes); throw e; }
+    // Preço e desconto mudados à mão ficam na auditoria
+    const alteracoes = [];
+    if (antes.precoUnitario !== i.precoUnitario) alteracoes.push({campo: 'Preço unitário', antes: moedaBR(antes.precoUnitario), depois: moedaBR(i.precoUnitario)});
+    if ((antes.desconto || 0) !== (i.desconto || 0)) alteracoes.push({campo: 'Desconto', antes: moedaBR(antes.desconto || 0), depois: moedaBR(i.desconto || 0)});
+    if (alteracoes.length) auditar(`${nomeVenda(v)}: item "${i.nome}" alterado`, {alteracoes});
     salvar('restVendas');
     return i;
   }
@@ -1048,7 +1600,7 @@
     const tipo = d.tipo === 'ENCOMENDA' ? 'ENCOMENDA' : 'DELIVERY';
     const modo = MODOS_ENTREGA[d.modo] ? d.modo : 'ENTREGAR';
     if (!(d.itens || []).length) erro('Adicione ao menos um produto.');
-    const linhas = d.itens.map(i => itemDaVenda(i.produtoId, i.quantidade, i.observacao));
+    const linhas = d.itens.map(i => itemDaVenda(i.produtoId, i.quantidade, i.observacao, opcoesDe(i)));
     const c = d.cliente || {};
     const ent = {nome: txt(c.nome), telefone: txt(c.telefone), cep: txt(c.cep), endereco: txt(c.endereco), numero: txt(c.numero),
       complemento: txt(c.complemento), bairro: txt(c.bairro), cidade: txt(c.cidade), referencia: txt(c.referencia)};
@@ -1070,13 +1622,16 @@
     if (!Number.isFinite(taxa) || taxa < 0) erro('Taxa de entrega inválida.');
     const forma = d.formaPrevistaId ? formaPorId(d.formaPrevistaId) : null;
     if (d.formaPrevistaId && (!forma || !forma.ativo)) erro('Forma de pagamento inválida.');
+    const app = d.aplicativoId ? aplicativoPorId(d.aplicativoId) : null;
+    if (d.aplicativoId && (!app || !app.ativo)) erro('Aplicativo inválido.');
     const base = r2(linhas.reduce((s, i) => s + i.quantidade * i.precoUnitario, 0));
     const acr = valorAjuste(d.acrescimo, base), desc = valorAjuste(d.desconto, base);
     if (desc > base + acr + 0.001) erro('O desconto não pode passar do total do pedido.');
     const v = {id: novoId('v'), numero: seq.venda + 1, caixaId: cx.id, tipo, status: 'ABERTA', clienteId: null, mesaId: null, mesa: '', pessoas: 1,
       entregadorId: null, obs: txt(d.obs), operadorId: sessaoAtual()?.id || null, operador: usuario(), data: agora(), finalizadaEm: null,
       canceladaEm: null, motivoCancelamento: '', desconto: desc, acrescimo: acr, itens: linhas, pagamentos: [],
-      entrega: ent, modo, agendadoPara, taxaEntrega: modo === 'ENTREGAR' ? taxa : 0, formaPrevistaId: forma?.id || null,
+      entrega: ent, modo, agendadoPara, taxaEntrega: modo === 'ENTREGAR' ? taxa : 0, taxaEmbalagem: taxaEmbalagemDe(linhas), formaPrevistaId: forma?.id || null,
+      aplicativo: app ? {id: app.id, nome: app.nome, comissao: app.comissao} : null,
       levarMaquina: !!d.levarMaquina && ['DEBITO', 'CREDITO'].includes(forma?.tipo), trocoPara: null, statusDelivery: 'RECEBIDO', historico: []};
     const total = totaisVenda(v).total;
     if (!(total > 0)) erro('O total do pedido precisa ser maior que R$ 0,00.');
@@ -1093,6 +1648,7 @@
       cli = salvarClienteRest(dados, cli?.id || null);
     }
     v.clienteId = cli?.id || null;
+    if (modo === 'ENTREGAR') v.entrega.regiao = regiaoDoBairro(ent.bairro, ent.cidade)?.nome || '';
     marcarStatus(v, 'RECEBIDO');
     seq.venda++;
     vendas.push(v);
@@ -1212,6 +1768,56 @@
     salvar('restConfig');
     return config;
   }
+  // Empresa: dados que saem no topo dos cupons, do fechamento de caixa e dos relatórios
+  const CAMPOS_EMPRESA = {razaoSocial: 'Razão social', cnpj: 'CNPJ', ie: 'Inscrição estadual', telefone: 'Telefone', email: 'E-mail', cep: 'CEP',
+    endereco: 'Endereço', numero: 'Número', bairro: 'Bairro', cidade: 'Cidade', uf: 'UF'};
+  function salvarEmpresa(d){
+    exigir('configuracoes');
+    const e = {};
+    Object.keys(CAMPOS_EMPRESA).forEach(k => { e[k] = txt(d[k]); });
+    e.uf = e.uf.toUpperCase();
+    const nome = txt(d.nome) || config.nome;
+    if (e.cnpj && !cnpjValido(e.cnpj)) erro('CNPJ inválido. Confira os números.');
+    if (e.telefone && digitos(e.telefone).length < 10) erro('Telefone incompleto (use DDD + número).');
+    if (e.email && !emailValido(e.email)) erro('E-mail inválido.');
+    if (e.cep && digitos(e.cep).length !== 8) erro('CEP deve ter 8 números.');
+    if (e.uf && !UFS.includes(e.uf)) erro('UF inválida.');
+    const alteracoes = Object.keys(CAMPOS_EMPRESA).filter(k => config.empresa[k] !== e[k]).map(k => ({campo: CAMPOS_EMPRESA[k], antes: config.empresa[k] || '—', depois: e[k] || '—'}));
+    if (nome !== config.nome) alteracoes.unshift({campo: 'Nome fantasia', antes: config.nome, depois: nome});
+    config = {...config, nome, empresa: e};
+    if (alteracoes.length) registrarAuditoria('Configurações', 'Dados da empresa alterados', {alteracoes});
+    salvar('restConfig');
+    return config;
+  }
+  // Nome no menu lateral, no login e na aba do navegador: o da empresa, ou MGA até ser informado
+  const nomeMarca = () => txt(config.nome) && config.nome !== NOME_PADRAO ? config.nome : 'MGA';
+  // Linhas do cabeçalho das impressões: nome, razão social e CNPJ, endereço, telefone
+  function cabecalhoEmpresa(){
+    const e = config.empresa;
+    const end = [[e.endereco, e.numero].filter(Boolean).join(', '), e.bairro, [e.cidade, e.uf].filter(Boolean).join('/')].filter(Boolean).join(' · ');
+    return [config.nome, [e.razaoSocial && e.razaoSocial !== config.nome && e.razaoSocial, e.cnpj && `CNPJ ${e.cnpj}`, e.ie && `IE ${e.ie}`].filter(Boolean).join(' · '),
+      end, [e.telefone && `Tel. ${e.telefone}`, e.email].filter(Boolean).join(' · ')].filter(Boolean);
+  }
+  function salvarImpressao(d){
+    exigir('configuracoes');
+    const vias = Math.round(Number(d.viasComanda));
+    const novo = {largura: ['58', '80'].includes(String(d.largura)) ? String(d.largura) : '80', cupomModo: MODOS_CUPOM[d.cupomModo] ? d.cupomModo : 'NAO', comandaAuto: !!d.comandaAuto,
+      viasComanda: vias >= 1 && vias <= 3 ? vias : 1, rodape: txt(d.rodape).slice(0, 120)};
+    const rot = {largura: 'Largura do papel (mm)', cupomModo: 'Cupom da venda', comandaAuto: 'Comanda automática', viasComanda: 'Vias da comanda', rodape: 'Rodapé'};
+    const alteracoes = Object.keys(rot).filter(k => config.impressao[k] !== novo[k]).map(k => ({campo: rot[k], antes: String(config.impressao[k]), depois: String(novo[k])}));
+    config = {...config, impressao: novo};
+    if (alteracoes.length) registrarAuditoria('Configurações', 'Configuração de impressão alterada', {alteracoes});
+    salvar('restConfig');
+    return novo;
+  }
+  // Comanda da cozinha: marca os itens já enviados (a mesa imprime só os novos)
+  function marcarImpresso(vendaId, itemIds){
+    const v = vendaPorId(vendaId);
+    if (!v) return;
+    const quando = agora();
+    v.itens.filter(i => itemIds.includes(i.id)).forEach(i => { i.impressoEm = quando; });
+    salvar('restVendas');
+  }
 
   // =====================================================================
   // ---- Financeiro: contas a pagar e a receber ----
@@ -1221,18 +1827,21 @@
     const tipo = dados.tipo;
     if (!TIPOS_CONTA[tipo]) erro('Tipo de conta inválido.');
     const c = {descricao: txt(dados.descricao), categoria: txt(dados.categoria), valor: r2(lerValor(dados.valor)), vencimento: txt(dados.vencimento),
-      clienteId: tipo === 'RECEBER' ? (dados.clienteId || null) : null, obs: txt(dados.obs)};
+      clienteId: tipo === 'RECEBER' ? (dados.clienteId || null) : null, fornecedorId: tipo === 'PAGAR' ? (dados.fornecedorId || null) : null, obs: txt(dados.obs)};
     if (!c.descricao) erro('Informe a descrição da conta.');
     if (!categorias[tipo].includes(c.categoria)) erro('Escolha a categoria.');
     if (!(c.valor > 0)) erro('Informe um valor maior que R$ 0,00.');
     if (!dataValida(c.vencimento)) erro('Informe a data de vencimento.');
     if (c.clienteId && !clientePorId(c.clienteId)) erro('Cliente não encontrado.');
+    if (c.fornecedorId && !fornecedorPorId(c.fornecedorId)) erro('Fornecedor não encontrado.');
     const existente = id && contaPorId(id);
     if (existente) {
       if (existente.vendaId) erro('Esta conta veio de uma venda a prazo e não pode ser editada. Cancele a venda, se for o caso.');
       if (existente.status === 'PAGA') erro('Conta já baixada. Estorne a baixa para editar.');
-      const rot = {descricao: 'Descrição', categoria: 'Categoria', valor: 'Valor', vencimento: 'Vencimento', obs: 'Observação'};
-      const alteracoes = Object.keys(rot).filter(k => existente[k] !== c[k]).map(k => ({campo: rot[k], antes: String(existente[k] || '—'), depois: String(c[k] || '—')}));
+      const rot = {descricao: 'Descrição', categoria: 'Categoria', valor: 'Valor', vencimento: 'Vencimento', fornecedorId: 'Fornecedor', obs: 'Observação'};
+      const fmt = {fornecedorId: v => fornecedorPorId(v)?.nome || '—'};
+      const alteracoes = Object.keys(rot).filter(k => (existente[k] ?? null) !== (c[k] ?? null))
+        .map(k => ({campo: rot[k], antes: (fmt[k] || String)(existente[k] || '—'), depois: (fmt[k] || String)(c[k] || '—')}));
       Object.assign(existente, c);
       if (alteracoes.length) auditar(`Conta ${TIPOS_CONTA[tipo].toLowerCase()} "${c.descricao}" editada`, {alteracoes});
       salvar('restContas');
@@ -1257,13 +1866,15 @@
   // Forma da baixa → tipo usado no caixa (boleto e transferência entram como "outros")
   const TIPO_DA_BAIXA = {'Dinheiro': 'DINHEIRO', 'PIX': 'PIX', 'Cartão de Débito': 'DEBITO', 'Cartão de Crédito': 'CREDITO'};
   // Com noCaixa, a baixa vira recebimento/pagamento no caixa aberto (entra no saldo e no fechamento)
-  function baixarConta(id, {data, forma, noCaixa = false}){
+  function baixarConta(id, {data, forma, noCaixa = false, contaBancariaId = null}){
     const c = contaPorId(id);
     if (!c) erro('Conta não encontrada.');
     if (c.status === 'PAGA') erro('Esta conta já foi baixada.');
     if (!dataValida(data)) erro('Informe a data do pagamento.');
     if (data > hojeISO()) erro('A data do pagamento não pode ser no futuro.');
     if (!FORMAS_BAIXA.includes(forma)) erro('Escolha a forma de pagamento.');
+    if (noCaixa && contaBancariaId) erro('Escolha o caixa aberto ou uma conta bancária, não os dois.');
+    if (contaBancariaId && !contaBancariaPorId(contaBancariaId)?.ativo) erro('Escolha uma conta bancária ativa.');
     let mov = null;
     if (noCaixa) {
       const cx = caixaExigido();
@@ -1272,9 +1883,10 @@
         erro(`Não há dinheiro suficiente no caixa (${moedaBR(resumoCaixa(cx.id).saldoDinheiro)}) para pagar ${moedaBR(c.valor)}.`);
       mov = lancarMov(cx, c.tipo === 'PAGAR' ? 'PAGAMENTO' : 'RECEBIMENTO', c.valor, tipoForma, c.descricao, {contaId: c.id});
     }
-    Object.assign(c, {status: 'PAGA', pagoEm: data, forma, movCaixaId: mov?.id || null});
-    auditar(`Conta "${c.descricao}" ${c.tipo === 'PAGAR' ? 'paga' : 'recebida'} — ${moedaBR(c.valor)} (${forma})${mov ? ' pelo caixa' : ''}`);
-    salvar('restContas', 'restMovCaixa');
+    const mc = contaBancariaId ? lancarConta(contaBancariaId, c.tipo === 'PAGAR' ? 'SAIDA' : 'ENTRADA', c.valor, c.descricao, {data, contaFinanceiraId: c.id, origem: 'BAIXA'}) : null;
+    Object.assign(c, {status: 'PAGA', pagoEm: data, forma, movCaixaId: mov?.id || null, movContaId: mc?.id || null});
+    auditar(`Conta "${c.descricao}" ${c.tipo === 'PAGAR' ? 'paga' : 'recebida'} — ${moedaBR(c.valor)} (${forma})${mov ? ' pelo caixa' : mc ? ` na conta ${contaBancariaPorId(contaBancariaId).nome}` : ''}`);
+    salvar('restContas', 'restMovCaixa', 'restMovConta');
     return c;
   }
   function estornarBaixa(id){
@@ -1286,9 +1898,11 @@
       if (caixaPorId(mov.caixaId)?.status !== 'ABERTO') erro('Esta baixa entrou num caixa já fechado e não pode ser estornada.');
       movCaixa.splice(movCaixa.indexOf(mov), 1);
     }
-    Object.assign(c, {status: 'ABERTA', pagoEm: null, forma: '', movCaixaId: null});
+    const mc = c.movContaId && movConta.find(m => m.id === c.movContaId);
+    if (mc) movConta.splice(movConta.indexOf(mc), 1);
+    Object.assign(c, {status: 'ABERTA', pagoEm: null, forma: '', movCaixaId: null, movContaId: null});
     auditar(`Baixa da conta "${c.descricao}" estornada`);
-    salvar('restContas', 'restMovCaixa');
+    salvar('restContas', 'restMovCaixa', 'restMovConta');
     return c;
   }
   const contaVencida = c => c.status === 'ABERTA' && c.vencimento < hojeISO();
@@ -1316,6 +1930,92 @@
     categorias[tipo] = categorias[tipo].filter(x => x !== nome);
     auditar(`Categoria "${nome}" excluída`);
     salvar('restCategorias');
+  }
+
+  // =====================================================================
+  // ---- Contas bancárias e movimento de conta (extrato) ----
+  // Saldo = saldo inicial + entradas − saídas. Entram aqui: baixas de contas a pagar/receber
+  // feitas "na conta", sangrias depositadas, suprimentos tirados da conta, lançamentos avulsos
+  // (tarifa, rendimento...) e transferências entre contas.
+  const TIPOS_CONTA_BANCARIA = {BANCO: 'Conta bancária', CAIXA: 'Cofre / dinheiro', CARTEIRA: 'Carteira digital (PIX, maquininha)'};
+  const contaBancariaPorId = id => contasBancarias.find(c => c.id === id);
+  const saldoConta = (id, ate = null) => { const c = contaBancariaPorId(id); if (!c) return 0;
+    return r2((c.saldoInicial || 0) + movConta.filter(m => m.contaId === id && (!ate || m.data <= ate)).reduce((s, m) => s + (m.tipo === 'ENTRADA' ? m.valor : -m.valor), 0)); };
+  function salvarContaBancaria(d, id){
+    exigir('financeiro');
+    const c = {nome: txt(d.nome), tipo: TIPOS_CONTA_BANCARIA[d.tipo] ? d.tipo : 'BANCO', banco: txt(d.banco), saldoInicial: txt(d.saldoInicial) === '' ? 0 : r2(lerValor(d.saldoInicial)),
+      dataInicial: txt(d.dataInicial) || hojeISO(), ativo: d.ativo !== false};
+    if (!c.nome) erro('Informe o nome da conta (ex.: Banco do Brasil, Cofre).');
+    if (!Number.isFinite(c.saldoInicial)) erro('Saldo inicial inválido.');
+    if (!dataValida(c.dataInicial)) erro('Data do saldo inicial inválida.');
+    const igual = contasBancarias.find(x => x.id !== id && norm(x.nome) === norm(c.nome));
+    if (igual) erro(`Já existe a conta "${igual.nome}".`);
+    const existente = id && contaBancariaPorId(id);
+    if (existente) {
+      const alteracoes = existente.saldoInicial !== c.saldoInicial ? [{campo: 'Saldo inicial', antes: moedaBR(existente.saldoInicial), depois: moedaBR(c.saldoInicial)}] : [];
+      Object.assign(existente, c);
+      auditar(`Conta bancária "${c.nome}" editada`, alteracoes.length ? {alteracoes} : undefined);
+      salvar('restContasBancarias');
+      return existente;
+    }
+    const nova = {id: novoId('cb'), ...c};
+    contasBancarias.push(nova);
+    auditar(`Conta bancária "${c.nome}" cadastrada — saldo inicial ${moedaBR(c.saldoInicial)}`);
+    salvar('restContasBancarias');
+    return nova;
+  }
+  function excluirContaBancaria(id){
+    exigir('financeiro');
+    const c = contaBancariaPorId(id);
+    if (!c) return;
+    if (movConta.some(m => m.contaId === id)) erro(`"${c.nome}" tem movimentos no extrato. Desative em vez de excluir.`);
+    contasBancarias.splice(contasBancarias.indexOf(c), 1);
+    auditar(`Conta bancária "${c.nome}" excluída`);
+    salvar('restContasBancarias');
+  }
+  // Lança no extrato (usado pelas baixas, sangrias e lançamentos avulsos)
+  function lancarConta(contaId, tipo, valor, descricao, extra = {}){
+    const c = contaBancariaPorId(contaId);
+    if (!c || !c.ativo) erro('Escolha uma conta bancária ativa.');
+    const m = {id: novoId('mc'), contaId, tipo, valor: r2(valor), descricao: txt(descricao), data: extra.data || hojeISO(), usuario: usuario(), criadoEm: agora(), ...extra};
+    movConta.push(m);
+    return m;
+  }
+  // Lançamento avulso: depósito, tarifa, rendimento, retirada...
+  function lancamentoConta({contaId, tipo, valor, descricao, data}){
+    exigir('financeiro');
+    if (!['ENTRADA', 'SAIDA'].includes(tipo)) erro('Escolha entrada ou saída.');
+    const v = r2(lerValor(valor));
+    if (!(v > 0)) erro('Informe um valor maior que R$ 0,00.');
+    if (txt(descricao).length < 3) erro('Informe a descrição (ex.: tarifa bancária).');
+    if (!dataValida(data)) erro('Informe a data.');
+    const m = lancarConta(contaId, tipo, v, descricao, {data, origem: 'AVULSO'});
+    auditar(`${tipo === 'ENTRADA' ? 'Entrada' : 'Saída'} de ${moedaBR(v)} em "${contaBancariaPorId(contaId).nome}"`, {detalhe: m.descricao});
+    salvar('restMovConta');
+    return m;
+  }
+  function transferirEntreContas({origemId, destinoId, valor, data, descricao}){
+    exigir('financeiro');
+    if (!origemId || !destinoId || origemId === destinoId) erro('Escolha duas contas diferentes.');
+    const v = r2(lerValor(valor));
+    if (!(v > 0)) erro('Informe um valor maior que R$ 0,00.');
+    if (!dataValida(data)) erro('Informe a data.');
+    const o = contaBancariaPorId(origemId), dd = contaBancariaPorId(destinoId);
+    const transferencia = novoId('tf');
+    lancarConta(origemId, 'SAIDA', v, txt(descricao) || `Transferência para ${dd?.nome}`, {data, transferencia, origem: 'TRANSFERENCIA'});
+    lancarConta(destinoId, 'ENTRADA', v, txt(descricao) || `Transferência de ${o?.nome}`, {data, transferencia, origem: 'TRANSFERENCIA'});
+    auditar(`Transferência de ${moedaBR(v)}: ${o.nome} → ${dd.nome}`);
+    salvar('restMovConta');
+  }
+  // Exclui um lançamento avulso ou uma transferência inteira (os automáticos se desfazem na origem)
+  function excluirMovConta(id){
+    exigir('financeiro');
+    const m = movConta.find(x => x.id === id) || erro('Lançamento não encontrado.');
+    if (m.origem !== 'AVULSO' && m.origem !== 'TRANSFERENCIA') erro('Este lançamento veio de uma baixa ou do caixa: desfaça por lá (estorne a baixa).');
+    const juntos = m.transferencia ? movConta.filter(x => x.transferencia === m.transferencia) : [m];
+    juntos.forEach(x => movConta.splice(movConta.indexOf(x), 1));
+    auditar(`Lançamento excluído do extrato: ${m.descricao} (${moedaBR(m.valor)})`);
+    salvar('restMovConta');
   }
 
   // =====================================================================
@@ -1386,11 +2086,188 @@
   }
 
   // =====================================================================
+  // ---- Relatórios (só leitura) ----
+  // Mesmo regime do Dashboard: a venda conta no dia em que foi finalizada. Período "de/até"
+  // inclusivo, no formato AAAA-MM-DD. Listas vêm ordenadas do maior valor para o menor.
+  const noPeriodo = (iso, de, ate) => { if (!iso) return false; const d = diaISO(new Date(iso)); return d >= de && d <= ate; };
+  const diasEntre = (de, ate) => Math.round((new Date(ate + 'T12:00:00') - new Date(de + 'T12:00:00')) / 86400000) + 1;
+  // Período imediatamente anterior, do mesmo tamanho (para comparar)
+  function periodoAnterior(de, ate){
+    const fim = new Date(de + 'T12:00:00'); fim.setDate(fim.getDate() - 1);
+    const ini = new Date(fim); ini.setDate(ini.getDate() - diasEntre(de, ate) + 1);
+    return {de: diaISO(ini), ate: diaISO(fim)};
+  }
+  const operadoresDasVendas = () => [...new Set(vendas.map(v => v.operador).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const filtroVenda = ({operador = '', tipo = ''}) => v => (!operador || v.operador === operador) && (!tipo || v.tipo === tipo);
+  const vendasDoPeriodo = f => vendas.filter(v => v.status === 'FINALIZADA' && noPeriodo(v.finalizadaEm, f.de, f.ate) && filtroVenda(f)(v));
+  // Soma em grupos: {chave: {nome, n, valor, ...}} → lista ordenada por valor
+  const acumular = (mapa, nome, valor, extra = {}) => {
+    const x = mapa[nome] ||= {nome, n: 0, valor: 0};
+    x.n++; x.valor = r2(x.valor + valor);
+    Object.entries(extra).forEach(([k, v]) => { x[k] = r2((x[k] || 0) + v); });
+    return x;
+  };
+  const ordenarValor = mapa => Object.values(mapa).sort((a, b) => b.valor - a.valor || a.nome.localeCompare(b.nome, 'pt-BR'));
+
+  // Vendas: totais, por dia, por hora, por forma de pagamento, por tipo e por operador
+  function relatorioVendas(f){
+    const lista = vendasDoPeriodo(f).map(v => ({v, t: totaisVenda(v)}));
+    const soma = k => r2(lista.reduce((s, x) => s + x.t[k], 0));
+    const total = soma('total');
+    const porDia = [];
+    for (let d = new Date(f.de + 'T12:00:00'); diaISO(d) <= f.ate; d.setDate(d.getDate() + 1))
+      porDia.push({dia: diaISO(d), rotulo: dataBR(diaISO(d)).slice(0, 5), valor: 0, n: 0});
+    const indiceDia = Object.fromEntries(porDia.map((x, k) => [x.dia, k]));
+    const porHora = Array.from({length: 24}, (_, h) => ({hora: h, rotulo: `${h}h`, valor: 0, n: 0}));
+    const formas = {}, tipos = {}, operadores = {};
+    lista.forEach(({v, t}) => {
+      const fim = new Date(v.finalizadaEm);
+      const dia = porDia[indiceDia[diaISO(fim)]];
+      dia.valor = r2(dia.valor + t.total); dia.n++;
+      const hora = porHora[new Date(v.data).getHours()]; // hora em que o pedido começou
+      hora.valor = r2(hora.valor + t.total); hora.n++;
+      v.pagamentos.filter(p => !AJUSTES.includes(p.forma)).forEach(p => acumular(formas, p.nome || TIPOS_FORMA[tipoPagamento(p)], p.valor));
+      acumular(tipos, TIPOS_VENDA[v.tipo], t.total);
+      acumular(operadores, v.operador || '—', t.total, {descontos: t.desconto});
+    });
+    const canceladas = vendas.filter(v => v.status === 'CANCELADA' && noPeriodo(v.finalizadaEm || v.data, f.de, f.ate) && filtroVenda(f)(v));
+    const ant = periodoAnterior(f.de, f.ate);
+    return {n: lista.length, total, ticket: lista.length ? r2(total / lista.length) : 0,
+      itens: soma('itens'), descontos: soma('desconto'), acrescimos: soma('acrescimo'), servico: soma('servico'), entrega: soma('entrega'), embalagem: soma('embalagem'),
+      canceladas: {n: canceladas.length, valor: r2(canceladas.reduce((s, v) => s + totaisVenda(v).total, 0))},
+      anterior: {...ant, total: r2(vendasDoPeriodo({...f, ...ant}).reduce((s, v) => s + totaisVenda(v).total, 0))},
+      porDia, porHora, porForma: ordenarValor(formas), porTipo: ordenarValor(tipos), porOperador: ordenarValor(operadores)};
+  }
+
+  // Produtos: quantidade, faturamento (itens, já com desconto do item), custo, lucro e curva ABC
+  function relatorioProdutos(f){
+    const mapa = {};
+    vendasDoPeriodo(f).forEach(v => v.itens.forEach(i => {
+      const p = produtoPorId(i.produtoId);
+      if (f.grupoId && p?.grupoId !== f.grupoId) return;
+      const x = mapa[i.produtoId] ||= {produtoId: i.produtoId, codigo: p?.codigo || i.codigo || '', nome: p?.nome || i.nome, unidade: p?.unidade || 'UN',
+        grupo: grupoPorId(p?.grupoId)?.nome || 'Sem categoria', qtd: 0, valor: 0, custo: 0, semCusto: false};
+      x.qtd = r3(x.qtd + i.quantidade);
+      x.valor = r2(x.valor + i.quantidade * i.precoUnitario - (i.desconto || 0));
+      if (i.custoUnitario > 0) x.custo = r2(x.custo + i.quantidade * i.custoUnitario);
+      else x.semCusto = true; // venda sem custo registrado: o lucro desse produto não é calculado
+    }));
+    const lista = Object.values(mapa).sort((a, b) => b.valor - a.valor || a.nome.localeCompare(b.nome, 'pt-BR'));
+    const total = r2(lista.reduce((s, x) => s + x.valor, 0));
+    // Curva ABC: A = produtos que somam os primeiros 80% do faturamento, B = até 95%, C = o resto
+    let acumulado = 0;
+    lista.forEach(x => {
+      x.curva = acumulado < total * 0.8 ? 'A' : acumulado < total * 0.95 ? 'B' : 'C';
+      acumulado += x.valor;
+      x.lucro = x.semCusto ? null : r2(x.valor - x.custo);
+      x.margem = x.lucro === null || !x.valor ? null : x.lucro / x.valor * 100;
+    });
+    const comCusto = lista.filter(x => !x.semCusto);
+    const grupos = {};
+    lista.forEach(x => { const g = grupos[x.grupo] ||= {nome: x.grupo, n: 0, qtd: 0, valor: 0}; g.n++; g.qtd = r3(g.qtd + x.qtd); g.valor = r2(g.valor + x.valor); });
+    return {lista, total, qtd: r3(lista.reduce((s, x) => s + x.qtd, 0)), porGrupo: ordenarValor(grupos),
+      comCusto: {n: comCusto.length, valor: r2(comCusto.reduce((s, x) => s + x.valor, 0)), custo: r2(comCusto.reduce((s, x) => s + x.custo, 0)),
+        lucro: r2(comCusto.reduce((s, x) => s + x.lucro, 0))}, semCusto: lista.length - comCusto.length};
+  }
+
+  // Caixa: cada caixa aberto no período com vendas, dinheiro esperado, contado e diferença
+  function relatorioCaixa(f){
+    const lista = caixas.filter(c => noPeriodo(c.abertura, f.de, f.ate) && (!f.operador || c.operador === f.operador))
+      .sort((a, b) => b.numero - a.numero)
+      .map(c => {
+        const r = resumoCaixa(c.id);
+        return {id: c.id, numero: c.numero, operador: c.operador, abertura: c.abertura, fechamento: c.fechamento, status: c.status,
+          vendas: r.totalVendas, nVendas: r.nVendas, inicial: r.inicial, suprimentos: r.suprimentos, sangrias: r.sangrias,
+          esperado: r.saldoDinheiro, contado: c.status === 'FECHADO' ? c.valorContado : null, diferenca: c.status === 'FECHADO' ? (c.diferenca || 0) : null};
+      });
+    const soma = (k, filtro = () => true) => r2(lista.filter(filtro).reduce((s, c) => s + (c[k] || 0), 0));
+    return {lista, vendas: soma('vendas'), nVendas: lista.reduce((s, c) => s + c.nVendas, 0), suprimentos: soma('suprimentos'), sangrias: soma('sangrias'),
+      sobras: soma('diferenca', c => c.diferenca > 0), faltas: soma('diferenca', c => c.diferenca < 0),
+      comDiferenca: lista.filter(c => Math.abs(c.diferenca || 0) > 0.001).length, abertos: lista.filter(c => c.status === 'ABERTO').length};
+  }
+
+  // Delivery e encomenda: pedidos entregues, taxas, tempo de entrega, entregadores e bairros
+  function relatorioDelivery(f){
+    const lista = vendasDoPeriodo(f).filter(ehDelivery).map(v => ({v, t: totaisVenda(v)}));
+    const total = r2(lista.reduce((s, x) => s + x.t.total, 0));
+    const entregas = lista.filter(x => x.v.modo !== 'RETIRAR');
+    // Tempo só do delivery (encomenda tem hora marcada)
+    const tempos = lista.filter(x => x.v.tipo === 'DELIVERY').map(x => tempoPedido(x.v));
+    const faixas = {verde: 0, amarelo: 0, vermelho: 0};
+    tempos.forEach(t => { if (faixas[t.faixa] !== undefined) faixas[t.faixa]++; });
+    const entregadoresM = {}, bairros = {}, modos = {}, regioesM = {}, apps = {};
+    lista.forEach(({v, t}) => {
+      acumular(modos, `${TIPOS_VENDA[v.tipo]} · ${MODOS_ENTREGA[v.modo] || MODOS_ENTREGA.ENTREGAR}`, t.total);
+      acumular(apps, v.aplicativo?.nome || 'Pedido direto', t.total, {comissao: v.aplicativo ? t.total * (v.aplicativo.comissao || 0) / 100 : 0});
+      if (v.modo === 'RETIRAR') return;
+      acumular(entregadoresM, entregadorPorId(v.entregadorId)?.nome || 'Sem entregador', t.total, {taxas: t.entrega});
+      acumular(bairros, txt(v.entrega?.bairro) || 'Não informado', t.total, {taxas: t.entrega});
+      acumular(regioesM, txt(v.entrega?.regiao) || 'Sem região', t.total, {taxas: t.entrega});
+    });
+    const canceladas = vendas.filter(v => ehDelivery(v) && v.status === 'CANCELADA' && noPeriodo(v.canceladaEm || v.data, f.de, f.ate) && filtroVenda(f)(v));
+    return {n: lista.length, total, ticket: lista.length ? r2(total / lista.length) : 0, nEntregas: entregas.length,
+      taxas: r2(entregas.reduce((s, x) => s + x.t.entrega, 0)),
+      tempoMedio: tempos.length ? Math.round(tempos.reduce((s, t) => s + t.min, 0) / tempos.length) : null, nTempos: tempos.length, faixas,
+      canceladas: canceladas.length, porEntregador: ordenarValor(entregadoresM), porBairro: ordenarValor(bairros), porRegiao: ordenarValor(regioesM), porModo: ordenarValor(modos), porAplicativo: ordenarValor(apps)};
+  }
+
+  // Financeiro do período (competência): DRE, contas a pagar/receber, sangrias e suprimentos, mês a mês.
+  // Compras de mercadoria (categoria Fornecedores) não entram como despesa na DRE: já estão no CMV.
+  const CATEGORIA_COMPRAS = 'Fornecedores';
+  function relatorioFinanceiro(f){
+    const vs = vendasDoPeriodo(f);
+    const receita = r2(vs.reduce((s, v) => s + totaisVenda(v).total, 0));
+    const itens = vs.flatMap(v => v.itens);
+    const cmv = r2(itens.reduce((s, i) => s + i.quantidade * (i.custoUnitario || 0), 0));
+    const semCusto = itens.filter(i => !(i.custoUnitario > 0)).length;
+    const comissoes = r2(vs.filter(v => v.aplicativo).reduce((s, v) => s + totaisVenda(v).total * (v.aplicativo.comissao || 0) / 100, 0));
+    const noPer = c => c.vencimento >= f.de && c.vencimento <= f.ate;
+    const pagar = contas.filter(c => c.tipo === 'PAGAR' && noPer(c)), receber = contas.filter(c => c.tipo === 'RECEBER' && noPer(c));
+    const despesas = pagar.filter(c => c.categoria !== CATEGORIA_COMPRAS);
+    const porCat = lista => { const m = {}; lista.forEach(c => { const x = m[c.categoria] ||= {nome: c.categoria, n: 0, valor: 0, pago: 0, aberto: 0}; x.n++; x.valor = r2(x.valor + c.valor); x[c.status === 'PAGA' ? 'pago' : 'aberto'] = r2(x[c.status === 'PAGA' ? 'pago' : 'aberto'] + c.valor); });
+      return Object.values(m).sort((a, b) => b.valor - a.valor); };
+    const totalDesp = r2(despesas.reduce((s, c) => s + c.valor, 0));
+    const outras = r2(receber.filter(c => !c.vendaId).reduce((s, c) => s + c.valor, 0));
+    const lucroBruto = r2(receita - cmv);
+    const resultado = r2(lucroBruto - comissoes - totalDesp + outras);
+    // Mês a mês no ano do fim do período
+    const ano = f.ate.slice(0, 4);
+    const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'].map((nome, k) => {
+      const ini = `${ano}-${String(k + 1).padStart(2, '0')}-01`, fim = diaISO(new Date(Number(ano), k + 1, 0));
+      const vMes = vendasDoPeriodo({de: ini, ate: fim});
+      const rec = r2(vMes.reduce((s, v) => s + totaisVenda(v).total, 0) + contas.filter(c => c.tipo === 'RECEBER' && !c.vendaId && c.vencimento >= ini && c.vencimento <= fim).reduce((s, c) => s + c.valor, 0));
+      const custo = r2(vMes.flatMap(v => v.itens).reduce((s, i) => s + i.quantidade * (i.custoUnitario || 0), 0));
+      const desp = r2(contas.filter(c => c.tipo === 'PAGAR' && c.categoria !== CATEGORIA_COMPRAS && c.vencimento >= ini && c.vencimento <= fim).reduce((s, c) => s + c.valor, 0));
+      return {nome: `${nome}/${ano.slice(2)}`, receitas: rec, cmv: custo, despesas: desp, resultado: r2(rec - custo - desp)};
+    });
+    const movs = movCaixa.filter(m => ['SANGRIA', 'SUPRIMENTO'].includes(m.tipo) && noPeriodo(m.data, f.de, f.ate)).sort((a, b) => a.data.localeCompare(b.data));
+    return {receita, cmv, semCusto, lucroBruto, comissoes, despesas: totalDesp, outras, resultado, despesasPorCategoria: porCat(despesas),
+      compras: r2(pagar.filter(c => c.categoria === CATEGORIA_COMPRAS).reduce((s, c) => s + c.valor, 0)),
+      pagar, receber, pagarPorCategoria: porCat(pagar), receberPorCategoria: porCat(receber), meses,
+      sangrias: movs.map(m => ({...m, caixa: caixaPorId(m.caixaId)?.numero}))};
+  }
+  // Engenharia de cardápio (método Kasavana & Smith): popularidade × margem de contribuição
+  //   Estrela: vende muito e dá boa margem · Burro de carga: vende muito, margem baixa
+  //   Quebra-cabeça: margem boa, vende pouco · Cão: vende pouco e dá pouca margem
+  const CLASSES_CARDAPIO = {ESTRELA: 'Estrela', BURRO: 'Burro de carga', QUEBRA: 'Quebra-cabeça', CAO: 'Cão'};
+  function engenhariaCardapio(f){
+    const lista = relatorioProdutos(f).lista.filter(x => !x.semCusto && x.qtd > 0);
+    if (!lista.length) return {lista: [], corteQtd: 0, corteMargem: 0};
+    const qtdTotal = lista.reduce((s, x) => s + x.qtd, 0);
+    const corteQtd = r3(qtdTotal / lista.length * 0.7); // 70% da participação média
+    const corteMargem = r2(lista.reduce((s, x) => s + x.lucro, 0) / qtdTotal); // margem média ponderada por unidade
+    return {corteQtd, corteMargem, lista: lista.map(x => {
+      const margemUn = r2(x.lucro / x.qtd), popular = x.qtd >= corteQtd, rentavel = margemUn >= corteMargem;
+      return {...x, margemUn, classe: popular ? (rentavel ? 'ESTRELA' : 'BURRO') : (rentavel ? 'QUEBRA' : 'CAO')};
+    }).sort((a, b) => b.lucro - a.lucro)};
+  }
+
+  // =====================================================================
   // ---- Dados de demonstração (marcados com demo: true; saem com um clique) ----
   const temDemo = () => vendas.some(v => v.demo) || contas.some(c => c.demo);
   function gerarDemonstracao(ref = new Date()){
     if (temDemo()) erro('Os dados de demonstração já existem. Remova-os antes de gerar de novo.');
-    const ativos = produtos.filter(p => p.ativo);
+    const ativos = produtos.filter(p => p.ativo && p.tipo !== 'INSUMO');
     if (!ativos.length) erro('Cadastre ao menos um produto ativo antes de gerar a demonstração.');
     const sorte = (a, b) => a + Math.random() * (b - a);
     const umDe = lista => lista[Math.floor(Math.random() * lista.length)];
@@ -1548,8 +2425,23 @@
     salvarGrupo: cad(salvarGrupo), excluirGrupo: cad(excluirGrupo), salvarProduto: cad(salvarProduto), excluirProduto: cad(excluirProduto),
     salvarCliente: cad(salvarClienteRest), excluirCliente: cad(excluirClienteRest), salvarEntregador: cad(salvarEntregador), excluirEntregador: cad(excluirEntregador),
     salvarForma: cad(salvarForma), excluirForma: cad(excluirForma),
+    // Pessoas, regiões de entrega, empresa e impressão
+    CARGOS, UFS, cnpjValido, mascaraCnpj, mascaraDoc,
+    fornecedores: () => fornecedores, fornecedorPorId, salvarFornecedor: cad(salvarFornecedor), excluirFornecedor: cad(excluirFornecedor),
+    funcionarios: () => funcionarios, funcionarioPorId, salvarFuncionario: cad(salvarFuncionario), excluirFuncionario: cad(excluirFuncionario),
+    regioes: () => regioes, regiaoPorId, regiaoDoBairro, salvarRegiao: cad(salvarRegiao), excluirRegiao: cad(excluirRegiao),
+    salvarEmpresa, cabecalhoEmpresa, nomeMarca, salvarImpressao, marcarImpresso,
     // Estoque
-    movEstoque: () => movEstoque, estoqueBaixo, custoMedio,
+    movEstoque: () => movEstoque, estoqueBaixo, custoMedio, custoProduto, TIPOS_PRODUTO,
+    produzir: est(produzir), compraEstoque: est(compraEstoque), zerarEstoque: est(zerarEstoque),
+    // Cardápio: adicionais/etapas, tamanhos e promoções
+    DIAS_SEMANA, adicionais: () => adicionais, grupoAdicionalPorId, salvarGrupoAdicional: cad(salvarGrupoAdicional), excluirGrupoAdicional: cad(excluirGrupoAdicional),
+    promocoes: () => promocoes, promocaoPorId, salvarPromocao: cad(salvarPromocao), excluirPromocao: cad(excluirPromocao), descreverPromocao,
+    promocoesVigentes, precoBase, precoItem, precisaMontar,
+    // Cozinha, aplicativos e embalagens
+    ESTADOS_PREPARO, filaProducao, moverPreparo: vnd(moverPreparo), MODOS_CUPOM,
+    aplicativos: () => aplicativos, aplicativoPorId, salvarAplicativo: cad(salvarAplicativo), excluirAplicativo: cad(excluirAplicativo),
+    embalagens: () => embalagens, embalagemPorId, embalagemDoProduto, taxaEmbalagemDe, salvarEmbalagem: cad(salvarEmbalagem), excluirEmbalagem: cad(excluirEmbalagem),
     entradaEstoque: est(entradaEstoque), saidaEstoque: est(saidaEstoque), ajustarEstoque: est(ajustarEstoque), configurarEstoque: est(configurarEstoque),
     // Caixa e vendas
     caixaAberto, abrirCaixa: comModulo('Caixa', abrirCaixa), movimentarCaixa: comModulo('Caixa', movimentarCaixa), resumoCaixa, fecharCaixa: comModulo('Caixa', fecharCaixa),
@@ -1565,7 +2457,14 @@
     // Delivery e encomenda
     STATUS_DELIVERY, ORDEM_STATUS, MODOS_ENTREGA, ehDelivery, pedidosDelivery, clientePorTelefone, tempoPedido, cpfValido, mascaraCpf,
     registrarDelivery: dlv(registrarDelivery), alterarStatusDelivery: dlv(alterarStatusDelivery), enviarEntregador: dlv(enviarEntregador), entregarPedido: dlv(entregarPedido),
-    resumoDashboard, temDemo, gerarDemonstracao: sis(gerarDemonstracao), removerDemonstracao: sis(removerDemonstracao),
+    resumoDashboard, temDemo,
+    // Relatórios
+    periodoAnterior, operadoresDasVendas, relatorioVendas, relatorioProdutos, relatorioCaixa, relatorioDelivery,
+    relatorioFinanceiro, engenhariaCardapio, CLASSES_CARDAPIO, CATEGORIA_COMPRAS,
+    // Contas bancárias e extrato
+    TIPOS_CONTA_BANCARIA, contasBancarias: () => contasBancarias, contaBancariaPorId, saldoConta, movConta: () => movConta,
+    salvarContaBancaria: fin(salvarContaBancaria), excluirContaBancaria: fin(excluirContaBancaria), lancamentoConta: fin(lancamentoConta),
+    transferirEntreContas: fin(transferirEntreContas), excluirMovConta: fin(excluirMovConta), gerarDemonstracao: sis(gerarDemonstracao), removerDemonstracao: sis(removerDemonstracao),
     resumoDados, exportarBackup, lerBackup, limparTudo
   };
 })();

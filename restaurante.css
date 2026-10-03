@@ -784,3 +784,213 @@
 [data-theme="dark"] #appShell .rest-b-venda { background: rgba(159, 176, 198, 0.14); color: #b4c0d3; }
 [data-theme="dark"] #appShell .rest-est-previa { background: #111a2b; color: #b4c0d3; }
 [data-theme="dark"] #appShell .rest-dica-est { background: #13233d; color: #9ccaff; }
+
+/* =====================================================================
+   Relatórios · tabelas com barra proporcional, período e impressão
+   ===================================================================== */
+#appShell .rest-rel-datas { display: inline-flex; align-items: center; gap: 6px; color: #69778d; font-size: 0.88rem; }
+#appShell .rest-rel-datas input { width: auto; }
+#appShell .rest-rel-grade { margin-top: 14px; align-items: start; }
+#appShell .rest-rel-largo { grid-column: 1 / -1; }
+#appShell .rest-rel-tabela table { width: 100%; }
+#appShell .rest-rel-tabela th, #appShell .rest-rel-tabela td { padding: 9px 10px; font-size: 0.88rem; }
+#appShell .rest-num { text-align: right; font-variant-numeric: tabular-nums; }
+#appShell .rest-rel-barra { display: block; height: 4px; margin-top: 4px; border-radius: 2px; background: #edf1f6; }
+#appShell .rest-rel-barra i { display: block; height: 100%; margin-left: auto; border-radius: 2px; background: #2a78d6; }
+#appShell .rest-so-impressao { display: none; }
+[data-theme="dark"] #appShell .rest-rel-datas { color: #8596ae; }
+[data-theme="dark"] #appShell .rest-rel-barra { background: #223049; }
+[data-theme="dark"] #appShell .rest-rel-barra i { background: #3987e5; }
+@media (max-width: 720px) {
+  #appShell .rest-rel-datas { flex-wrap: wrap; }
+}
+@media print {
+  body.rest-rel-imprimindo #appShell .sidebar,
+  body.rest-rel-imprimindo #appShell .topbar,
+  body.rest-rel-imprimindo #appShell .rest-sem-impressao,
+  body.rest-rel-imprimindo #appShell .dash-head,
+  body.rest-rel-imprimindo #appShell .rest-tabela-btn { display: none !important; }
+  body.rest-rel-imprimindo #appShell .main { width: 100% !important; background: #fff !important; }
+  body.rest-rel-imprimindo #appShell .rest-kpis-mini { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+  body.rest-rel-imprimindo #appShell .content { padding: 0 !important; }
+  body.rest-rel-imprimindo #appShell .card,
+  body.rest-rel-imprimindo #appShell .rest-kpi-mini { box-shadow: none !important; break-inside: avoid; }
+  body.rest-rel-imprimindo #appShell .table-scroll { overflow: visible !important; }
+  body.rest-rel-imprimindo #appShell .rest-so-impressao { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; font-size: 12px; }
+  body.rest-rel-imprimindo #appShell .rest-so-impressao b { font-size: 15px; }
+  body.rest-rel-imprimindo #appShell .rest-rel-barra { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+}
+
+/* =====================================================================
+   Pessoas, regiões, empresa e impressão (cupom, comanda, conferência)
+   ===================================================================== */
+#appShell .field textarea { height: auto; min-height: 76px; resize: vertical; font: inherit; line-height: 1.4; }
+#appShell .rest-bairros-cel { max-width: 380px; font-size: 0.88rem; line-height: 1.45; }
+#appShell .rest-fora-regiao { color: #b4610a; font-weight: 700; }
+#appShell .rest-concluida-acoes { display: flex; justify-content: center; gap: 8px; margin: 2px 0 14px; flex-wrap: wrap; }
+#appShell .rest-mesa-imprimir { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+#appShell .rest-previa-cupom {
+  display: flex; flex-direction: column; align-items: center; gap: 1px; max-width: 360px; margin: 0 0 16px; padding: 12px 14px;
+  border: 1px dashed #c9d3e0; border-radius: 8px; background: #fff; color: #102745; font: 12px/1.45 Arial, Helvetica, sans-serif; text-align: center;
+}
+#appShell .rest-previa-cupom b { font-size: 15px; }
+[data-theme="dark"] #appShell .rest-fora-regiao { color: #fbbf24; }
+[data-theme="dark"] #appShell .rest-previa-cupom { background: #0f1828; border-color: #2a3a56; color: #e3eaf5; }
+
+/* Bobina térmica (58/80 mm): cada documento numa página; papel definido por @page na hora de imprimir */
+#rest-impressao .cp { color: #000; font: 12px/1.35 Arial, Helvetica, sans-serif; }
+#rest-impressao.rest-bobina-58 .cp { font-size: 10.5px; }
+#rest-impressao .cp-pagina + .cp-pagina { break-before: page; page-break-before: always; }
+#rest-impressao .cp-empresa { display: flex; flex-direction: column; align-items: center; gap: 1px; margin-bottom: 6px; color: #000; text-align: center; font-size: 12px; }
+#rest-impressao .cp-empresa b { font-size: 1.25em; }
+#rest-impressao .cp-titulo { margin: 4px 0; padding: 3px 0; border-top: 1px dashed #000; border-bottom: 1px dashed #000; text-align: center; font-weight: 800; letter-spacing: 0.04em; }
+#rest-impressao .cp-l { display: flex; justify-content: space-between; gap: 8px; }
+#rest-impressao .cp-l b { white-space: nowrap; }
+#rest-impressao .cp-forte { margin-top: 2px; font-size: 1.2em; font-weight: 800; }
+#rest-impressao .cp-sep { margin: 5px 0; border-top: 1px dashed #000; }
+#rest-impressao .cp-item, #rest-impressao .cp-bloco { display: flex; flex-direction: column; margin: 3px 0; }
+#rest-impressao .cp-rodape { display: flex; flex-direction: column; align-items: center; text-align: center; font-size: 0.9em; }
+#rest-impressao .cp-quem { margin: 4px 0; text-align: center; font-size: 1.8em; font-weight: 800; }
+#rest-impressao .cp-cozinha { display: flex; flex-direction: column; margin: 5px 0; font-size: 1.3em; }
+#rest-impressao .cp-cozinha span { font-size: 0.85em; font-weight: 700; }
+#appShell .rest-config-marcas { display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px; }
+#appShell .rest-config-marcas .rest-check { align-self: flex-start; align-items: flex-start; min-height: 0; white-space: normal; }
+#appShell .rest-config-marcas .rest-check input { margin-top: 3px; flex: none; }
+#appShell .rest-config-marcas .rest-check span { display: flex; flex-direction: column; gap: 2px; }
+
+/* ---- Barra superior: busca rápida de mesa e atalhos (Mesas, Delivery, Balcão) ---- */
+#appShell .rest-atalhos { display: flex; align-items: center; gap: 6px; }
+#appShell .rest-busca-mesa input {
+  width: 96px; height: 38px; padding: 0 12px; border: 1px solid #dce3ec; border-radius: 999px;
+  background: #fff; color: #102745; font: inherit; font-size: 0.88rem; font-weight: 600;
+}
+#appShell .rest-busca-mesa input:focus { outline: none; border-color: #1f90ff; box-shadow: 0 0 0 3px rgba(31, 144, 255, 0.18); }
+#appShell .rest-busca-mesa.erro input { border-color: #c22a4e; box-shadow: 0 0 0 3px rgba(194, 42, 78, 0.15); }
+#appShell .rest-atalho {
+  display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 12px; border: 1px solid #dce3ec; border-radius: 999px;
+  background: #fff; color: #102745; font: inherit; font-size: 0.86rem; font-weight: 700; white-space: nowrap; cursor: pointer;
+}
+#appShell .rest-atalho:hover { border-color: #1f90ff; color: #1d5fb0; }
+#appShell .rest-mesa-garcom { margin-left: 8px; font-family: "Inter", sans-serif; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.85; vertical-align: top; }
+[data-theme="dark"] #appShell .rest-busca-mesa input,
+[data-theme="dark"] #appShell .rest-atalho { background: #111a2b; border-color: #2a3a56; color: #e3eaf5; }
+[data-theme="dark"] #appShell .rest-atalho:hover { border-color: #3987e5; color: #9ccaff; }
+@media (max-width: 1500px) {
+  #appShell .rest-atalho-txt { display: none; }
+  #appShell .rest-atalho { padding: 0 11px; }
+}
+@media (max-width: 860px) {
+  #appShell .rest-atalhos { display: none; }
+}
+
+/* ---- Nome da empresa no menu lateral (Configurações › Empresa) ---- */
+#appShell .brand { max-width: 100%; text-align: left; }
+#appShell .brand .dot { flex: none; }
+#appShell .brand-nome { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#appShell .brand-nome.longo {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  font-size: 1.35rem; line-height: 1.15; letter-spacing: -0.02em; white-space: normal; overflow-wrap: anywhere;
+}
+#appShell .brand-nome.muito-longo { font-size: 1.1rem; -webkit-line-clamp: 3; }
+
+/* =====================================================================
+   Cardápio: montar item (tamanho, etapas, adicionais), promoções, ficha técnica e compra
+   ===================================================================== */
+#appShell .rest-montar { display: flex; flex-direction: column; gap: 14px; max-height: 60vh; overflow-y: auto; padding-right: 4px; }
+#appShell .rest-montar h4 { margin: 0 0 8px; color: #102745; font-size: 0.95rem; }
+#appShell .rest-montar h4 small { margin-left: 6px; color: #69778d; font-size: 0.78rem; font-weight: 600; }
+#appShell .rest-montar h4 small.obrigatorio { color: #b4610a; }
+#appShell .rest-montar-opcoes { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+#appShell .rest-montar-op {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 56px; padding: 10px 12px;
+  border: 2px solid #dce5ef; border-radius: 12px; background: #fff; color: #102745; font: inherit; text-align: left; cursor: pointer;
+}
+#appShell .rest-montar-op span { color: #1d5fb0; font-size: 0.85rem; font-weight: 700; }
+#appShell .rest-montar-op.ativo { border-color: #1f90ff; background: #ecf6ff; box-shadow: 0 0 0 3px rgba(31, 144, 255, 0.15); }
+#appShell .rest-montar-rodape { display: flex; align-items: flex-end; gap: 12px; }
+#appShell .rest-montar-rodape .field { flex: 1; }
+#appShell .rest-montar-qtd { flex: none; }
+#appShell .rest-car-extras { display: block; color: #1d5fb0; font-size: 0.78rem; font-weight: 600; }
+#appShell .rest-pdv-preco s, #appShell .rest-montar-op s { color: #8a97ab; font-weight: 600; font-size: 0.85em; }
+#appShell .rest-pdv-preco small { color: #69778d; font-size: 0.72rem; font-weight: 600; }
+#appShell .rest-pdv-promo { color: #b4610a; font-size: 0.74rem; font-weight: 700; }
+#appShell .rest-bloco { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 12px 14px; border: 1px solid #e3e9f1; border-radius: 12px; }
+#appShell .rest-bloco legend { padding: 0 6px; color: #102745; font-weight: 700; font-size: 0.9rem; }
+#appShell .rest-bloco legend small { color: #69778d; font-weight: 500; }
+#appShell .rest-bloco .rest-link { align-self: flex-start; }
+#appShell .rest-bloco-checks { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+#appShell .rest-bloco-checks .rest-check { min-height: 30px; align-self: auto; }
+#appShell .rest-bloco-rolagem { max-height: 180px; overflow-y: auto; }
+#appShell .rest-linha-edit { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+#appShell .rest-linha-edit:has(> label) { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto auto; }
+#appShell .rest-linha-ficha { grid-template-columns: minmax(0, 2fr) minmax(0, 0.8fr) minmax(0, 1fr) auto; }
+#appShell .rest-linha-edit input, #appShell .rest-linha-edit select {
+  height: 38px; padding: 0 10px; border: 1px solid #dce5ef; border-radius: 9px; background: #fff; color: #102745; font: inherit; font-size: 0.9rem; min-width: 0;
+}
+#appShell .rest-compra { display: flex; flex-direction: column; gap: 8px; }
+#appShell .rest-compra-cab, #appShell .rest-compra-linha { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 0.9fr) minmax(0, 1fr) minmax(0, 0.9fr) 34px; gap: 8px; align-items: center; }
+#appShell .rest-compra-cab { color: #69778d; font-size: 0.74rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+#appShell .rest-producao-tab { width: 100%; margin: 10px 0; font-size: 0.9rem; }
+#appShell .rest-producao-tab th, #appShell .rest-producao-tab td { padding: 6px 8px; border-bottom: 1px solid #edf1f6; text-align: left; }
+#appShell .rest-producao-tab .rest-num { text-align: right; }
+#appShell .rest-b-producao { background: rgba(144, 133, 233, 0.16); color: #5b4fc4; }
+[data-theme="dark"] #appShell .rest-montar h4, [data-theme="dark"] #appShell .rest-bloco legend { color: #eef3fa; }
+[data-theme="dark"] #appShell .rest-montar-op, [data-theme="dark"] #appShell .rest-linha-edit input, [data-theme="dark"] #appShell .rest-linha-edit select { background: #0f1828; border-color: #2a3a56; color: #e3eaf5; }
+[data-theme="dark"] #appShell .rest-montar-op.ativo { background: #13233d; border-color: #3987e5; }
+[data-theme="dark"] #appShell .rest-montar-op span, [data-theme="dark"] #appShell .rest-car-extras { color: #9ccaff; }
+[data-theme="dark"] #appShell .rest-bloco { border-color: #223049; }
+[data-theme="dark"] #appShell .rest-pdv-promo, [data-theme="dark"] #appShell .rest-montar h4 small.obrigatorio { color: #fbbf24; }
+[data-theme="dark"] #appShell .rest-b-producao { background: rgba(144, 133, 233, 0.2); color: #b9b1ff; }
+[data-theme="dark"] #appShell .rest-producao-tab th, [data-theme="dark"] #appShell .rest-producao-tab td { border-color: #223049; }
+@media (max-width: 640px) {
+  #appShell .rest-compra-cab { display: none; }
+  #appShell .rest-compra-linha { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 34px; }
+  #appShell .rest-compra-linha select { grid-column: 1 / -1; }
+}
+#appShell .form-grid > .rest-bloco { grid-column: 1 / -1; }
+#appShell .conferencia-box:has(.rest-compra), .conferencia-box:has(.rest-compra) { width: min(780px, 94vw); max-width: none; }
+
+/* =====================================================================
+   Fila de produção (cozinha), conferência do caixa e atalhos do recebimento
+   ===================================================================== */
+#appShell .rest-cozinha { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: start; }
+#appShell .rest-coz-col { display: flex; flex-direction: column; gap: 10px; min-height: 200px; padding: 12px; border-radius: 14px; background: #eef2f7; }
+#appShell .rest-coz-col h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 2px; color: #102745; font-size: 1rem; }
+#appShell .rest-coz-col h3 small { padding: 1px 8px; border-radius: 999px; background: #fff; color: #455468; font-size: 0.78rem; }
+#appShell .rest-coz-card { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid #e3e9f1; border-left: 5px solid #16a34a; border-radius: 12px; background: #fff; }
+#appShell .rest-coz-card.amarelo { border-left-color: #f59e0b; }
+#appShell .rest-coz-card.vermelho { border-left-color: #c22a4e; }
+#appShell .rest-coz-card header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+#appShell .rest-coz-card header b { color: #102745; font-size: 1.05rem; }
+#appShell .rest-coz-tempo { color: #455468; font-size: 0.85rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+#appShell .rest-coz-card.vermelho .rest-coz-tempo { color: #c22a4e; }
+#appShell .rest-coz-sub { color: #69778d; font-size: 0.8rem; }
+#appShell .rest-coz-card ul { margin: 0; padding: 0; list-style: none; }
+#appShell .rest-coz-card li button {
+  display: flex; flex-direction: column; align-items: flex-start; width: 100%; padding: 6px 4px; border: 0; border-bottom: 1px dashed #e3e9f1;
+  background: none; color: #102745; font: inherit; font-size: 0.98rem; text-align: left; cursor: pointer;
+}
+#appShell .rest-coz-card li button:hover { background: #f4f8fd; }
+#appShell .rest-coz-card li small { color: #1d5fb0; font-size: 0.8rem; font-weight: 600; }
+#appShell .rest-coz-obs { color: #b4610a !important; font-weight: 700; font-size: 0.82rem; margin: 0; }
+#appShell .rest-coz-btn { width: 100%; }
+#appShell .rest-coz-vazio { margin: 6px 0; color: #8a97ab; text-align: center; }
+#appShell .rest-conferencia { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; padding: 10px 12px; border: 1px solid #e3e9f1; border-radius: 10px; }
+#appShell .rest-conferencia > b small { color: #69778d; font-weight: 500; }
+#appShell .rest-conf-linha { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-items: center; font-size: 0.9rem; }
+#appShell .rest-conf-linha span small { display: block; color: #69778d; font-size: 0.78rem; }
+#appShell .rest-conf-linha input { height: 36px; padding: 0 10px; border: 1px solid #dce5ef; border-radius: 8px; font: inherit; min-width: 0; }
+#appShell .rest-pag-forma kbd { padding: 0 4px; border: 1px solid currentColor; border-radius: 4px; font-size: 0.7rem; opacity: 0.7; }
+#appShell .rest-cupom-modo label small { display: block; font-weight: 500; }
+[data-theme="dark"] #appShell .rest-coz-col { background: #0f1828; }
+[data-theme="dark"] #appShell .rest-coz-col h3, [data-theme="dark"] #appShell .rest-coz-card header b, [data-theme="dark"] #appShell .rest-coz-card li button { color: #eef3fa; }
+[data-theme="dark"] #appShell .rest-coz-col h3 small { background: #17223a; color: #b4c0d3; }
+[data-theme="dark"] #appShell .rest-coz-card { background: #141e30; border-color: #223049; }
+[data-theme="dark"] #appShell .rest-coz-card li button { border-bottom-color: #223049; }
+[data-theme="dark"] #appShell .rest-coz-card li button:hover { background: #17223a; }
+[data-theme="dark"] #appShell .rest-coz-card li small { color: #9ccaff; }
+[data-theme="dark"] #appShell .rest-coz-obs { color: #fbbf24 !important; }
+[data-theme="dark"] #appShell .rest-conferencia { border-color: #223049; }
+[data-theme="dark"] #appShell .rest-conf-linha input { background: #0f1828; border-color: #2a3a56; color: #e3eaf5; }
+@media (max-width: 980px) { #appShell .rest-cozinha { grid-template-columns: minmax(0, 1fr); } }
+#appShell .rest-coz-item { font-size: 1.02rem; }

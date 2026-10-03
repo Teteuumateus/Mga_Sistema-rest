@@ -7,7 +7,7 @@
   'use strict';
   if (!window.RestUI) return;
   const {useState, useEffect, useRef} = React;
-  const {html, D, useDados, useAviso, Modal} = window.RestUI;
+  const {html, D, useDados, useAviso, Modal, rotuloCarrinho, montado} = window.RestUI;
 
   // O carrinho sobrevive à troca de tela (fica guardado nesta aba)
   const CHAVE = 'mga_pdvCarrinho';
@@ -55,6 +55,18 @@
       if (temPrazo && !clienteId) return setAviso('Venda a prazo: escolha o cliente.');
       onConcluir({pagamentos: lista, clienteId: clienteId || null});
     };
+    // F2…F8 escolhem a forma na ordem da tela (F5 deixa de recarregar a página aqui)
+    useEffect(() => {
+      const atalho = e => {
+        const n = /^F([2-8])$/.exec(e.key);
+        if (!n || !formas[Number(n[1]) - 2]) return;
+        e.preventDefault();
+        setFormaId(formas[Number(n[1]) - 2].id);
+        setTimeout(() => campo.current?.select(), 0);
+      };
+      document.addEventListener('keydown', atalho);
+      return () => document.removeEventListener('keydown', atalho);
+    });
     const teclado = e => {
       if (e.key !== 'Enter') return;
       e.preventDefault();
@@ -75,7 +87,7 @@
           ${restante > 0.001 && html`
             <div className="rest-pag-formas" role="radiogroup" aria-label="Forma de pagamento">
               ${formas.map(f => html`<button type="button" key=${f.id} role="radio" aria-checked=${f.id === formaId} className=${'rest-pag-forma' + (f.id === formaId ? ' ativa' : '')}
-                onClick=${() => setFormaId(f.id)} onDoubleClick=${() => adicionar(f.id, D.valorBR(restante))}>${f.nome}</button>`)}
+                onClick=${() => setFormaId(f.id)} onDoubleClick=${() => adicionar(f.id, D.valorBR(restante))}>${formas.indexOf(f) < 7 ? html`<kbd>F${formas.indexOf(f) + 2}</kbd> ` : null}${f.nome}</button>`)}
             </div>
             <div className="rest-pag-valor">
               <label htmlFor="pagValor">${forma?.tipo === 'DINHEIRO' ? 'Valor recebido do cliente' : 'Valor'}</label>
@@ -100,19 +112,80 @@
       <//>`;
   }
 
+  // ---- Montar o item: tamanho, etapas obrigatórias e adicionais (mínimo e máximo de cada grupo) ----
+  function MontarItem({p, qtd, onConfirmar, onFechar}){
+    const grupos = (p.gruposAdicionais || []).map(D.grupoAdicionalPorId).filter(g => g && g.ativo);
+    const tamanhos = p.tamanhos || [];
+    const [tamanhoId, setTamanhoId] = useState(tamanhos.length === 1 ? tamanhos[0].id : '');
+    const [sel, setSel] = useState([]);
+    const [quantidade, setQuantidade] = useState(qtd > 0 ? qtd : 1);
+    const [obs, setObs] = useState('');
+    const [erro, setErro] = useState('');
+    const doGrupo = g => sel.filter(id => g.opcoes.some(o => o.id === id));
+    const alternar = (g, o) => {
+      setErro('');
+      if (sel.includes(o.id)) return setSel(sel.filter(id => id !== o.id));
+      if (g.max === 1) return setSel([...sel.filter(id => !g.opcoes.some(x => x.id === id)), o.id]); // escolha única: troca
+      if (g.max && doGrupo(g).length >= g.max) return setErro(`${g.nome}: no máximo ${g.max}.`);
+      setSel([...sel, o.id]);
+    };
+    const unit = D.precoItem(p, {tamanhoId, adicionais: sel});
+    const regra = g => g.min && g.max === g.min ? `escolha ${g.min}` : g.min ? `escolha de ${g.min}${g.max ? ` a ${g.max}` : ' ou mais'}` : g.max ? `opcional · até ${g.max}` : 'opcional';
+    const confirmar = () => {
+      if (tamanhos.length && !tamanhoId) return setErro('Escolha o tamanho.');
+      const faltando = grupos.find(g => doGrupo(g).length < g.min);
+      if (faltando) return setErro(`${faltando.nome}: ${regra(faltando)}.`);
+      if (!(quantidade > 0)) return setErro('Quantidade inválida.');
+      onConfirmar(quantidade, {tamanhoId: tamanhoId || null, adicionais: sel, observacao: obs});
+    };
+    return html`
+      <${Modal} titulo=${p.nome} onFechar=${onFechar}>
+        <div className="rest-montar" onKeyDown=${e => { if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') { e.preventDefault(); confirmar(); } }}>
+          ${tamanhos.length > 0 && html`<section><h4>Tamanho <small>escolha 1</small></h4>
+            <div className="rest-montar-opcoes">${tamanhos.map(t => {
+              const pr = D.precoBase(p, t.id);
+              return html`<button type="button" key=${t.id} className=${'rest-montar-op' + (tamanhoId === t.id ? ' ativo' : '')} aria-pressed=${tamanhoId === t.id} onClick=${() => { setTamanhoId(t.id); setErro(''); }}>
+                <b>${t.nome}</b><span>${pr.promo ? html`<s>${D.moedaBR(pr.tabela)}</s> ` : null}${D.moedaBR(pr.preco)}</span></button>`;
+            })}</div></section>`}
+          ${grupos.map(g => html`<section key=${g.id}><h4>${g.nome} <small className=${g.min ? 'obrigatorio' : ''}>${regra(g)}</small></h4>
+            <div className="rest-montar-opcoes">${g.opcoes.filter(o => o.ativo).map(o => html`<button type="button" key=${o.id} className=${'rest-montar-op' + (sel.includes(o.id) ? ' ativo' : '')}
+              aria-pressed=${sel.includes(o.id)} onClick=${() => alternar(g, o)}><b>${o.nome}</b>${o.preco > 0 ? html`<span>+ ${D.moedaBR(o.preco)}</span>` : null}</button>`)}</div></section>`)}
+          <div className="rest-montar-rodape">
+            <div className="field"><label htmlFor="mtObs">Observação</label><input id="mtObs" type="text" maxLength="100" placeholder="Ex.: sem cebola" value=${obs} onInput=${e => setObs(e.target.value)} /></div>
+            <div className="rest-car-acoes rest-montar-qtd" aria-label="Quantidade">
+              <button type="button" aria-label="Diminuir" onClick=${() => setQuantidade(q => Math.max(1, q - 1))}>−</button>
+              <span className="rest-qtd-txt">${qtdBR(quantidade)}</span>
+              <button type="button" aria-label="Aumentar" onClick=${() => setQuantidade(q => q + 1)}>+</button>
+            </div>
+          </div>
+          ${erro && html`<div className="toast rest-toast toast-erro" role="alert">${erro}</div>`}
+        </div>
+        <div className="cf-acoes">
+          <button type="button" className="btn btn-ghost" onClick=${onFechar}>Cancelar</button>
+          <button type="button" className="btn rest-btn-concluir" onClick=${confirmar}>Adicionar · ${D.moedaBR(r2(unit * quantidade))}</button>
+        </div>
+      <//>`;
+  }
+
   // ---- Seletor de produtos (PDV e pedido da mesa): categorias, busca, quantidade e grade ----
-  // onEscolher(produto, quantidade) devolve true quando o item entrou.
+  // onEscolher(produto, quantidade, opcoes) devolve true quando o item entrou.
+  // opcoes = {tamanhoId, adicionais: [ids], observacao} quando o produto tem tamanhos ou adicionais.
   function SeletorProdutos({onEscolher, refBusca}){
     useDados();
     const [grupo, setGrupo] = useState('');
     const [busca, setBusca] = useState('');
     const [qtd, setQtd] = useState('1');
+    const [montando, setMontando] = useState(null);
     const grupos = D.grupos().filter(g => g.ativo && D.produtosDoGrupo(g.id).some(p => p.ativo));
     const b = D.norm(busca), cod = busca.trim().toUpperCase();
-    const produtos = D.produtos().filter(p => p.ativo && D.grupoPorId(p.grupoId)?.ativo !== false)
+    const produtos = D.produtos().filter(p => p.ativo && p.tipo !== 'INSUMO' && D.grupoPorId(p.grupoId)?.ativo !== false)
       .filter(p => busca ? D.norm(p.nome + ' ' + p.codigo).includes(b) || p.codigo === cod : !grupo || p.grupoId === grupo)
       .sort((x, y) => (busca && x.codigo === cod ? -1 : 0) || (D.grupoPorId(x.grupoId)?.ordem || 0) - (D.grupoPorId(y.grupoId)?.ordem || 0) || x.nome.localeCompare(y.nome, 'pt-BR'));
-    const escolher = p => { if (onEscolher(p, D.lerValor(qtd))) setQtd('1'); };
+    const escolher = p => {
+      if (D.precisaMontar(p)) return setMontando(p);
+      if (onEscolher(p, D.lerValor(qtd))) setQtd('1');
+    };
+    const montar = (q, opcoes) => { if (onEscolher(montando, q, opcoes)) { setMontando(null); setQtd('1'); } };
     return html`
       <nav className="rest-pdv-grupos" aria-label="Categorias">
         <button type="button" className=${'rest-pdv-grupo' + (!grupo && !busca ? ' ativo' : '')} onClick=${() => { setGrupo(''); setBusca(''); }}>Todos</button>
@@ -129,11 +202,13 @@
           ${produtos.length ? produtos.map(p => html`<button type="button" key=${p.id} className="rest-pdv-prod" onClick=${() => escolher(p)} title=${p.descricao || p.nome}>
             ${p.foto ? html`<img src=${p.foto} alt="" />` : html`<span className="rest-pdv-ini" aria-hidden="true">${p.nome.slice(0, 1)}</span>`}
             <span className="rest-pdv-nome">${p.nome}</span>
-            <span className="rest-pdv-preco">${D.moedaBR(p.preco)}</span>
+            ${(() => { const pr = D.precoBase(p); return html`<span className="rest-pdv-preco">${(p.tamanhos || []).length ? html`<small>a partir de </small>` : null}${pr.promo ? html`<s>${D.moedaBR(pr.tabela)}</s> ` : null}${D.moedaBR(pr.preco)}</span>
+              ${pr.promo ? html`<span className="rest-pdv-promo">🏷️ ${pr.promo.nome}</span>` : null}`; })()}
             ${p.controlaEstoque && html`<span className=${'rest-pdv-estoque' + (D.estoqueBaixo(p) ? ' baixo' : '')}>${p.estoque > 0 ? `${D.qtdBR(p.estoque)} ${p.unidade} em estoque` : 'Sem estoque'}</span>`}
           </button>`) : html`<p className="rest-grafico-vazio">Nenhum produto encontrado.</p>`}
         </div>
-      </section>`;
+      </section>
+      ${montando && html`<${MontarItem} p=${montando} qtd=${D.lerValor(qtd)} onFechar=${() => setMontando(null)} onConfirmar=${montar} />`}`;
   }
 
   function TelaPDV({ir}){
@@ -149,17 +224,19 @@
     const cx = D.caixaAberto();
 
     // Linhas do carrinho com preço atual do cadastro
-    const linhas = car.itens.map(i => ({...i, p: D.produtoPorId(i.produtoId)})).filter(i => i.p);
-    const subtotal = r2(linhas.reduce((s, i) => s + i.quantidade * i.p.preco, 0));
+    const linhas = car.itens.map(i => ({...i, p: D.produtoPorId(i.produtoId)})).filter(i => i.p).map(i => ({...i, preco: D.precoItem(i.p, i), rot: rotuloCarrinho(i.p, i)}));
+    const subtotal = r2(linhas.reduce((s, i) => s + i.quantidade * i.preco, 0));
     const acrescimo = ajuste(car.acrescimo, subtotal), desconto = ajuste(car.desconto, subtotal);
     const ajusteInvalido = !Number.isFinite(acrescimo) || !Number.isFinite(desconto) || desconto > subtotal + acrescimo + 0.001;
     const total = ajusteInvalido ? NaN : r2(subtotal - desconto + acrescimo);
     const nItens = linhas.reduce((s, i) => s + i.quantidade, 0);
 
-    const adicionar = (p, q) => {
+    const adicionar = (p, q, opcoes = {}) => {
       if (!(q > 0)) { mostrar('Quantidade inválida.', true); return false; }
-      const igual = car.itens.find(i => i.produtoId === p.id && !i.observacao);
-      const itens = igual ? car.itens.map(i => i === igual ? {...i, quantidade: r2(i.quantidade + q)} : i) : [...car.itens, {key: Date.now() + Math.random(), produtoId: p.id, quantidade: r2(q), observacao: ''}];
+      const novo = {key: Date.now() + Math.random(), produtoId: p.id, quantidade: r2(q), observacao: opcoes.observacao || '', tamanhoId: opcoes.tamanhoId || null, adicionais: opcoes.adicionais || []};
+      // Item montado (tamanho/adicionais) entra sempre como linha nova; o simples soma na linha igual
+      const igual = !montado(novo) && !novo.observacao && car.itens.find(i => i.produtoId === p.id && !i.observacao && !montado(i));
+      const itens = igual ? car.itens.map(i => i === igual ? {...i, quantidade: r2(i.quantidade + q)} : i) : [...car.itens, novo];
       setCar({...car, itens});
       return true;
     };
@@ -180,10 +257,11 @@
     };
     const concluir = ({pagamentos, clienteId}) => {
       try {
-        const v = D.registrarVenda({tipo: 'BALCAO', itens: car.itens.map(i => ({produtoId: i.produtoId, quantidade: i.quantidade, observacao: i.observacao})),
+        const v = D.registrarVenda({tipo: 'BALCAO', itens: car.itens.map(i => ({produtoId: i.produtoId, quantidade: i.quantidade, observacao: i.observacao, tamanhoId: i.tamanhoId, adicionais: i.adicionais})),
           desconto: car.desconto, acrescimo: car.acrescimo, obs: car.obs, pagamentos, clienteId});
         setPagando(false); setCar({itens: [], desconto: '', acrescimo: '', obs: ''}); setObsAberta(null);
         setConcluida(v);
+        window.RestUI.impressao.aposBalcao(v);
       } catch (e) { setErroPag(e.regra ? e.message : 'Erro inesperado: ' + e.message); if (!e.regra) console.error(e); }
     };
 
@@ -214,6 +292,10 @@
           <h2>Venda #${concluida.numero} concluída</h2>
           <p>${D.moedaBR(t.total)} · ${concluida.pagamentos.map(p => p.nome).join(' + ')}</p>
           ${t.troco > 0 && html`<div className="rest-troco"><span>Troco</span><b>${D.moedaBR(t.troco)}</b></div>`}
+          <div className="rest-concluida-acoes">
+            <button type="button" className="btn btn-ghost" onClick=${() => window.RestUI.impressao.cupom(concluida)}>🖨️ Cupom</button>
+            <button type="button" className="btn btn-ghost" onClick=${() => window.RestUI.impressao.comanda(concluida, {todos: true})}>🖨️ Comanda</button>
+          </div>
           <button type="button" className="btn rest-btn-grande" autoFocus onClick=${() => setConcluida(null)}>Nova venda (Enter)</button>
         </div>`;
     }
@@ -229,8 +311,8 @@
           <ul className="rest-car-itens">
             ${linhas.length ? linhas.map(i => html`<li key=${i.key}>
               <div className="rest-car-linha">
-                <span className="rest-car-nome">${i.p.nome}<small>${D.moedaBR(i.p.preco)} ${i.p.unidade !== 'UN' ? '/ ' + i.p.unidade : 'un.'}</small></span>
-                <b>${D.moedaBR(i.quantidade * i.p.preco)}</b>
+                <span className="rest-car-nome">${i.rot.nome}${i.rot.extras ? html`<small className="rest-car-extras">+ ${i.rot.extras}</small>` : null}<small>${D.moedaBR(i.preco)} ${i.p.unidade !== 'UN' ? '/ ' + i.p.unidade : 'un.'}</small></span>
+                <b>${D.moedaBR(i.quantidade * i.preco)}</b>
               </div>
               <div className="rest-car-acoes">
                 <button type="button" aria-label="Diminuir" onClick=${() => mudarQtd(i.key, i.quantidade - 1)}>−</button>

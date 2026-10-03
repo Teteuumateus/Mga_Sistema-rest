@@ -43,17 +43,19 @@
     const b = D.norm(busca);
     const lista = todas.filter(porFiltro)
       .filter(c => !categoria || c.categoria === categoria)
-      .filter(c => !busca || D.norm([c.descricao, c.categoria, D.clientePorId(c.clienteId)?.nome].join(' ')).includes(b))
+      .filter(c => !busca || D.norm([c.descricao, c.categoria, D.clientePorId(c.clienteId)?.nome, D.fornecedorPorId(c.fornecedorId)?.nome].join(' ')).includes(b))
       .sort((x, y) => filtro === 'pagas' ? String(y.pagoEm).localeCompare(String(x.pagoEm)) : x.vencimento.localeCompare(y.vencimento));
     const cats = D.categorias()[tipo];
     const nomeBaixa = pagar ? 'Pagar' : 'Receber';
 
-    const novo = () => setForm({id: null, tipo, descricao: '', categoria: cats[0] || '', valor: '', vencimento: hoje, clienteId: '', obs: ''});
-    const editar = c => setForm({id: c.id, tipo, descricao: c.descricao, categoria: c.categoria, valor: D.valorBR(c.valor), vencimento: c.vencimento, clienteId: c.clienteId || '', obs: c.obs || ''});
+    const novo = () => setForm({id: null, tipo, descricao: '', categoria: cats[0] || '', valor: '', vencimento: hoje, clienteId: '', fornecedorId: '', obs: ''});
+    const editar = c => setForm({id: c.id, tipo, descricao: c.descricao, categoria: c.categoria, valor: D.valorBR(c.valor), vencimento: c.vencimento, clienteId: c.clienteId || '',
+      fornecedorId: c.fornecedorId || '', obs: c.obs || ''});
     const salvar = () => { if (tentar(() => D.salvarConta(form, form.id), c => form.id ? `Conta "${c.descricao}" atualizada.` : `Conta "${c.descricao}" lançada: ${D.moedaBR(c.valor)} vence ${D.dataBR(c.vencimento)}.`)) setForm(null); };
     const excluir = c => { if (confirmar(`Excluir a conta "${c.descricao}" (${D.moedaBR(c.valor)})?`)) tentar(() => D.excluirConta(c.id), `Conta "${c.descricao}" excluída.`); };
     const estornar = c => { if (confirmar(`Estornar a baixa de "${c.descricao}"? Ela volta a ficar em aberto.`)) tentar(() => D.estornarBaixa(c.id), `Baixa de "${c.descricao}" estornada.`); };
-    const confirmarBaixa = () => { if (tentar(() => D.baixarConta(baixa.conta.id, {...baixa, noCaixa: baixa.noCaixa && baixa.data === hoje && !!D.caixaAberto()}), c => `"${c.descricao}" ${pagar ? 'paga' : 'recebida'}: ${D.moedaBR(c.valor)} (${c.forma}).`)) setBaixa(null); };
+    const pelaCaixa = b => b.noCaixa && b.data === hoje && !!D.caixaAberto() && D.podeAcessar('vendas');
+    const confirmarBaixa = () => { if (tentar(() => D.baixarConta(baixa.conta.id, {...baixa, noCaixa: pelaCaixa(baixa), contaBancariaId: pelaCaixa(baixa) ? null : baixa.contaBancariaId || null}), c => `"${c.descricao}" ${pagar ? 'paga' : 'recebida'}: ${D.moedaBR(c.valor)} (${c.forma}).`)) setBaixa(null); };
 
     const kpi = (rotulo, lista, sub, alerta, f) => html`
       <button type="button" className=${'rest-kpi-mini' + (alerta && lista.length ? ' hv-alerta' : '') + (filtro === f ? ' ativo' : '')} onClick=${() => setFiltro(f)} aria-pressed=${filtro === f}>
@@ -85,6 +87,12 @@
               ${D.clientes().slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')).map(c => html`<option key=${c.id} value=${c.id}>${c.nome}</option>`)}
             </select>
           <//>`}
+          ${pagar && html`<${Campo} rotulo="Fornecedor (opcional)">
+            <select value=${form.fornecedorId} onChange=${e => setForm({...form, fornecedorId: e.target.value})}>
+              <option value="">—</option>
+              ${D.fornecedores().filter(f => f.ativo || f.id === form.fornecedorId).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')).map(f => html`<option key=${f.id} value=${f.id}>${f.nome}</option>`)}
+            </select>
+          <//>`}
           <${Campo} rotulo="Observação" largo><input type="text" value=${form.obs} maxLength="200" onInput=${e => setForm({...form, obs: e.target.value})} /><//>
         <//>`}
       <div className="cad-toolbar rest-filtros">
@@ -98,10 +106,10 @@
       <${Tabela} colunas=${['Vencimento', 'Descrição', 'Valor', 'Situação']} vazio=${todas.length ? 'Nenhuma conta com esse filtro.' : `Nenhuma conta ${pagar ? 'a pagar' : 'a receber'} lançada ainda.`}
         rodape=${html`<tfoot><tr><td colSpan="2">${plural(lista.length, 'conta', 'contas')} na lista</td><td className="nowrap"><b>${D.moedaBR(somaValor(lista))}</b></td><td colSpan="2"></td></tr></tfoot>`}>
         ${lista.map(c => {
-          const cli = D.clientePorId(c.clienteId), venda = c.vendaId && D.vendaPorId(c.vendaId);
+          const cli = D.clientePorId(c.clienteId), venda = c.vendaId && D.vendaPorId(c.vendaId), forn = D.fornecedorPorId(c.fornecedorId);
           return html`<tr key=${c.id} className=${D.contaVencida(c) ? 'rest-linha-vencida' : ''}>
             <td className="nowrap">${D.dataBR(c.vencimento)}</td>
-            <td><b>${c.descricao}</b><small className="history-date">${[c.categoria, cli?.nome, venda && `venda #${venda.numero}`].filter(Boolean).join(' · ')}</small></td>
+            <td><b>${c.descricao}</b><small className="history-date">${[c.categoria, cli?.nome, forn?.nome, venda && `venda #${venda.numero}`].filter(Boolean).join(' · ')}</small></td>
             <td className="nowrap"><b>${D.moedaBR(c.valor)}</b></td>
             <td><${Situacao} c=${c} tipo=${tipo} /></td>
             <td><${Acoes} nome=${c.descricao}
@@ -127,6 +135,13 @@
             <label className="rest-check rest-no-caixa"><input type="checkbox" checked=${baixa.noCaixa && baixa.data === hoje} disabled=${baixa.data !== hoje}
               onChange=${e => setBaixa({...baixa, noCaixa: e.target.checked})} /> ${pagar ? 'Pagar com o' : 'Receber no'} caixa aberto (#${D.caixaAberto().numero})</label>
             <p className="dv-ajuda">${baixa.data !== hoje ? 'Só baixas com data de hoje entram no caixa.' : 'Marcado, o valor entra no saldo e no fechamento do caixa.'}</p>`}
+          ${!pelaCaixa(baixa) && D.contasBancarias().some(c => c.ativo) && html`
+            <div className="form-grid"><${Campo} rotulo=${pagar ? 'Saiu da conta (opcional)' : 'Entrou na conta (opcional)'}>
+              <select value=${baixa.contaBancariaId || ''} onChange=${e => setBaixa({...baixa, contaBancariaId: e.target.value})}>
+                <option value="">— não lançar em conta —</option>
+                ${D.contasBancarias().filter(c => c.ativo).map(c => html`<option key=${c.id} value=${c.id}>${c.nome} · saldo ${D.moedaBR(D.saldoConta(c.id))}</option>`)}
+              </select>
+            <//></div>`}
           ${aviso}
           <div className="cf-acoes">
             <button type="button" className="btn btn-ghost" onClick=${() => setBaixa(null)}>Cancelar</button>

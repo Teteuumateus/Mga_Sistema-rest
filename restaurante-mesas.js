@@ -56,6 +56,12 @@
     const [abrindo, setAbrindo] = useState(null);
     const {el: aviso, mostrar} = useAviso();
     useEffect(() => { if (params?.aberta) { mostrar(`Mesa ${params.aberta} continua aberta. A comanda fica guardada até fechar a conta.`); history.replaceState(null, '', '#/mesas'); } }, []);
+    // Busca rápida da barra superior: mesa livre chega aqui para ser aberta
+    useEffect(() => {
+      const m = params?.abrir && D.mesaPorId(params.abrir);
+      if (m && !D.vendaDaMesa(m.id)) setAbrindo(m);
+      if (params?.abrir) history.replaceState(null, '', '#/mesas');
+    }, [params?.abrir]);
     const lista = D.mesas().filter(m => m.ativo).map(m => ({m, v: D.vendaDaMesa(m.id)})).map(x => ({...x, s: situacao(x.v)}));
     const ocupadas = lista.filter(x => x.v);
     const consumo = ocupadas.reduce((s, x) => s + D.totaisVenda(x.v).total, 0);
@@ -79,7 +85,7 @@
             const t = x.v && D.totaisVenda(x.v);
             return html`<button type="button" key=${x.m.id} className=${'rest-mesa ' + x.s} onClick=${() => clicar(x)}
               aria-label=${`Mesa ${x.m.numero}: ${NOME_SITUACAO[x.s]}${t ? ', ' + D.moedaBR(t.total) : ''}`}>
-              <span className="rest-mesa-num">${x.m.numero}</span>
+              <span className="rest-mesa-num">${x.m.numero}${x.v && html`<small className="rest-mesa-garcom" title="Quem abriu a mesa">${x.v.operador.split(' ')[0]}</small>`}</span>
               ${x.v ? html`
                 <b className="rest-mesa-valor">${D.moedaBR(t.total)}</b>
                 <span className="rest-mesa-info">${x.v.contaPedida ? '🧾 Conta pedida' : `${x.v.pessoas} pessoa${x.v.pessoas === 1 ? '' : 's'}`} · ${tempoDesde(x.v.data)}</span>
@@ -181,6 +187,7 @@
     const {el: aviso, tentar, mostrar} = useAviso();
     const [fechando, setFechando] = useState(false);
     const [transferindo, setTransferindo] = useState(false);
+    const [editando, setEditando] = useState(null); // item em edição: quantidade, preço unitário, desconto e observação
     const [obsAberta, setObsAberta] = useState(null);
     const [final, setFinal] = useState(null);
     const refBusca = useRef(null);
@@ -197,6 +204,7 @@
         <h2>Conta da mesa ${final.venda.mesa} fechada</h2>
         <p>${D.moedaBR(D.totaisVenda(final.venda).total)} · venda #${final.venda.numero}</p>
         ${final.troco > 0 && html`<div className="rest-troco"><span>Troco</span><b>${D.moedaBR(final.troco)}</b></div>`}
+        <div className="rest-concluida-acoes"><button type="button" className="btn btn-ghost" onClick=${() => window.RestUI.impressao.cupom(final.venda)}>🖨️ Imprimir cupom</button></div>
         <button type="button" className="btn rest-btn-grande" autoFocus onClick=${() => ir('mesas')}>Voltar às mesas</button>
       </div>`;
     if (!v || v.tipo !== 'MESA' || v.status !== 'ABERTA') return html`
@@ -205,7 +213,9 @@
         <button type="button" className="btn" onClick=${() => ir('mesas')}>Voltar às mesas</button></div>`;
 
     const t = D.totaisVenda(v);
-    const adicionar = (p, q) => !!tentar(() => D.adicionarItem(v.id, p.id, {quantidade: q}), `${qtdBR(q)}× ${p.nome} lançado na mesa ${v.mesa}.`);
+    const imp = window.RestUI.impressao;
+    const novosCozinha = imp.pendentes(v).length;
+    const adicionar = (p, q, opcoes = {}) => !!tentar(() => D.adicionarItem(v.id, p.id, {quantidade: q, ...opcoes}), i => `${qtdBR(q)}× ${i.nome} lançado na mesa ${v.mesa}.`);
     const mudarQtd = (i, q) => q <= 0 ? remover(i) : tentar(() => D.alterarItem(v.id, i.id, {quantidade: q}));
     const remover = i => { if (confirmar(`Excluir ${qtdBR(i.quantidade)}× ${i.nome} da mesa ${v.mesa}?`)) tentar(() => D.removerItem(v.id, i.id), `${i.nome} excluído.`); };
     const cancelarMesa = () => {
@@ -237,6 +247,8 @@
               <div className="rest-car-linha">
                 <span className="rest-car-nome">${qtdBR(i.quantidade)}× ${i.nome}${i.pago ? html` <span className="badge b-ok">pago</span>` : null}
                   <small>${D.moedaBR(i.precoUnitario)} un.${i.adicionadoEm ? ` · ${new Date(i.adicionadoEm).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})} ${i.adicionadoPor || ''}` : ''}</small>
+                  ${i.adicionais?.length ? html`<small className="rest-car-extras">+ ${window.RestUI.adicionaisTxt(i)}</small>` : null}
+                  ${i.desconto > 0 || i.promocao ? html`<small className="rest-car-extras">${i.promocao ? `🏷️ ${i.promocao}` : ''}${i.desconto > 0 ? `${i.promocao ? ' · ' : ''}desconto ${D.moedaBR(i.desconto)}` : ''}</small>` : null}
                   ${i.observacao && obsAberta !== i.id ? html`<small className="rest-obs-txt">📝 ${i.observacao}</small>` : null}</span>
                 <b>${D.moedaBR(i.quantidade * i.precoUnitario - (i.desconto || 0))}</b>
               </div>
@@ -245,6 +257,7 @@
                 <span className="rest-qtd-txt">${qtdBR(i.quantidade)}</span>
                 <button type="button" aria-label="Aumentar" onClick=${() => mudarQtd(i, i.quantidade + 1)}>+</button>
                 <button type="button" className=${'rest-car-obs-btn' + (i.observacao ? ' com' : '')} onClick=${() => setObsAberta(obsAberta === i.id ? null : i.id)}>${i.observacao ? '✎ obs.' : '+ obs.'}</button>
+                <button type="button" className="rest-car-obs-btn" title="Quantidade, preço unitário e desconto" onClick=${() => setEditando({id: i.id, quantidade: qtdBR(i.quantidade), preco: D.valorBR(i.precoUnitario), desconto: i.desconto ? D.valorBR(i.desconto) : '', observacao: i.observacao || ''})}>✎</button>
                 <button type="button" className="rest-car-rm" aria-label=${'Excluir ' + i.nome} onClick=${() => remover(i)}>✕</button>
               </div>`}
               ${obsAberta === i.id && html`<input type="text" className="rest-car-obs" placeholder="Observação (ex.: sem cebola)" maxLength="100" defaultValue=${i.observacao} autoFocus
@@ -266,15 +279,42 @@
           ${t.pago > 0 && podeReceber && html`<details className="rest-recebimentos"><summary>${plural(v.pagamentos.length, 'recebimento', 'recebimentos')} parciais</summary>
             <ul>${v.pagamentos.map(p => html`<li key=${p.id}><span>${p.parte || 'Recebimento'} · ${p.nome}</span><b>${D.moedaBR(p.valor)}</b>
               <button type="button" className="rest-link" onClick=${() => { if (confirmar(`Desfazer o recebimento de ${D.moedaBR(p.valor)} (${p.nome})? O valor deve ser devolvido ao cliente.`)) tentar(() => D.removerPagamento(v.id, p.id), 'Recebimento desfeito.'); }}>desfazer</button></li>`)}</ul></details>`}
+          <div className="rest-mesa-imprimir">
+            <button type="button" className="btn btn-ghost" disabled=${!novosCozinha} title="Imprime a comanda só com os itens ainda não enviados"
+              onClick=${() => { const n = imp.comanda(v); mostrar(`${plural(n, 'item enviado', 'itens enviados')} para a cozinha.`); }}>🖨️ Cozinha${novosCozinha ? ` (${novosCozinha})` : ''}</button>
+            <button type="button" className="btn btn-ghost" disabled=${!v.itens.length} title="Pré-conta para o cliente conferir" onClick=${() => imp.conferencia(v)}>🖨️ Conferência</button>
+          </div>
           <button type="button" className="btn rest-btn-manter" disabled=${!v.itens.length} title="O cliente continua consumindo: a mesa fica aberta com a comanda"
-            onClick=${() => ir('mesas', {aberta: v.mesa})}>🍽️ Manter mesa aberta</button>
-          <button type="button" className="btn btn-ghost" onClick=${() => tentar(() => D.pedirConta(v.id, !v.contaPedida), v.contaPedida ? 'Conta reaberta.' : 'Conta pedida: a mesa aparece em laranja no mapa.')}>
+            onClick=${() => { if (D.config().impressao.comandaAuto) imp.comanda(v); ir('mesas', {aberta: v.mesa}); }}>🍽️ Manter mesa aberta</button>
+          <button type="button" className="btn btn-ghost" onClick=${() => { if (tentar(() => D.pedirConta(v.id, !v.contaPedida), v.contaPedida ? 'Conta reaberta.' : 'Conta pedida: a mesa aparece em laranja no mapa.') && v.contaPedida) imp.aposPedirConta(v); }}>
             ${v.contaPedida ? 'Reabrir conta' : '🧾 Pedir conta'}</button>
           ${podeReceber ? html`<button type="button" className="btn rest-btn-finalizar" disabled=${!v.itens.length} onClick=${() => setFechando(true)}>Fechar conta · ${D.moedaBR(t.restante)}</button>`
             : html`<p className="dv-ajuda">O recebimento é feito pelo caixa.</p>`}
         </aside>
       </div>
-      ${fechando && html`<${FecharConta} v=${v} onFechar=${() => setFechando(false)} onFinalizada=${r => { setFechando(false); setFinal(r); }} />`}
+      ${editando && (() => {
+        const i = v.itens.find(x => x.id === editando.id);
+        if (!i) return null;
+        const salvarItem = () => { if (tentar(() => D.alterarItem(v.id, i.id, {quantidade: editando.quantidade, precoUnitario: editando.preco, desconto: editando.desconto, observacao: editando.observacao}), `${i.nome} atualizado.`)) setEditando(null); };
+        const totalItem = (D.lerValor(editando.quantidade) || 0) * (D.lerValor(editando.preco) || 0) - (D.lerValor(editando.desconto) || 0);
+        return html`<${Modal} titulo=${`Editar · ${i.nome}`} onFechar=${() => setEditando(null)}>
+          <form onSubmit=${e => { e.preventDefault(); salvarItem(); }}>
+            <div className="form-grid">
+              <div className="field"><label htmlFor="eiQtd">Quantidade</label><input id="eiQtd" type="text" inputMode="decimal" value=${editando.quantidade} onInput=${e => setEditando({...editando, quantidade: e.target.value})} /></div>
+              <div className="field"><label htmlFor="eiPreco">Preço unitário (R$)</label><input id="eiPreco" type="text" inputMode="decimal" value=${editando.preco} onInput=${e => setEditando({...editando, preco: e.target.value})} /></div>
+              <div className="field"><label htmlFor="eiDesc">Desconto no item (R$)</label><input id="eiDesc" type="text" inputMode="decimal" placeholder="0,00" value=${editando.desconto} onInput=${e => setEditando({...editando, desconto: e.target.value})} /></div>
+              <div className="field rest-largo"><label htmlFor="eiObs">Observação</label><input id="eiObs" type="text" maxLength="100" value=${editando.observacao} onInput=${e => setEditando({...editando, observacao: e.target.value})} /></div>
+            </div>
+            <p className="dv-ajuda">Total do item: <b>${D.moedaBR(Math.max(totalItem, 0))}</b>. Mudanças de preço e desconto ficam registradas na auditoria.</p>
+            ${aviso}
+            <div className="cf-acoes">
+              <button type="button" className="btn btn-ghost" onClick=${() => setEditando(null)}>Cancelar</button>
+              <button type="submit" className="btn">Salvar</button>
+            </div>
+          </form>
+        <//>`;
+      })()}
+      ${fechando && html`<${FecharConta} v=${v} onFechar=${() => setFechando(false)} onFinalizada=${r => { setFechando(false); setFinal(r); imp.aposMesa(r.venda); }} />`}
       ${transferindo && html`
         <${Modal} titulo=${`Transferir mesa ${v.mesa}`} onFechar=${() => setTransferindo(false)}>
           <p className="dv-ajuda">Escolha a mesa livre para onde o pedido vai.</p>
