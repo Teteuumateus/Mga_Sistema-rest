@@ -767,3 +767,20 @@
 
 /* Mesa: manter aberta (cliente ainda consumindo) */
 #appShell .rest-btn-manter { min-height: 52px; background: linear-gradient(135deg, #1766c4, #12519c); font-size: 1.02rem; }
+
+/* =====================================================================
+   Estoque · posição, movimentações e saldo no PDV
+   ===================================================================== */
+#appShell .rest-est-alerta { color: #c22a4e; }
+#appShell .rest-b-venda { background: rgba(105, 119, 141, 0.13); color: #455468; }
+#appShell .rest-est-previa { margin: 12px 0 0; padding: 10px 12px; border-radius: 10px; background: #f3f7fc; color: #455468; font-size: 0.9rem; line-height: 1.6; }
+#appShell .rest-dica-est { margin: 0 0 16px; padding: 12px 14px; border-radius: 12px; background: #ecf6ff; color: #1d5fb0; font-size: 0.9rem; line-height: 1.5; }
+#appShell .rest-pdv-estoque { color: #0e7c5f; font-size: 0.76rem; font-weight: 700; }
+#appShell .rest-pdv-estoque.baixo { color: #c22a4e; }
+#appShell td .rest-link { font-weight: 700; text-align: left; cursor: pointer; }
+[data-theme="dark"] #appShell .rest-est-alerta,
+[data-theme="dark"] #appShell .rest-pdv-estoque.baixo { color: #fca5b5; }
+[data-theme="dark"] #appShell .rest-pdv-estoque { color: #4ade80; }
+[data-theme="dark"] #appShell .rest-b-venda { background: rgba(159, 176, 198, 0.14); color: #b4c0d3; }
+[data-theme="dark"] #appShell .rest-est-previa { background: #111a2b; color: #b4c0d3; }
+[data-theme="dark"] #appShell .rest-dica-est { background: #13233d; color: #9ccaff; }

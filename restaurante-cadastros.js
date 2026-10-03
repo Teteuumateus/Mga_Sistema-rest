@@ -68,7 +68,7 @@
   const pctBR = v => v.toLocaleString('pt-BR', {maximumFractionDigits: 1}) + '%';
 
   // ---- Produtos (cadastro completo) ----
-  const PRODUTO_VAZIO = {id: null, codigo: '', nome: '', grupoId: '', preco: '', custo: '', estoque: '', unidade: 'UN', foto: '', descricao: '', ativo: true};
+  const PRODUTO_VAZIO = {id: null, codigo: '', nome: '', grupoId: '', preco: '', custo: '', estoque: '', estoqueMinimo: '', controlaEstoque: false, unidade: 'UN', foto: '', descricao: '', ativo: true};
   function TelaProdutos({params}){
     const grupoInicial = params.grupo;
     useDados();
@@ -87,7 +87,7 @@
     const nInativos = todos.filter(p => !p.ativo).length;
     const num = v => v === '' || v == null ? '' : D.valorBR(v);
     const novo = () => setForm({...PRODUTO_VAZIO, codigo: D.proximoCodigo(), grupoId: grupo || grupos.find(g => g.ativo)?.id || ''});
-    const editar = p => setForm({...PRODUTO_VAZIO, ...p, preco: num(p.preco), custo: p.custo ? num(p.custo) : '', estoque: String(p.estoque ?? '').replace('.', ',')});
+    const editar = p => setForm({...PRODUTO_VAZIO, ...p, preco: num(p.preco), custo: p.custo ? num(p.custo) : '', estoque: D.qtdBR(p.estoque), estoqueMinimo: p.estoqueMinimo ? D.qtdBR(p.estoqueMinimo) : ''});
     const salvar = () => { if (tentar(() => D.salvarProduto(form, form.id), p => form.id ? `Produto "${p.nome}" atualizado.` : `Produto "${p.nome}" cadastrado (cód. ${p.codigo}).`)) setForm(null); };
     const excluir = p => { if (confirmar(`Excluir o produto "${p.nome}"?`)) tentar(() => D.excluirProduto(p.id), `Produto "${p.nome}" excluído.`); };
     const alternar = p => tentar(() => D.salvarProduto({...p, ativo: !p.ativo}, p.id), `"${p.nome}" ${p.ativo ? 'desativado' : 'ativado'}.`);
@@ -125,10 +125,13 @@
           <//>
           <${Campo} rotulo="Preço de venda (R$)">${valor('preco')}<//>
           <${Campo} rotulo=${'Custo (R$)' + (m != null ? ` · margem ${pctBR(m)}` : '')}>${valor('custo')}<//>
-          <${Campo} rotulo="Estoque atual"><input type="text" inputMode="decimal" value=${form.estoque} placeholder="0" onInput=${e => setForm({...form, estoque: e.target.value})} /><//>
           <${Campo} rotulo="Unidade">
             <select value=${form.unidade} onChange=${e => setForm({...form, unidade: e.target.value})}>${D.UNIDADES.map(u => html`<option key=${u}>${u}</option>`)}</select>
           <//>
+          <label className="rest-check" title="Para bebidas e itens comprados prontos: a venda finalizada baixa o saldo"><input type="checkbox" checked=${form.controlaEstoque} onChange=${e => setForm({...form, controlaEstoque: e.target.checked})} /> Controlar estoque</label>
+          ${form.controlaEstoque && html`
+            <${Campo} rotulo=${form.id ? 'Estoque atual' : 'Estoque inicial'}><input type="text" inputMode="decimal" value=${form.estoque} placeholder="0" onInput=${e => setForm({...form, estoque: e.target.value})} /><//>
+            <${Campo} rotulo="Estoque mínimo (alerta)"><input type="text" inputMode="decimal" value=${form.estoqueMinimo} placeholder="0" onInput=${e => setForm({...form, estoqueMinimo: e.target.value})} /><//>`}
           <${Campo} rotulo="Descrição" largo><input type="text" value=${form.descricao} maxLength="200" placeholder="Ingredientes, tamanho, observações para o atendente" onInput=${e => setForm({...form, descricao: e.target.value})} /><//>
           <label className="rest-check"><input type="checkbox" checked=${form.ativo} onChange=${e => setForm({...form, ativo: e.target.checked})} /> Ativo (aparece no PDV)</label>
         <//>`}
@@ -154,7 +157,9 @@
             <td>${D.grupoPorId(p.grupoId)?.nome || '—'}</td>
             <td className="nowrap"><b>${D.moedaBR(p.preco)}</b></td>
             <td className="nowrap">${p.custo ? html`${D.moedaBR(p.custo)}<small className="history-date">margem ${pctBR(mg)}</small>` : html`<span className="rest-cod">—</span>`}</td>
-            <td className="nowrap">${String(p.estoque ?? 0).replace('.', ',')} <small className="rest-cod">${p.unidade}</small></td>
+            <td className="nowrap">${p.controlaEstoque
+              ? html`<span className=${D.estoqueBaixo(p) ? 'rest-est-alerta' : ''}>${D.qtdBR(p.estoque)}</span> <small className="rest-cod">${p.unidade}</small>`
+              : html`<span className="rest-cod" title="Não controla estoque">—</span>`}</td>
             <td><button type="button" className="rest-status-btn" onClick=${() => alternar(p)} title=${p.ativo ? 'Clique para desativar' : 'Clique para ativar'}><${StatusAtivo} ativo=${p.ativo} /></button></td>
             <td><${Acoes} nome=${p.nome} onEditar=${() => editar(p)} onExcluir=${() => excluir(p)} /></td>
           </tr>`;

@@ -7,7 +7,7 @@
 //
 // Tudo fica no localStorage com o prefixo "mga_" (entra no backup):
 //   restUsuarios, restFormas, restGrupos, restProdutos, restEntregadores, restCaixas,
-//   restMovCaixa, restVendas, restSeq, restContas, restCategorias,
+//   restMovCaixa, restVendas, restSeq, restContas, restCategorias, restMovEstoque,
 //   clientes (com bairro, CEP, cidade e complemento), auditoria
 //
 // Regras gerais:
@@ -34,12 +34,15 @@
   const MOV_ENTRADA = ['SUPRIMENTO', 'RECEBIMENTO'], MOV_SAIDA = ['SANGRIA', 'ESTORNO', 'PAGAMENTO'];
   const VEICULOS = ['Moto', 'Bicicleta', 'Carro', 'A pé'];
   const UNIDADES = ['UN', 'KG', 'G', 'L', 'ML', 'PCT', 'CX', 'DZ', 'PORÇÃO'];
+  // Estoque: tipos de movimento e motivos sugeridos para a saída manual
+  const TIPOS_MOV_ESTOQUE = {ENTRADA: 'Entrada', SAIDA: 'Saída', AJUSTE: 'Ajuste de inventário', VENDA: 'Venda', ESTORNO: 'Venda cancelada'};
+  const MOTIVOS_SAIDA = ['Perda / quebra', 'Produto vencido', 'Consumo interno', 'Cortesia', 'Devolução ao fornecedor'];
   // ---- Usuários: perfis e módulos que cada um acessa (o administrador ajusta por usuário) ----
   const MODULOS = {cadastros: 'Cadastros', financeiro: 'Financeiro', estoque: 'Estoque', vendas: 'Vendas / PDV e caixa', mesas: 'Mesas',
     delivery: 'Delivery', relatorios: 'Relatórios', configuracoes: 'Configurações'};
   const PERFIS = {
     ADMIN: {nome: 'Administrador', modulos: Object.keys(MODULOS)},
-    GERENTE: {nome: 'Gerente', modulos: ['vendas', 'relatorios', 'financeiro', 'mesas', 'delivery']},
+    GERENTE: {nome: 'Gerente', modulos: ['vendas', 'relatorios', 'financeiro', 'estoque', 'mesas', 'delivery']},
     CAIXA: {nome: 'Operador / Caixa', modulos: ['vendas', 'mesas', 'delivery']},
     GARCOM: {nome: 'Garçom', modulos: ['mesas']}
   };
@@ -58,6 +61,7 @@
   const gravar = (k, v) => { try { localStorage.setItem('mga_' + k, JSON.stringify(v)); } catch (e) { /* storage indisponível */ } };
   const novoId = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const r2 = v => Math.round((Number(v) || 0) * 100) / 100;
+  const r3 = v => Math.round((Number(v) || 0) * 1000) / 1000; // quantidades (0,350 KG)
   const agora = () => new Date().toISOString();
   // Datas de calendário no fuso local, no formato AAAA-MM-DD (vencimentos, dias do dashboard)
   const diaISO = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -149,10 +153,13 @@
   // Produtos de versões anteriores ganham os campos do cadastro completo
   produtos.forEach(p => {
     if (p.custo === undefined) Object.assign(p, {custo: 0, estoque: 0, unidade: 'UN', foto: '', descricao: ''});
+    // Antes do módulo Estoque: quem já tinha saldo informado passa a controlar
+    if (p.controlaEstoque === undefined) Object.assign(p, {controlaEstoque: Number(p.estoque) !== 0, estoqueMinimo: 0});
   });
   let caixas = ler('restCaixas', []);
   let movCaixa = ler('restMovCaixa', []);
   let vendas = ler('restVendas', []);
+  let movEstoque = ler('restMovEstoque', []);
   let seq = Object.assign({produto: produtos.reduce((m, p) => Math.max(m, Number(p.codigo) || 0), 0), caixa: 0, venda: 0}, ler('restSeq', {}));
   let contas = ler('restContas', []);
   let categorias = ler('restCategorias', null);
@@ -172,7 +179,7 @@
   function salvar(...chaves){
     const mapa = {restGrupos: grupos, restProdutos: produtos, restEntregadores: entregadores, restUsuarios: usuarios, restFormas: formas,
       restCaixas: caixas, restMovCaixa: movCaixa, restVendas: vendas, restSeq: seq, clientes: listaClientes(),
-      restContas: contas, restCategorias: categorias, restMesas: mesas, restConfig: config};
+      restContas: contas, restCategorias: categorias, restMesas: mesas, restConfig: config, restMovEstoque: movEstoque};
     chaves.forEach(k => gravar(k, mapa[k]));
     versao++;
     ouvintes.forEach(fn => fn(versao));
@@ -374,12 +381,14 @@
     const preco = r2(lerValor(dados.preco));
     const custo = txt(dados.custo) === '' ? 0 : r2(lerValor(dados.custo));
     const estoque = txt(dados.estoque) === '' ? 0 : lerValor(dados.estoque);
+    const estoqueMinimo = txt(dados.estoqueMinimo) === '' ? 0 : lerValor(dados.estoqueMinimo);
     const codigo = txt(dados.codigo).toUpperCase();
     if (!nome) erro('Informe o nome do produto.');
     if (!grupoPorId(dados.grupoId)) erro('Escolha a categoria do produto.');
     if (!Number.isFinite(lerValor(dados.preco)) || preco <= 0) erro('Informe um preço de venda maior que R$ 0,00.');
     if (!Number.isFinite(custo) || custo < 0) erro('Custo inválido.');
     if (!Number.isFinite(estoque)) erro('Estoque inválido.');
+    if (!Number.isFinite(estoqueMinimo) || estoqueMinimo < 0) erro('Estoque mínimo inválido.');
     if (codigo && !/^[A-Z0-9._-]{1,20}$/.test(codigo)) erro('Código: até 20 letras ou números, sem espaços.');
     const unidade = UNIDADES.includes(dados.unidade) ? dados.unidade : 'UN';
     const foto = typeof dados.foto === 'string' ? dados.foto : '';
@@ -388,26 +397,38 @@
     if (pIgual) erro(`Já existe o produto "${pIgual.nome}" (cód. ${pIgual.codigo}).`);
     const cIgual = codigo && produtos.find(p => p.id !== id && p.codigo === codigo);
     if (cIgual) erro(`O código ${codigo} já é do produto "${cIgual.nome}".`);
-    const campos = {codigo, nome, preco, custo, estoque: r2(estoque), unidade, grupoId: dados.grupoId, foto, descricao: txt(dados.descricao), ativo: dados.ativo !== false};
+    const controlaEstoque = !!dados.controlaEstoque;
+    const campos = {codigo, nome, preco, custo, unidade, grupoId: dados.grupoId, foto, descricao: txt(dados.descricao), ativo: dados.ativo !== false,
+      controlaEstoque, estoqueMinimo: controlaEstoque ? r3(estoqueMinimo) : 0};
+    const saldo = r3(estoque);
     const p = id && produtoPorId(id);
     const moeda = v => 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',');
     if (p) {
       if (!campos.codigo) campos.codigo = p.codigo;
-      const fmt = {preco: moeda, custo: moeda, grupoId: v => grupoPorId(v)?.nome || '—', ativo: v => v ? 'Sim' : 'Não', foto: v => v ? 'com foto' : 'sem foto'};
-      const rotulo = {codigo: 'Código', nome: 'Nome', preco: 'Preço', custo: 'Custo', estoque: 'Estoque', unidade: 'Unidade', grupoId: 'Categoria', foto: 'Foto', descricao: 'Descrição', ativo: 'Ativo'};
+      const fmt = {preco: moeda, custo: moeda, grupoId: v => grupoPorId(v)?.nome || '—', ativo: v => v ? 'Sim' : 'Não', foto: v => v ? 'com foto' : 'sem foto',
+        controlaEstoque: v => v ? 'Sim' : 'Não'};
+      const rotulo = {codigo: 'Código', nome: 'Nome', preco: 'Preço', custo: 'Custo', unidade: 'Unidade', grupoId: 'Categoria', foto: 'Foto', descricao: 'Descrição', ativo: 'Ativo',
+        controlaEstoque: 'Controla estoque', estoqueMinimo: 'Estoque mínimo'};
       const alteracoes = Object.keys(rotulo).filter(k => (p[k] ?? '') !== (campos[k] ?? ''))
         .map(k => ({campo: rotulo[k], antes: (fmt[k] || String)(p[k] ?? '—'), depois: (fmt[k] || String)(campos[k] ?? '—')}));
       Object.assign(p, campos);
+      // Saldo mudado no cadastro também fica no histórico do estoque (ajuste)
+      const saldoAntes = r3(p.estoque);
+      if (controlaEstoque && saldo !== saldoAntes) {
+        lancarEstoque(p, 'AJUSTE', saldo - saldoAntes, {motivo: 'Alterado no cadastro do produto'});
+        alteracoes.push({campo: 'Estoque', antes: qtdBR(saldoAntes), depois: qtdBR(saldo)});
+      }
       if (alteracoes.length) auditar(`Produto "${nome}" editado`, {alteracoes});
-      salvar('restProdutos');
+      salvar('restProdutos', 'restMovEstoque');
       return p;
     }
     if (!campos.codigo) campos.codigo = proximoCodigo();
     if (/^\d+$/.test(campos.codigo)) seq.produto = Math.max(seq.produto, Number(campos.codigo));
-    const novo = {id: novoId('p'), ...campos};
+    const novo = {id: novoId('p'), ...campos, estoque: 0};
     produtos.push(novo);
-    auditar(`Produto "${nome}" cadastrado`, {detalhe: `cód. ${novo.codigo} · ${grupoPorId(campos.grupoId).nome} · ${moeda(preco)}`});
-    salvar('restProdutos', 'restSeq');
+    if (controlaEstoque && saldo) lancarEstoque(novo, 'ENTRADA', saldo, {motivo: 'Estoque inicial', custoUnitario: custo || null});
+    auditar(`Produto "${nome}" cadastrado`, {detalhe: `cód. ${novo.codigo} · ${grupoPorId(campos.grupoId).nome} · ${moeda(preco)}${controlaEstoque ? ` · estoque ${qtdBR(saldo)} ${unidade}` : ''}`});
+    salvar('restProdutos', 'restSeq', 'restMovEstoque');
     return novo;
   }
   function excluirProduto(id){
@@ -417,6 +438,113 @@
     produtos.splice(produtos.indexOf(p), 1);
     auditar(`Produto "${p.nome}" excluído`);
     salvar('restProdutos');
+  }
+
+  // =====================================================================
+  // ---- Estoque ----
+  // Só os produtos com "controla estoque" têm saldo. Pratos feitos na hora ficam sem controle.
+  // Toda mudança de saldo vira um movimento (restMovEstoque) com o saldo depois dele.
+  // A venda baixa o estoque ao ser finalizada e devolve se for cancelada; falta de saldo
+  // não trava o atendimento (o saldo fica negativo e aparece em "Sem estoque").
+  const estoqueBaixo = p => !!p.controlaEstoque && r3(p.estoque) <= (p.estoqueMinimo || 0);
+  function lancarEstoque(p, tipo, delta, extra){
+    const m = {id: novoId('me'), produtoId: p.id, produto: p.nome, unidade: p.unidade, tipo, quantidade: r3(delta),
+      saldo: r3((Number(p.estoque) || 0) + delta), data: agora(), usuario: usuario(), motivo: '', ...(extra || {})};
+    p.estoque = m.saldo;
+    movEstoque.push(m);
+    return m;
+  }
+  const produtoComEstoque = id => {
+    const p = produtoPorId(id);
+    if (!p) erro('Escolha o produto.');
+    if (!p.controlaEstoque) erro(`"${p.nome}" não controla estoque. Ative o controle antes de movimentar.`);
+    return p;
+  };
+  const lerQtd = (v, rotulo = 'a quantidade') => { const q = r3(lerValor(v)); if (!(q > 0)) erro(`Informe ${rotulo} (maior que zero).`); return q; };
+  // Custo médio ponderado: o que já estava em estoque pesa junto com a compra nova
+  function custoMedio(p, qtd, custoEntrada){
+    const saldo = Number(p.estoque) || 0, atual = Number(p.custo) || 0;
+    if (!(custoEntrada > 0)) return atual;
+    if (saldo <= 0 || !(atual > 0)) return r2(custoEntrada);
+    return r2((saldo * atual + qtd * custoEntrada) / (saldo + qtd));
+  }
+  // Entrada de mercadoria (compra). Com conta, lança também a conta a pagar ao fornecedor.
+  function entradaEstoque({produtoId, quantidade, custo, documento, conta = null}){
+    exigir('estoque');
+    const p = produtoComEstoque(produtoId);
+    const qtd = lerQtd(quantidade);
+    const custoUn = txt(custo) === '' ? 0 : r2(lerValor(custo));
+    if (!Number.isFinite(custoUn) || custoUn < 0) erro('Custo unitário inválido.');
+    if (conta) {
+      exigir('financeiro');
+      if (!(custoUn > 0)) erro('Informe o custo unitário para lançar a conta a pagar.');
+      salvarConta({tipo: 'PAGAR', descricao: `Compra: ${qtdBR(qtd)} ${p.unidade} ${p.nome}${txt(documento) ? ` (${txt(documento)})` : ''}`,
+        categoria: categorias.PAGAR.includes('Fornecedores') ? 'Fornecedores' : categorias.PAGAR[0], valor: r2(qtd * custoUn), vencimento: conta.vencimento, obs: ''});
+    }
+    const custoAntes = p.custo || 0;
+    p.custo = custoMedio(p, qtd, custoUn);
+    const m = lancarEstoque(p, 'ENTRADA', qtd, {custoUnitario: custoUn || null, motivo: txt(documento)});
+    auditar(`Entrada de ${qtdBR(qtd)} ${p.unidade} de "${p.nome}" — saldo ${qtdBR(m.saldo)}`,
+      {detalhe: [txt(documento), custoUn && `custo ${moedaBR(custoUn)}/${p.unidade}`, p.custo !== custoAntes && `custo médio ${moedaBR(custoAntes)} → ${moedaBR(p.custo)}`].filter(Boolean).join(' · ')});
+    salvar('restProdutos', 'restMovEstoque');
+    return m;
+  }
+  // Saída manual: perda, vencido, consumo interno... (não pode passar do saldo)
+  function saidaEstoque({produtoId, quantidade, motivo}){
+    exigir('estoque');
+    const p = produtoComEstoque(produtoId);
+    const qtd = lerQtd(quantidade);
+    if (txt(motivo).length < 3) erro('Informe o motivo da saída.');
+    if (qtd > r3(p.estoque) + 0.0001) erro(`A saída passa do saldo (${qtdBR(p.estoque)} ${p.unidade}). Se o saldo estiver errado, faça um ajuste de inventário.`);
+    const m = lancarEstoque(p, 'SAIDA', -qtd, {motivo: txt(motivo)});
+    auditar(`Saída de ${qtdBR(qtd)} ${p.unidade} de "${p.nome}" — saldo ${qtdBR(m.saldo)}`, {detalhe: m.motivo});
+    salvar('restProdutos', 'restMovEstoque');
+    return m;
+  }
+  // Inventário: informa o que foi contado e o sistema lança a diferença
+  function ajustarEstoque({produtoId, contado, motivo}){
+    exigir('estoque');
+    const p = produtoComEstoque(produtoId);
+    if (txt(contado) === '') erro('Informe a quantidade contada.');
+    const q = r3(lerValor(contado));
+    if (!Number.isFinite(q) || q < 0) erro('Quantidade contada inválida.');
+    const delta = r3(q - (Number(p.estoque) || 0));
+    if (!delta) erro(`O saldo de "${p.nome}" já é ${qtdBR(q)} ${p.unidade}.`);
+    const m = lancarEstoque(p, 'AJUSTE', delta, {motivo: txt(motivo) || 'Inventário'});
+    auditar(`Ajuste de estoque de "${p.nome}": ${qtdBR(m.saldo - delta)} → ${qtdBR(m.saldo)} ${p.unidade}`, {detalhe: m.motivo});
+    salvar('restProdutos', 'restMovEstoque');
+    return m;
+  }
+  // Liga/desliga o controle e define o mínimo (o saldo continua guardado se desligar)
+  function configurarEstoque(produtoId, {controla, minimo}){
+    exigir('estoque');
+    const p = produtoPorId(produtoId) || erro('Produto não encontrado.');
+    const min = txt(minimo) === '' ? 0 : r3(lerValor(minimo));
+    if (!Number.isFinite(min) || min < 0) erro('Estoque mínimo inválido.');
+    const antes = {controlaEstoque: !!p.controlaEstoque, estoqueMinimo: p.estoqueMinimo || 0};
+    Object.assign(p, {controlaEstoque: !!controla, estoqueMinimo: controla ? min : antes.estoqueMinimo});
+    const alteracoes = [];
+    if (antes.controlaEstoque !== p.controlaEstoque) alteracoes.push({campo: 'Controla estoque', antes: antes.controlaEstoque ? 'Sim' : 'Não', depois: p.controlaEstoque ? 'Sim' : 'Não'});
+    if (antes.estoqueMinimo !== p.estoqueMinimo) alteracoes.push({campo: 'Estoque mínimo', antes: qtdBR(antes.estoqueMinimo), depois: qtdBR(p.estoqueMinimo)});
+    if (alteracoes.length) auditar(`Estoque de "${p.nome}" configurado`, {alteracoes});
+    salvar('restProdutos');
+    return p;
+  }
+  // Venda finalizada: baixa os itens dos produtos controlados (um movimento por produto)
+  function baixarEstoqueVenda(v){
+    const porProduto = {};
+    v.itens.forEach(i => { const p = produtoPorId(i.produtoId); if (p?.controlaEstoque) porProduto[p.id] = r3((porProduto[p.id] || 0) + i.quantidade); });
+    Object.entries(porProduto).forEach(([id, qtd]) => lancarEstoque(produtoPorId(id), 'VENDA', -qtd, {vendaId: v.id, motivo: `${nomeVenda(v)}${v.tipo === 'BALCAO' ? '' : ` (venda #${v.numero})`}`}));
+    v.estoqueBaixado = true;
+  }
+  // Venda cancelada depois de finalizada: devolve exatamente o que foi baixado
+  function devolverEstoqueVenda(v, motivo){
+    if (!v.estoqueBaixado) return; // vendas de antes do módulo Estoque não baixaram nada
+    movEstoque.filter(m => m.vendaId === v.id && m.tipo === 'VENDA').forEach(m => {
+      const p = produtoPorId(m.produtoId);
+      if (p) lancarEstoque(p, 'ESTORNO', -m.quantidade, {vendaId: v.id, motivo: `Venda #${v.numero} cancelada: ${txt(motivo)}`});
+    });
+    v.estoqueBaixado = false;
   }
 
   // ---- Clientes (cadastro geral + campos de entrega) ----
@@ -641,6 +769,7 @@
     v.itens.forEach(i => { i.pago = true; });
     v.status = 'FINALIZADA';
     v.finalizadaEm = agora();
+    baixarEstoqueVenda(v);
     const prazo = r2(v.pagamentos.filter(p => p.tipo === 'PRAZO').reduce((s, p) => s + p.valor, 0));
     if (prazo > 0) {
       const venc = new Date(); venc.setDate(venc.getDate() + PRAZO_DIAS);
@@ -671,7 +800,7 @@
     concluir(v);
     seq.venda++;
     vendas.push(v);
-    salvar('restVendas', 'restContas', 'restSeq');
+    salvar('restVendas', 'restContas', 'restSeq', 'restProdutos', 'restMovEstoque');
     return v;
   }
   // Vendas que ficam abertas (mesa, delivery): criadas, recebem itens e pagamentos, e são finalizadas depois.
@@ -830,7 +959,7 @@
     const quitou = totaisVenda(v).restante <= 0.001;
     auditar(`${nomeVenda(v)}: recebido ${moedaBR(alvo)}${parte ? ` (${txt(parte)})` : ''}`, {detalhe: novos.map(p => `${p.nome} ${moedaBR(p.valor)}`).join(' + ')});
     if (quitou && !ehDelivery(v)) concluir(v);
-    salvar('restVendas', 'restContas');
+    salvar('restVendas', 'restContas', 'restProdutos', 'restMovEstoque');
     return {venda: v, finalizada: quitou && !ehDelivery(v), troco: r2(novos.reduce((s, p) => s + (p.troco || 0), 0))};
   }
   // Desfaz um recebimento parcial de um pedido ainda aberto (o dinheiro volta ao cliente)
@@ -856,7 +985,7 @@
     const cx = caixaAberto();
     if (!cx || cx.id !== v.caixaId) erro('O caixa desta venda não está mais aberto.');
     concluir(v);
-    salvar('restVendas', 'restContas');
+    salvar('restVendas', 'restContas', 'restProdutos', 'restMovEstoque');
     return v;
   }
   // Cancelar devolve o que foi pago: cada pagamento à vista vira um estorno no caixa aberto
@@ -876,12 +1005,13 @@
     if (devolver.length && !cx) erro('Abra o caixa para cancelar: o valor pago será devolvido (estorno) pelo caixa aberto.');
     devolver.forEach(p => lancarMov(cx, 'ESTORNO', p.valor, tipoPagamento(p), `Cancelamento da venda #${v.numero}: ${txt(motivo)}`, {vendaId: v.id}));
     ligadas.forEach(c => contas.splice(contas.indexOf(c), 1));
+    devolverEstoqueVenda(v, motivo);
     v.status = 'CANCELADA';
     v.canceladaEm = agora();
     v.canceladaPor = usuario();
     v.motivoCancelamento = txt(motivo);
     auditar(`${eraAberta ? nomeVenda(v) : `Venda #${v.numero}`} cancelada${devolver.length ? ` — estorno de ${moedaBR(devolver.reduce((s, p) => s + p.valor, 0))}` : ''}`, {detalhe: v.motivoCancelamento});
-    salvar('restVendas', 'restContas', 'restMovCaixa');
+    salvar('restVendas', 'restContas', 'restMovCaixa', 'restProdutos', 'restMovEstoque');
     return v;
   }
 
@@ -1023,7 +1153,7 @@
     const status = v.statusDelivery;
     marcarStatus(v, 'ENTREGUE');
     try { concluir(v); } catch (e) { v.pagamentos.splice(v.pagamentos.length - novos.length); v.historico.pop(); v.statusDelivery = status; throw e; }
-    salvar('restVendas', 'restContas');
+    salvar('restVendas', 'restContas', 'restProdutos', 'restMovEstoque');
     return {venda: v, troco: r2(novos.reduce((s, p) => s + (p.troco || 0), 0))};
   }
 
@@ -1390,6 +1520,7 @@
   // ---- Formatação usada nas telas ----
   const moedaBR = v => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
   const valorBR = v => Number(v || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  const qtdBR = v => Number(v || 0).toLocaleString('pt-BR', {maximumFractionDigits: 3}); // 12 · 0,35 · 1.250
   function mascaraTelefone(v){
     const d = digitos(v).slice(0, 11);
     if (d.length <= 2) return d ? `(${d}` : '';
@@ -1400,12 +1531,12 @@
   const mascaraCep = v => { const d = digitos(v).slice(0, 8); return d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d; };
 
   // Cada grupo de funções aparece na auditoria com o próprio módulo
-  const cad = fn => comModulo('Cadastros', fn), fin = fn => comModulo('Financeiro', fn), vnd = fn => comModulo('Vendas', fn), sis = fn => comModulo('Sistema', fn), mes = fn => comModulo('Mesas', fn), dlv = fn => comModulo('Delivery', fn);
+  const cad = fn => comModulo('Cadastros', fn), fin = fn => comModulo('Financeiro', fn), vnd = fn => comModulo('Vendas', fn), sis = fn => comModulo('Sistema', fn), mes = fn => comModulo('Mesas', fn), dlv = fn => comModulo('Delivery', fn), est = fn => comModulo('Estoque', fn);
   const porVenda = fn => (id, ...r) => { const t = vendaPorId(id)?.tipo; return (t === 'MESA' ? mes : t === 'DELIVERY' || t === 'ENCOMENDA' ? dlv : vnd)(fn)(id, ...r); };
   window.RestDados = {
     TIPOS_VENDA, STATUS_VENDA, TIPOS_FORMA, TIPOS_MOV_CAIXA, MOV_ENTRADA, MOV_SAIDA, VEICULOS, UNIDADES, TIPOS_CONTA, FORMAS_BAIXA, CATEGORIA_PRAZO,
-    MODULOS, PERFIS, LIMITE_FOTO,
-    on, versao: () => versao, norm, lerValor, moedaBR, valorBR, mascaraTelefone, mascaraCep, diaISO, hojeISO, dataBR,
+    MODULOS, PERFIS, LIMITE_FOTO, TIPOS_MOV_ESTOQUE, MOTIVOS_SAIDA,
+    on, versao: () => versao, norm, lerValor, moedaBR, valorBR, qtdBR, mascaraTelefone, mascaraCep, diaISO, hojeISO, dataBR,
     usuario, registrarAuditoria, auditoria,
     // Usuários, sessão e permissões
     usuarios: () => usuarios, usuarioPorId, temUsuarios, sessaoAtual, podeAcessar, modulosDo, ehAdmin,
@@ -1417,6 +1548,9 @@
     salvarGrupo: cad(salvarGrupo), excluirGrupo: cad(excluirGrupo), salvarProduto: cad(salvarProduto), excluirProduto: cad(excluirProduto),
     salvarCliente: cad(salvarClienteRest), excluirCliente: cad(excluirClienteRest), salvarEntregador: cad(salvarEntregador), excluirEntregador: cad(excluirEntregador),
     salvarForma: cad(salvarForma), excluirForma: cad(excluirForma),
+    // Estoque
+    movEstoque: () => movEstoque, estoqueBaixo, custoMedio,
+    entradaEstoque: est(entradaEstoque), saidaEstoque: est(saidaEstoque), ajustarEstoque: est(ajustarEstoque), configurarEstoque: est(configurarEstoque),
     // Caixa e vendas
     caixaAberto, abrirCaixa: comModulo('Caixa', abrirCaixa), movimentarCaixa: comModulo('Caixa', movimentarCaixa), resumoCaixa, fecharCaixa: comModulo('Caixa', fecharCaixa),
     valorAjuste, registrarVenda: vnd(registrarVenda), novaVenda: (d = {}) => (d.tipo === 'MESA' ? mes : vnd)(novaVenda)(d), adicionarItem: porVenda(adicionarItem), ajustarVenda: porVenda(ajustarVenda),

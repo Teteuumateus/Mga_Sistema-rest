@@ -31,13 +31,12 @@
       ['mesas', 'Mesas', 'mesas', 'Vendas das mesas do salão'],
       ['delivery', 'Delivery', 'delivery', 'Pedidos feitos pelo WhatsApp ou por telefone'],
       ['vendas/pdv', 'Venda balcão'], ['vendas/caixa', 'Caixa'], ['vendas/lista', 'Vendas realizadas'], ['vendas/caixas', 'Caixas anteriores']]},
-    {rota: 'estoque', nome: 'Estoque', ic: '📦', modulo: 'estoque'},
+    {grupo: 'est', nome: 'Estoque', ic: '📦', modulo: 'estoque', itens: [['estoque', 'Posição do estoque'], ['estoque/movimentos', 'Movimentações']]},
     {grupo: 'fin', nome: 'Financeiro', ic: '💰', modulo: 'financeiro', itens: [['fin/pagar', 'Contas a pagar'], ['fin/receber', 'Contas a receber'], ['fin/categorias', 'Categorias financeiras']]},
     {rota: 'relatorios', nome: 'Relatórios', ic: '📈', modulo: 'relatorios'},
     {grupo: 'config', nome: 'Configurações', ic: '⚙️', modulo: 'configuracoes', itens: [['config/restaurante', 'Restaurante'], ['config/auditoria', 'Auditoria'], ['config/dados', 'Dados do sistema']]}
   ];
   const EM_BREVE = {
-    estoque: {nome: 'Estoque', ic: '📦', fase: 4, texto: 'Entradas e saídas de estoque, baixa automática nas vendas e custo dos produtos.'},
     relatorios: {nome: 'Relatórios', ic: '📈', fase: 6, texto: 'Vendas, caixa, delivery e produtos por período, operador e forma de pagamento.'}
   };
   const ROTAS = {};
@@ -83,7 +82,11 @@
   // ---- Menu lateral escuro (sanfona: abre o grupo da tela atual); só o que o usuário pode acessar ----
   function MenuLateral({rota, aberto, setAberto}){
     useDados();
-    const vencidas = D.podeAcessar('financeiro') ? D.contas().filter(D.contaVencida).length : 0;
+    // Contadores de alerta nos grupos: contas vencidas e produtos no mínimo ou abaixo
+    const alertas = {
+      fin: D.podeAcessar('financeiro') ? [D.contas().filter(D.contaVencida).length, 'conta(s) vencida(s)'] : [0],
+      est: D.podeAcessar('estoque') ? [D.produtos().filter(p => p.ativo && D.estoqueBaixo(p)).length, 'produto(s) no estoque mínimo ou abaixo'] : [0]
+    };
     const visiveis = MENU.map(m => m.itens ? {...m, itens: m.itens.filter(([r]) => pode(r))} : m)
       .filter(m => m.itens ? m.itens.length : D.podeAcessar(m.modulo));
     return html`
@@ -94,7 +97,7 @@
             ? html`<div key=${m.grupo} className=${'nav-grupo' + (aberto === m.grupo ? '' : ' recolhido') + (ROTAS[rota]?.grupo === m.grupo ? ' grupo-ativo' : '')}>
                 <button type="button" className="nav-titulo" aria-expanded=${aberto === m.grupo} onClick=${() => setAberto(aberto === m.grupo ? null : m.grupo)}>
                   <span className="ic">${m.ic}</span>${m.nome}
-                  ${m.grupo === 'fin' && vencidas ? html`<span className="nav-badge" title=${`${vencidas} conta(s) vencida(s)`}>${vencidas}</span>` : null}
+                  ${alertas[m.grupo]?.[0] ? html`<span className="nav-badge" title=${`${alertas[m.grupo][0]} ${alertas[m.grupo][1]}`}>${alertas[m.grupo][0]}</span>` : null}
                   <span className="nav-seta" aria-hidden="true">▾</span>
                 </button>
                 <div className="nav-itens">

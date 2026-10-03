@@ -130,6 +130,7 @@
             ${p.foto ? html`<img src=${p.foto} alt="" />` : html`<span className="rest-pdv-ini" aria-hidden="true">${p.nome.slice(0, 1)}</span>`}
             <span className="rest-pdv-nome">${p.nome}</span>
             <span className="rest-pdv-preco">${D.moedaBR(p.preco)}</span>
+            ${p.controlaEstoque && html`<span className=${'rest-pdv-estoque' + (D.estoqueBaixo(p) ? ' baixo' : '')}>${p.estoque > 0 ? `${D.qtdBR(p.estoque)} ${p.unidade} em estoque` : 'Sem estoque'}</span>`}
           </button>`) : html`<p className="rest-grafico-vazio">Nenhum produto encontrado.</p>`}
         </div>
       </section>`;
