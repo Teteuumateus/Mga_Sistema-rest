@@ -8,6 +8,15 @@
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <script src="theme.js"></script>
+  <style>
+    .login-erro { margin: 0; padding: 10px 12px; border-radius: 10px; background: #fbe4e8; color: #b4233f; font-size: 0.9rem; font-weight: 600; }
+    .login-erro[hidden], .login-form[hidden], .login-dica[hidden] { display: none; }
+    .login-dica { margin: 0; padding: 10px 12px; border-radius: 10px; background: #ecf6ff; color: #1d5fb0; font-size: 0.88rem; line-height: 1.45; }
+    .login-form .submit-btn:disabled { opacity: 0.6; cursor: wait; }
+    .login-esqueci { padding: 0; border: 0; background: none; color: #1f90ff; font: inherit; font-weight: 600; cursor: pointer; }
+    [data-theme="dark"] .login-erro { background: #3a1520; color: #fca5b5; }
+    [data-theme="dark"] .login-dica { background: #13233d; color: #9ccaff; }
+  </style>
 </head>
 <body>
   <div class="login-shell">
@@ -21,35 +30,35 @@
         </div>
         <div class="brand-copy">
           <h1>MGA</h1>
-          <span>Sistema de gestão</span>
+          <span>Restaurante</span>
         </div>
       </div>
 
       <div class="hero-copy">
-        <h2>Gestão inteligente para crescer sem perder o controle.</h2>
-        <p>Centralize vendas, estoque, financeiro e operações em uma plataforma moderna e prática.</p>
+        <h2>Atendimento rápido, do balcão ao fechamento do caixa.</h2>
+        <p>PDV, caixa, cadastros e financeiro integrados, feitos para usar durante o atendimento.</p>
       </div>
 
       <ul class="feature-list">
         <li>
           <span class="feature-icon">✓</span>
           <div>
-            <strong>Fluxo de caixa em tempo real</strong>
-            <small>Controle financeiro com visão imediata</small>
+            <strong>Venda em poucos cliques</strong>
+            <small>Categorias, busca rápida e pagamento dividido</small>
           </div>
         </li>
         <li>
           <span class="feature-icon">✓</span>
           <div>
-            <strong>PDV e vendas integradas</strong>
-            <small>Checkout rápido com acompanhamento em tempo real</small>
+            <strong>Caixa sob controle</strong>
+            <small>Abertura, sangrias, suprimentos e fechamento com conferência</small>
           </div>
         </li>
         <li>
           <span class="feature-icon">✓</span>
           <div>
-            <strong>Operações em um só lugar</strong>
-            <small>Gestão de loja, food e suporte conectados</small>
+            <strong>Cada um no seu acesso</strong>
+            <small>Administrador, gerente, caixa e garçom com permissões próprias</small>
           </div>
         </li>
       </ul>
@@ -62,7 +71,7 @@
         <span class="tt-knob"></span>
       </button>
       <div class="login-wrap">
-        <div class="mini-brand" aria-label="MGA brand">
+        <div class="mini-brand" aria-label="MGA">
           <div class="mini-mark" aria-hidden="true">
             <span class="mini-bar mini-bar-1"></span>
             <span class="mini-bar mini-bar-2"></span>
@@ -71,75 +80,108 @@
           </div>
           <div class="mini-text">
             <h1>MGA</h1>
-            <span>Smart System</span>
+            <span>Restaurante</span>
           </div>
         </div>
 
-        <h3>Entrar</h3>
-        <p>Faça login para acessar sua conta.</p>
+        <h3 id="loginTitulo">Entrar</h3>
+        <p id="loginSub">Informe seu usuário e senha.</p>
 
+        <!-- Login -->
         <form class="login-form" id="loginForm" novalidate>
-          <label class="input-field" aria-label="E-mail">
-            <span class="field-icon">✉️</span>
-            <input id="emailInput" type="email" placeholder="Seu e-mail" autocomplete="email">
+          <label class="input-field" aria-label="Usuário">
+            <span class="field-icon">👤</span>
+            <input id="loginInput" type="text" placeholder="Usuário" autocomplete="username" autocapitalize="none" spellcheck="false">
           </label>
-
           <label class="input-field" aria-label="Senha">
             <span class="field-icon">🔒</span>
-            <input id="passwordInput" type="password" placeholder="Sua senha" autocomplete="current-password">
-            <button type="button" class="password-toggle" id="togglePassword" aria-label="Mostrar senha">👁️</button>
+            <input id="passwordInput" type="password" placeholder="Senha" autocomplete="current-password">
+            <button type="button" class="password-toggle" data-alvo="passwordInput" aria-label="Mostrar senha">👁️</button>
           </label>
-
           <div class="form-row">
-            <label class="remember-me"><input type="checkbox"> Lembrar-me</label>
-            <a href="#">Esqueceu a senha?</a>
+            <label class="remember-me"><input type="checkbox" id="lembrar"> Lembrar-me neste computador</label>
+            <button type="button" class="login-esqueci" id="btnEsqueci">Esqueceu a senha?</button>
           </div>
-
-          <button type="submit" class="submit-btn">
-            Entrar <span class="arrow">→</span>
-          </button>
+          <p class="login-dica" id="dicaSenha" hidden>A senha é redefinida pelo administrador em Cadastros › Usuários. Peça a ele uma nova senha.</p>
+          <p class="login-erro" id="loginErro" role="alert" hidden></p>
+          <button type="submit" class="submit-btn">Entrar <span class="arrow">→</span></button>
         </form>
 
-        <div class="divider"><span>ou continue com</span></div>
+        <!-- Primeiro acesso: cria o administrador -->
+        <form class="login-form" id="primeiroForm" novalidate hidden>
+          <p class="login-dica">Ainda não há usuários. Crie o <b>administrador</b>: ele tem acesso a tudo e cadastra os demais usuários.</p>
+          <label class="input-field" aria-label="Seu nome">
+            <span class="field-icon">🪪</span>
+            <input id="paNome" type="text" placeholder="Seu nome" autocomplete="name">
+          </label>
+          <label class="input-field" aria-label="Usuário para entrar">
+            <span class="field-icon">👤</span>
+            <input id="paLogin" type="text" placeholder="Usuário para entrar (ex.: joao)" autocomplete="username" autocapitalize="none" spellcheck="false">
+          </label>
+          <label class="input-field" aria-label="Senha">
+            <span class="field-icon">🔒</span>
+            <input id="paSenha" type="password" placeholder="Senha (mínimo 4 caracteres)" autocomplete="new-password">
+            <button type="button" class="password-toggle" data-alvo="paSenha" aria-label="Mostrar senha">👁️</button>
+          </label>
+          <label class="input-field" aria-label="Confirmar senha">
+            <span class="field-icon">🔒</span>
+            <input id="paConfirmar" type="password" placeholder="Repita a senha" autocomplete="new-password">
+          </label>
+          <p class="login-erro" id="paErro" role="alert" hidden></p>
+          <button type="submit" class="submit-btn">Criar administrador e entrar <span class="arrow">→</span></button>
+        </form>
       </div>
     </main>
   </div>
 
+  <script src="restaurante-dados.js"></script>
   <script>
-    const passwordInput = document.getElementById('passwordInput');
-    const togglePassword = document.getElementById('togglePassword');
-    const loginForm = document.getElementById('loginForm');
+    (function(){
+      const D = window.RestDados;
+      const $ = id => document.getElementById(id);
+      // Já logado (ex.: "lembrar-me"): vai direto para o sistema
+      if (D.sessaoAtual()) { location.replace('mga-sistema.html'); return; }
 
-    togglePassword.addEventListener('click', () => {
-      const showPassword = passwordInput.type === 'password';
-      passwordInput.type = showPassword ? 'text' : 'password';
-      togglePassword.textContent = showPassword ? '🙈' : '👁️';
-      togglePassword.setAttribute('aria-label', showPassword ? 'Ocultar senha' : 'Mostrar senha');
-    });
+      const primeiro = !D.temUsuarios();
+      $('loginForm').hidden = primeiro;
+      $('primeiroForm').hidden = !primeiro;
+      if (primeiro) { $('loginTitulo').textContent = 'Primeiro acesso'; $('loginSub').textContent = 'Configure o sistema em menos de um minuto.'; }
+      (primeiro ? $('paNome') : $('loginInput')).focus();
 
-    loginForm.addEventListener('submit', (event) => {
-      event.preventDefault();
-      const email = document.getElementById('emailInput').value.trim();
-      const senha = passwordInput.value.trim();
+      document.querySelectorAll('.password-toggle').forEach(b => b.addEventListener('click', () => {
+        const inp = $(b.dataset.alvo), mostrar = inp.type === 'password';
+        inp.type = mostrar ? 'text' : 'password';
+        b.textContent = mostrar ? '🙈' : '👁️';
+        b.setAttribute('aria-label', mostrar ? 'Ocultar senha' : 'Mostrar senha');
+      }));
+      $('btnEsqueci').addEventListener('click', () => { $('dicaSenha').hidden = !$('dicaSenha').hidden; });
 
-      if (!email || !senha) {
-        window.alert('Informe e-mail e senha para continuar.');
-        return;
+      const mostrarErro = (id, msg) => { $(id).textContent = msg; $(id).hidden = !msg; };
+      async function enviar(form, idErro, acao){
+        const botao = form.querySelector('.submit-btn');
+        mostrarErro(idErro, '');
+        botao.disabled = true;
+        try { await acao(); location.replace('mga-sistema.html'); }
+        catch (e) { mostrarErro(idErro, e.regra ? e.message : 'Não foi possível entrar: ' + e.message); botao.disabled = false; }
       }
 
-      // Nome do usuário (parte do e-mail antes de "." ou "@") para registrar nas movimentações
-      const nome = email.split('@')[0].split(/[._-]/)[0] || 'Operador';
-      const usuario = nome.charAt(0).toUpperCase() + nome.slice(1).toLowerCase();
-      try {
-        localStorage.setItem('mga_usuario', JSON.stringify(usuario));
-        // Auditoria: registra a entrada no sistema
-        const auditoria = JSON.parse(localStorage.getItem('mga_auditoria') || '[]');
-        auditoria.push({data: new Date().toISOString(), usuario, modulo: 'Sistema', descricao: 'Entrou no sistema', detalhe: email});
-        localStorage.setItem('mga_auditoria', JSON.stringify(auditoria.slice(-5000)));
-      } catch (e) { /* storage indisponível */ }
+      $('loginForm').addEventListener('submit', e => {
+        e.preventDefault();
+        enviar(e.target, 'loginErro', async () => {
+          if (!$('loginInput').value.trim() || !$('passwordInput').value) throw Object.assign(new Error('Informe usuário e senha.'), {regra: true});
+          const u = await D.autenticar($('loginInput').value, $('passwordInput').value);
+          D.iniciarSessao(u, $('lembrar').checked);
+        }).then(() => { $('passwordInput').value = ''; });
+      });
 
-      window.location.href = 'mga-sistema.html';
-    });
+      $('primeiroForm').addEventListener('submit', e => {
+        e.preventDefault();
+        enviar(e.target, 'paErro', async () => {
+          const u = await D.criarPrimeiroAdmin({nome: $('paNome').value, login: $('paLogin').value, senha: $('paSenha').value, confirmar: $('paConfirmar').value});
+          D.iniciarSessao(u, false);
+        });
+      });
+    })();
   </script>
 </body>
 </html>
