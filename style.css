@@ -416,17 +416,7 @@ button {
   }
 
   .login-hero {
-    padding: 42px 24px 32px;
-    min-height: 360px;
-  }
-
-  .hero-copy {
-    margin-top: 48px;
-  }
-
-  .feature-list {
-    gap: 14px;
-    margin-top: 28px;
+    display: none;
   }
 
   .login-panel {
