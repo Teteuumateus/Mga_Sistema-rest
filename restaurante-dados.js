@@ -289,6 +289,14 @@
     gravar('usuario', u.nome); // nome usado pela auditoria e pelo tema do login
     registrarAuditoria('Sistema', 'Entrou no sistema', {detalhe: `${u.login} · ${PERFIS[u.perfil].nome}`});
   }
+  // Login pelo Supabase: guarda o usuário do banco na lista local (sem senha) para sessaoAtual() achá-lo
+  function iniciarSessaoSupabase(d, lembrar){
+    const u = {id: d.id, nome: d.nome, login: d.login, perfil: PERFIS[d.perfil] ? d.perfil : 'CAIXA', ativo: true, empresaId: d.empresaId};
+    u.modulos = ehAdmin(u) ? Object.keys(MODULOS) : (d.modulos?.length ? d.modulos : PERFIS[u.perfil].modulos).filter(m => MODULOS[m]);
+    usuarios = usuarioPorId(u.id) ? usuarios.map(x => x.id === u.id ? {...x, ...u} : x) : [...usuarios, {...u, criadoEm: agora()}];
+    salvar('restUsuarios');
+    iniciarSessao(u, lembrar);
+  }
   function encerrarSessao(){
     if (sessaoAtual()) registrarAuditoria('Sistema', 'Saiu do sistema');
     armazens().forEach(s => { try { s.removeItem(CHAVE_SESSAO); } catch (e) { /* */ } });
@@ -2417,7 +2425,7 @@
     usuario, registrarAuditoria, auditoria,
     // Usuários, sessão e permissões
     usuarios: () => usuarios, usuarioPorId, temUsuarios, sessaoAtual, podeAcessar, modulosDo, ehAdmin,
-    criarPrimeiroAdmin, autenticar, iniciarSessao, encerrarSessao, salvarUsuario, excluirUsuario,
+    criarPrimeiroAdmin, autenticar, iniciarSessao, iniciarSessaoSupabase, encerrarSessao, salvarUsuario, excluirUsuario,
     grupos: () => grupos, produtos: () => produtos, clientes: listaClientes, entregadores: () => entregadores,
     formas: () => formas, formasAtivas, formaPorId, prazoHabilitado, tipoPagamento,
     caixas: () => caixas, movCaixa: () => movCaixa, vendas: () => vendas, contas: () => contas, categorias: () => categorias,

@@ -14,6 +14,7 @@
     .login-dica { margin: 0; padding: 10px 12px; border-radius: 10px; background: #ecf6ff; color: #1d5fb0; font-size: 0.88rem; line-height: 1.45; }
     .login-form .submit-btn:disabled { opacity: 0.6; cursor: wait; }
     .login-esqueci { padding: 0; border: 0; background: none; color: #1f90ff; font: inherit; font-weight: 600; cursor: pointer; }
+    .login-troca { margin: 4px 0 0; text-align: center; font-size: 0.9rem; }
     [data-theme="dark"] .login-erro { background: #3a1520; color: #fca5b5; }
     [data-theme="dark"] .login-dica { background: #13233d; color: #9ccaff; }
   </style>
@@ -85,13 +86,13 @@
         </div>
 
         <h3 id="loginTitulo">Entrar</h3>
-        <p id="loginSub">Informe seu usuário e senha.</p>
+        <p id="loginSub">Informe seu e-mail e senha.</p>
 
         <!-- Login -->
         <form class="login-form" id="loginForm" novalidate>
-          <label class="input-field" aria-label="Usuário">
+          <label class="input-field" aria-label="E-mail">
             <span class="field-icon">👤</span>
-            <input id="loginInput" type="text" placeholder="Usuário" autocomplete="username" autocapitalize="none" spellcheck="false">
+            <input id="loginInput" type="email" placeholder="E-mail" autocomplete="email" autocapitalize="none" spellcheck="false">
           </label>
           <label class="input-field" aria-label="Senha">
             <span class="field-icon">🔒</span>
@@ -105,22 +106,27 @@
           <p class="login-dica" id="dicaSenha" hidden>A senha é redefinida pelo administrador em Cadastros › Usuários. Peça a ele uma nova senha.</p>
           <p class="login-erro" id="loginErro" role="alert" hidden></p>
           <button type="submit" class="submit-btn">Entrar <span class="arrow">→</span></button>
+          <p class="login-troca">Novo por aqui? <button type="button" class="login-esqueci" id="irCadastro">Criar conta do restaurante</button></p>
         </form>
 
-        <!-- Primeiro acesso: cria o administrador -->
+        <!-- Primeiro acesso: cria a conta, o restaurante e o administrador -->
         <form class="login-form" id="primeiroForm" novalidate hidden>
-          <p class="login-dica">Ainda não há usuários. Crie o <b>administrador</b>: ele tem acesso a tudo e cadastra os demais usuários.</p>
+          <p class="login-dica">Crie a conta do seu restaurante. Você será o <b>administrador</b>: tem acesso a tudo e cadastra os demais usuários.</p>
+          <label class="input-field" aria-label="Nome do restaurante">
+            <span class="field-icon">🍽️</span>
+            <input id="paRestaurante" type="text" placeholder="Nome do restaurante" autocomplete="organization">
+          </label>
           <label class="input-field" aria-label="Seu nome">
             <span class="field-icon">🪪</span>
             <input id="paNome" type="text" placeholder="Seu nome" autocomplete="name">
           </label>
-          <label class="input-field" aria-label="Usuário para entrar">
+          <label class="input-field" aria-label="E-mail">
             <span class="field-icon">👤</span>
-            <input id="paLogin" type="text" placeholder="Usuário para entrar (ex.: joao)" autocomplete="username" autocapitalize="none" spellcheck="false">
+            <input id="paEmail" type="email" placeholder="E-mail" autocomplete="email" autocapitalize="none" spellcheck="false">
           </label>
           <label class="input-field" aria-label="Senha">
             <span class="field-icon">🔒</span>
-            <input id="paSenha" type="password" placeholder="Senha (mínimo 4 caracteres)" autocomplete="new-password">
+            <input id="paSenha" type="password" placeholder="Senha (mínimo 6 caracteres)" autocomplete="new-password">
             <button type="button" class="password-toggle" data-alvo="paSenha" aria-label="Mostrar senha">👁️</button>
           </label>
           <label class="input-field" aria-label="Confirmar senha">
@@ -128,17 +134,21 @@
             <input id="paConfirmar" type="password" placeholder="Repita a senha" autocomplete="new-password">
           </label>
           <p class="login-erro" id="paErro" role="alert" hidden></p>
-          <button type="submit" class="submit-btn">Criar administrador e entrar <span class="arrow">→</span></button>
+          <button type="submit" class="submit-btn">Criar conta e entrar <span class="arrow">→</span></button>
+          <p class="login-troca">Já tem conta? <button type="button" class="login-esqueci" id="irLogin">Entrar</button></p>
         </form>
       </div>
     </main>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" crossorigin></script>
+  <script src="supabase-config.js"></script>
   <script src="restaurante-dados.js"></script>
   <script>
-    (function(){
+    (async function(){
       const D = window.RestDados;
       const $ = id => document.getElementById(id);
+      const regra = msg => Object.assign(new Error(msg), {regra: true});
       // Nome da empresa (Configurações › Empresa) no lugar de MGA; "Restaurante" vira a assinatura do sistema
       const marca = D.nomeMarca();
       if (marca !== 'MGA') {
@@ -147,14 +157,22 @@
         document.querySelector('.mini-brand')?.setAttribute('aria-label', marca);
         document.title = marca + ' | Entrar';
       }
-      // Já logado (ex.: "lembrar-me"): vai direto para o sistema
-      if (D.sessaoAtual()) { location.replace('mga-sistema.html'); return; }
 
-      const primeiro = !D.temUsuarios();
-      $('loginForm').hidden = primeiro;
-      $('primeiroForm').hidden = !primeiro;
-      if (primeiro) { $('loginTitulo').textContent = 'Primeiro acesso'; $('loginSub').textContent = 'Configure o sistema em menos de um minuto.'; }
-      (primeiro ? $('paNome') : $('loginInput')).focus();
+      // Já logado (ex.: "lembrar-me"): vai direto para o sistema. Se só uma das sessões sobrou, começa do zero.
+      const { data: { session } } = await supa.auth.getSession();
+      if (session && D.sessaoAtual()) { location.replace('mga-sistema.html'); return; }
+      if (session) await supa.auth.signOut({ scope: 'local' });
+
+      function mostrarCadastro(cadastro){
+        $('loginForm').hidden = cadastro;
+        $('primeiroForm').hidden = !cadastro;
+        $('loginTitulo').textContent = cadastro ? 'Primeiro acesso' : 'Entrar';
+        $('loginSub').textContent = cadastro ? 'Configure o sistema em menos de um minuto.' : 'Informe seu e-mail e senha.';
+        (cadastro ? $('paRestaurante') : $('loginInput')).focus();
+      }
+      mostrarCadastro(false);
+      $('irCadastro').addEventListener('click', () => mostrarCadastro(true));
+      $('irLogin').addEventListener('click', () => mostrarCadastro(false));
 
       document.querySelectorAll('.password-toggle').forEach(b => b.addEventListener('click', () => {
         const inp = $(b.dataset.alvo), mostrar = inp.type === 'password';
@@ -164,29 +182,70 @@
       }));
       $('btnEsqueci').addEventListener('click', () => { $('dicaSenha').hidden = !$('dicaSenha').hidden; });
 
+      // Mensagens do Supabase em português
+      const traducoes = {
+        'Invalid login credentials': 'E-mail ou senha incorretos.',
+        'User already registered': 'Este e-mail já tem conta. Use "Entrar".',
+        'Email not confirmed': 'Confirme seu e-mail (veja a caixa de entrada) e tente de novo.',
+        'Unable to validate email address: invalid format': 'E-mail inválido.'
+      };
       const mostrarErro = (id, msg) => { $(id).textContent = msg; $(id).hidden = !msg; };
       async function enviar(form, idErro, acao){
         const botao = form.querySelector('.submit-btn');
         mostrarErro(idErro, '');
         botao.disabled = true;
         try { await acao(); location.replace('mga-sistema.html'); }
-        catch (e) { mostrarErro(idErro, e.regra ? e.message : 'Não foi possível entrar: ' + e.message); botao.disabled = false; }
+        catch (e) { mostrarErro(idErro, e.regra ? e.message : (traducoes[e.message] || 'Não foi possível entrar: ' + e.message)); botao.disabled = false; }
+      }
+
+      // Lê o usuário no banco e abre a sessão do sistema. Cria o restaurante se o cadastro parou antes disso.
+      async function entrarNoSistema(lembrar){
+        const { data: { user } } = await supa.auth.getUser();
+        const buscar = () => supa.from('usuarios')
+          .select('id, nome, login, perfil, empresa_id, usuario_modulos(modulo)')
+          .eq('id', user.id).maybeSingle();
+        let { data: u, error } = await buscar();
+        if (error) throw error;
+        const meta = user.user_metadata || {};
+        if (!u && meta.restaurante) {
+          const r = await supa.rpc('criar_empresa', { p_nome: meta.restaurante, p_nome_admin: meta.nome || user.email, p_login: user.email });
+          if (r.error) throw r.error;
+          ({ data: u, error } = await buscar());
+          if (error) throw error;
+        }
+        if (!u) {
+          await supa.auth.signOut({ scope: 'local' });
+          throw regra('Este usuário não tem acesso: está inativo ou não pertence a nenhum restaurante.');
+        }
+        D.iniciarSessaoSupabase({
+          id: u.id, nome: u.nome, login: u.login, perfil: u.perfil, ativo: true,
+          empresaId: u.empresa_id, modulos: u.usuario_modulos.map(m => m.modulo)
+        }, lembrar);
       }
 
       $('loginForm').addEventListener('submit', e => {
         e.preventDefault();
         enviar(e.target, 'loginErro', async () => {
-          if (!$('loginInput').value.trim() || !$('passwordInput').value) throw Object.assign(new Error('Informe usuário e senha.'), {regra: true});
-          const u = await D.autenticar($('loginInput').value, $('passwordInput').value);
-          D.iniciarSessao(u, $('lembrar').checked);
-        }).then(() => { $('passwordInput').value = ''; });
+          const email = $('loginInput').value.trim().toLowerCase(), senha = $('passwordInput').value;
+          if (!email || !senha) throw regra('Informe e-mail e senha.');
+          const { error } = await supa.auth.signInWithPassword({ email, password: senha });
+          if (error) throw error;
+          await entrarNoSistema($('lembrar').checked);
+        });
       });
 
       $('primeiroForm').addEventListener('submit', e => {
         e.preventDefault();
         enviar(e.target, 'paErro', async () => {
-          const u = await D.criarPrimeiroAdmin({nome: $('paNome').value, login: $('paLogin').value, senha: $('paSenha').value, confirmar: $('paConfirmar').value});
-          D.iniciarSessao(u, false);
+          const restaurante = $('paRestaurante').value.trim(), nome = $('paNome').value.trim();
+          const email = $('paEmail').value.trim().toLowerCase(), senha = $('paSenha').value;
+          if (!restaurante || !nome || !email || !senha) throw regra('Preencha todos os campos.');
+          if (senha.length < 6) throw regra('A senha precisa ter pelo menos 6 caracteres.');
+          if (senha !== $('paConfirmar').value) throw regra('As senhas não conferem.');
+          const { data, error } = await supa.auth.signUp({ email, password: senha, options: { data: { restaurante, nome } } });
+          if (error) throw error;
+          if (!data.session) throw regra('Enviamos um e-mail de confirmação. Confirme e depois use "Entrar".');
+          await entrarNoSistema(false);
         });
       });
     })();

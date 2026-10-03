@@ -92,13 +92,8 @@
     };
     const visiveis = MENU.map(m => m.itens ? {...m, itens: m.itens.filter(([r]) => pode(r))} : m)
       .filter(m => m.itens ? m.itens.length : D.podeAcessar(m.modulo));
-    return html`
-      <aside className="sidebar" id="sidebar">
-        <button type="button" className="brand" onClick=${() => ir('dashboard')} title=${`${D.nomeMarca()} · ir para o Dashboard`}>
-          <span className="dot"></span><span className=${'brand-nome' + (D.nomeMarca().length > 20 ? ' longo muito-longo' : D.nomeMarca().length > 9 ? ' longo' : '')}>${D.nomeMarca()}</span>
-        </button>
-        <nav className="nav" aria-label="Menu principal">
-          ${visiveis.map(m => m.itens
+    // Um item do menu: grupo com subitens (sanfona) ou link simples
+    const itemMenu = m => m.itens
             ? html`<div key=${m.grupo} className=${'nav-grupo' + (aberto === m.grupo ? '' : ' recolhido') + (ROTAS[rota]?.grupo === m.grupo ? ' grupo-ativo' : '')}>
                 <button type="button" className="nav-titulo" aria-expanded=${aberto === m.grupo} onClick=${() => setAberto(aberto === m.grupo ? null : m.grupo)}>
                   <span className="ic">${m.ic}</span>${m.nome}
@@ -111,9 +106,20 @@
               </div>`
             : html`<button type="button" key=${m.rota} className=${'nav-simples' + (rota === m.rota || ROTAS[rota]?.pai === m.rota ? ' active' : '')} aria-current=${rota === m.rota ? 'page' : null} onClick=${() => ir(m.rota)}>
                 <span className="ic">${m.ic}</span>${m.nome}${EM_BREVE[m.rota] ? html`<span className="rest-breve">fase ${EM_BREVE[m.rota].fase}</span>` : null}
-              </button>`)}
+              </button>`;
+    // Configurações e Sair ficam na parte de baixo do menu
+    return html`
+      <aside className="sidebar" id="sidebar">
+        <button type="button" className="brand" onClick=${() => ir('dashboard')} title=${`${D.nomeMarca()} · ir para o Dashboard`}>
+          <span className="dot"></span><span className=${'brand-nome' + (D.nomeMarca().length > 20 ? ' longo muito-longo' : D.nomeMarca().length > 9 ? ' longo' : '')}>${D.nomeMarca()}</span>
+        </button>
+        <nav className="nav" aria-label="Menu principal">
+          ${visiveis.filter(m => m.grupo !== 'config').map(itemMenu)}
         </nav>
-        <button type="button" className="logout-btn" onClick=${sair}><span className="ic">↪</span>Sair</button>
+        <div className="rest-nav-baixo">
+          <nav className="nav" aria-label="Configurações">${visiveis.filter(m => m.grupo === 'config').map(itemMenu)}</nav>
+          <button type="button" className="logout-btn" onClick=${sair}><span className="ic">↪</span>Sair</button>
+        </div>
         <div className="sidebar-foot">MGA Tecnologia<br />v3.0 · 100% Web</div>
       </aside>`;
   }
@@ -150,7 +156,9 @@
   const haQuanto = iso => { const min = Math.max(0, Math.floor((Date.now() - new Date(iso)) / 60000)); return min < 60 ? `há ${min} min` : `há ${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')} min`; };
 
   // ---- Barra superior: título, saudação, status do caixa e operador ----
-  function BarraSuperior({rota}){
+  // Menu lateral escondido ou à mostra: lembrado neste navegador (mga_menuOculto)
+  const lerMenuOculto = () => { try { return localStorage.getItem('mga_menuOculto') === '1'; } catch (e) { return false; } };
+  function BarraSuperior({rota, menuOculto, alternarMenu}){
     useDados();
     const [agora, setAgora] = useState(new Date());
     useEffect(() => { const t = setInterval(() => setAgora(new Date()), 60000); return () => clearInterval(t); }, []);
@@ -163,6 +171,10 @@
     const podeCaixa = D.podeAcessar('vendas');
     return html`
       <header className="topbar">
+        <button type="button" className="rest-btn-menu" onClick=${alternarMenu} aria-expanded=${!menuOculto} aria-controls="sidebar"
+          title=${menuOculto ? 'Mostrar o menu' : 'Esconder o menu'} aria-label=${menuOculto ? 'Mostrar o menu' : 'Esconder o menu'}>
+          <span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span>
+        </button>
         <div className="rest-topo-esq">
           <h1>${ROTAS[rota].titulo}</h1>
           <span className="rest-saudacao">${saudacao}, ${u.nome.split(' ')[0]}!</span>
@@ -207,6 +219,8 @@
     useDados();
     const [{rota, params}, setLocal] = useState(lerRota);
     const [aberto, setAberto] = useState(ROTAS[rota].grupo);
+    const [menuOculto, setMenuOculto] = useState(lerMenuOculto);
+    const alternarMenu = () => setMenuOculto(o => { try { localStorage.setItem('mga_menuOculto', o ? '0' : '1'); } catch (e) { /* storage indisponível */ } return !o; });
     useEffect(() => {
       const mudou = () => { const l = lerRota(); setLocal(l); setAberto(g => ROTAS[l.rota].grupo || g); window.scrollTo(0, 0); };
       window.addEventListener('hashchange', mudou);
@@ -217,9 +231,9 @@
     if (!D.sessaoAtual()) { location.replace('login.html'); return null; }
     const Tela = window.RestUI.telas[rota];
     return html`
-      <${MenuLateral} rota=${rota} aberto=${aberto} setAberto=${setAberto} />
+      ${!menuOculto && html`<${MenuLateral} rota=${rota} aberto=${aberto} setAberto=${setAberto} />`}
       <div className=${'main' + (['vendas/pdv', 'mesas/pedido', 'delivery/novo'].includes(rota) ? ' rest-main-pdv' : '') + (rota === 'vendas/cozinha' ? ' rest-main-cozinha' : '')}>
-        <${BarraSuperior} rota=${rota} />
+        <${BarraSuperior} rota=${rota} menuOculto=${menuOculto} alternarMenu=${alternarMenu} />
         <main className="content">
           ${!pode(rota) ? html`<${SemAcesso} rota=${rota} />` : Tela ? html`<${Tela} key=${rota} params=${params} ir=${ir} />` : html`<${TelaEmBreve} rota=${rota} />`}
         </main>
