@@ -325,18 +325,23 @@
     const [form, setForm] = useState(null);
     const [salvando, setSalvando] = useState(false);
     const eu = D.sessaoAtual();
-    const lista = D.usuarios().filter(u => u.hash).slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    const lista = D.usuarios().filter(u => u.hash || u.nuvem).slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    const nuvem = !!window.MGA_NUVEM?.ativa; // com o Supabase: login por e-mail, senha de 6+ caracteres
     const editar = u => setForm({...USUARIO_VAZIO, id: u.id, nome: u.nome, login: u.login, perfil: u.perfil, modulos: D.modulosDo(u), ativo: u.ativo});
     // Trocar o perfil sugere os módulos padrão dele (o administrador ainda pode ajustar)
     const mudarPerfil = perfil => setForm({...form, perfil, modulos: D.PERFIS[perfil].modulos});
     const alternarModulo = m => setForm({...form, modulos: form.modulos.includes(m) ? form.modulos.filter(x => x !== m) : [...form.modulos, m]});
     const salvar = async () => {
       setSalvando(true);
-      try { const u = await D.salvarUsuario(form, form.id); mostrar(form.id ? `Usuário "${u.nome}" atualizado.` : `Usuário "${u.nome}" cadastrado. Ele entra com o login "${u.login}".`); setForm(null); }
+      try { const u = await D.salvarUsuario(form, form.id); mostrar(form.id ? `Usuário "${u.nome}" atualizado.` : `Usuário "${u.nome}" cadastrado. Ele entra com ${nuvem ? 'o e-mail' : 'o login'} "${u.login}".`); setForm(null); }
       catch (e) { mostrar(e.regra ? e.message : 'Erro inesperado: ' + e.message, true); }
       finally { setSalvando(false); }
     };
-    const excluir = u => { if (confirmar(`Excluir o usuário "${u.nome}"?`)) tentar(() => D.excluirUsuario(u.id), `Usuário "${u.nome}" excluído.`); };
+    const excluir = async u => {
+      if (!confirmar(`Excluir o usuário "${u.nome}"?${nuvem ? ' O login dele deixa de funcionar.' : ''}`)) return;
+      try { await D.excluirUsuario(u.id); mostrar(`Usuário "${u.nome}" excluído.`); }
+      catch (e) { mostrar(e.regra ? e.message : 'Erro inesperado: ' + e.message, true); }
+    };
     const admin = form?.perfil === 'ADMIN';
     return html`
       <${Cabecalho} titulo="Usuários" sub="Quem entra no sistema e quais módulos cada um acessa">
@@ -346,11 +351,12 @@
       ${form && html`
         <${FormCard} titulo=${form.id ? `Editar usuário — ${form.nome}` : 'Novo usuário'} onSalvar=${salvar} onCancelar=${() => setForm(null)} rotuloSalvar=${salvando ? 'Salvando...' : 'Salvar'}>
           <${Campo} rotulo="Nome"><input type="text" value=${form.nome} maxLength="60" placeholder="Ex.: João da Silva" onInput=${e => setForm({...form, nome: e.target.value})} /><//>
-          <${Campo} rotulo="Login (para entrar)"><input type="text" value=${form.login} maxLength="30" autoCapitalize="none" spellCheck="false" placeholder="Ex.: joao" onInput=${e => setForm({...form, login: e.target.value.toLowerCase().replace(/\s/g, '')})} /><//>
+          <${Campo} rotulo=${nuvem ? 'E-mail (para entrar)' : 'Login (para entrar)'}><input type=${nuvem ? 'email' : 'text'} value=${form.login} maxLength=${nuvem ? 80 : 30} autoCapitalize="none" spellCheck="false"
+            placeholder=${nuvem ? 'Ex.: joao@restaurante.com' : 'Ex.: joao'} onInput=${e => setForm({...form, login: e.target.value.toLowerCase().replace(/\s/g, '')})} /><//>
           <${Campo} rotulo="Perfil">
             <select value=${form.perfil} onChange=${e => mudarPerfil(e.target.value)}>${Object.entries(D.PERFIS).map(([k, p]) => html`<option key=${k} value=${k}>${p.nome}</option>`)}</select>
           <//>
-          <${Campo} rotulo=${form.id ? 'Nova senha (vazio = mantém)' : 'Senha'}><input type="password" value=${form.senha} autoComplete="new-password" onInput=${e => setForm({...form, senha: e.target.value})} /><//>
+          <${Campo} rotulo=${(form.id ? 'Nova senha (vazio = mantém)' : 'Senha') + (nuvem ? ' · mín. 6' : '')}><input type="password" value=${form.senha} autoComplete="new-password" onInput=${e => setForm({...form, senha: e.target.value})} /><//>
           <${Campo} rotulo="Repita a senha"><input type="password" value=${form.confirmar} autoComplete="new-password" onInput=${e => setForm({...form, confirmar: e.target.value})} /><//>
           <fieldset className="rest-modulos rest-largo">
             <legend>Módulos que acessa ${admin ? '(administrador acessa tudo)' : ''}</legend>

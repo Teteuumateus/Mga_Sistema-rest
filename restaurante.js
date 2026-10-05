@@ -61,7 +61,8 @@
     const q = new URLSearchParams(params).toString();
     location.hash = '/' + rota + (q ? '?' + q : '');
   }
-  function sair(){ D.encerrarSessao(); location.replace('login.html'); }
+  // O master (suporte) volta para o painel de empresas; os demais vão para o login
+  function sair(){ const master = D.sessaoAtual()?.master; D.encerrarSessao(); location.replace(master ? 'master.html' : 'login.html'); }
   // Saiu (ou o usuário foi desativado) em outra aba: esta aba também sai
   window.addEventListener('storage', e => { if ((e.key === 'mga_sessao' || e.key === 'mga_restUsuarios') && !D.sessaoAtual()) location.replace('login.html'); });
 
@@ -117,6 +118,13 @@
           ${visiveis.filter(m => m.grupo !== 'config').map(itemMenu)}
         </nav>
         <div className="rest-nav-baixo">
+          ${D.sessaoAtual()?.master && html`
+            <div className="rest-suporte-card" title="Você está nesta empresa como master (suporte)">
+              <span className="rest-suporte-tag">🛠 Modo suporte</span>
+              <b>${D.nomeMarca()}</b>
+              <small>${D.sessaoAtual().nome} · ${D.PERFIS[D.sessaoAtual().perfil].nome}</small>
+              <button type="button" onClick=${sair}>← Voltar ao painel master</button>
+            </div>`}
           <nav className="nav" aria-label="Configurações">${visiveis.filter(m => m.grupo === 'config').map(itemMenu)}</nav>
           <button type="button" className="logout-btn" onClick=${sair}><span className="ic">↪</span>Sair</button>
         </div>
@@ -177,7 +185,7 @@
         </button>
         <div className="rest-topo-esq">
           <h1>${ROTAS[rota].titulo}</h1>
-          <span className="rest-saudacao">${saudacao}, ${u.nome.split(' ')[0]}!</span>
+          <span className="rest-saudacao">${u.master ? `${saudacao}! Modo suporte` : `${saudacao}, ${u.nome.split(' ')[0]}!`}</span>
         </div>
         <div className="topbar-right">
           <button type="button" className=${'rest-caixa ' + (cx ? 'aberto' : 'fechado')} disabled=${!podeCaixa} onClick=${() => ir('vendas/caixa')}
@@ -187,10 +195,10 @@
           </button>
           <${Atalhos} />
           <${BotaoTema} />
-          <div className="who" title=${`${u.nome} (${u.login}) · ${D.PERFIS[u.perfil].nome}`}>
+          ${!u.master && html`<div className="who" title=${`${u.nome} (${u.login}) · ${D.PERFIS[u.perfil].nome}`}>
             <span className="rest-who-txt"><b>${u.nome}</b><small>${D.PERFIS[u.perfil].nome}</small></span>
             <div className="avatar" aria-hidden="true">${u.nome.slice(0, 2).toUpperCase()}</div>
-          </div>
+          </div>`}
         </div>
       </header>`;
   }
@@ -240,5 +248,7 @@
       </div>`;
   }
 
-  ReactDOM.createRoot(raiz).render(html`<${App} />`);
+  // Com o Supabase, a tela espera os cadastros chegarem do banco (restaurante-nuvem.js)
+  raiz.innerHTML = '<div class="nuvem-carregando">Carregando…</div>';
+  Promise.resolve(window.MGA_PRONTO).finally(() => { raiz.innerHTML = ''; ReactDOM.createRoot(raiz).render(html`<${App} />`); });
 })();

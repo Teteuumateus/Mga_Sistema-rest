@@ -67,6 +67,7 @@
     const [erroLimpar, setErroLimpar] = useState('');
     const arquivo = useRef(null);
     const r = D.resumoDados();
+    const nuvem = !!window.MGA_NUVEM?.ativa; // com o Supabase os dados ficam no banco; restaurar/apagar aqui seria desfeito pelo banco
     const espaco = r.bytes > 1048576 ? (r.bytes / 1048576).toFixed(2).replace('.', ',') + ' MB' : Math.ceil(r.bytes / 1024) + ' KB';
     const itens = [['Vendas', r.vendas], ['Produtos', r.produtos], ['Grupos', r.grupos], ['Clientes', r.clientes], ['Entregadores', r.entregadores],
       ['Contas a pagar/receber', r.contas], ['Registros de auditoria', r.auditoria], ['Espaço usado', espaco]];
@@ -95,32 +96,33 @@
       catch (e) { setErroLimpar(e.message); }
     };
     return html`
-      <${Cabecalho} titulo="Dados do sistema" sub="Tudo fica guardado neste navegador. Faça backup com frequência." />
+      <${Cabecalho} titulo="Dados do sistema" sub=${nuvem ? 'Os dados ficam guardados no banco de dados (nuvem) e aparecem em todos os computadores da empresa.' : 'Tudo fica guardado neste navegador. Faça backup com frequência.'} />
       ${aviso}
       <div className="hv-resumo rest-dados-resumo">${itens.map(([k, v]) => html`<div key=${k}><span>${k}</span><b>${typeof v === 'number' ? v.toLocaleString('pt-BR') : v}</b></div>`)}</div>
       <div className="rest-dados-grid">
         <section className="card rest-dados-card">
           <h3 className="rest-form-titulo">💾 Backup</h3>
-          <p className="dv-ajuda">Baixa um arquivo com todos os dados (cadastros, vendas, financeiro e auditoria). Para trocar de computador ou navegador, restaure o arquivo lá.</p>
+          <p className="dv-ajuda">${nuvem ? 'Os dados já estão salvos no banco. Se quiser, baixe uma cópia em arquivo (cadastros, vendas, financeiro e auditoria) para guardar.'
+            : 'Baixa um arquivo com todos os dados (cadastros, vendas, financeiro e auditoria). Para trocar de computador ou navegador, restaure o arquivo lá.'}</p>
           <div className="rest-form-acoes">
             <button type="button" className="btn" onClick=${exportar}>Baixar backup</button>
-            <button type="button" className="btn btn-ghost" onClick=${() => arquivo.current.click()}>Restaurar backup...</button>
+            ${!nuvem && html`<button type="button" className="btn btn-ghost" onClick=${() => arquivo.current.click()}>Restaurar backup...</button>`}
             <input type="file" accept=".json,application/json" ref=${arquivo} hidden onChange=${e => { importar(e.target.files[0]); e.target.value = ''; }} />
           </div>
         </section>
         <section className="card rest-dados-card">
           <h3 className="rest-form-titulo">🧪 Demonstração</h3>
-          <p className="dv-ajuda">${r.demo ? 'Há dados de demonstração no sistema (vendas e contas marcadas). Remova antes de começar a usar de verdade.' : 'Gera vendas e contas de exemplo para ver o Dashboard e os gráficos com números. Seus dados não são alterados.'}</p>
+          <p className="dv-ajuda">${nuvem ? 'Ficam só neste computador (não vão para o banco). ' : ''}${r.demo ? 'Há dados de demonstração no sistema (vendas e contas marcadas). Remova antes de começar a usar de verdade.' : 'Gera vendas e contas de exemplo para ver o Dashboard e os gráficos com números. Seus dados não são alterados.'}</p>
           <div className="rest-form-acoes">
             ${r.demo ? html`<button type="button" className="btn btn-ghost" onClick=${removerDemo}>Remover demonstração</button>`
               : html`<button type="button" className="btn btn-ghost" onClick=${gerarDemo}>Gerar dados de demonstração</button>`}
           </div>
         </section>
-        <section className="card rest-dados-card rest-perigo">
+        ${!nuvem && html`<section className="card rest-dados-card rest-perigo">
           <h3 className="rest-form-titulo">🗑️ Apagar todos os dados</h3>
           <p className="dv-ajuda">Apaga cadastros, vendas, caixas, financeiro e auditoria deste navegador. <b>Não pode ser desfeito</b> sem um backup. O tema e o usuário logado são mantidos.</p>
           <div className="rest-form-acoes"><button type="button" className="btn btn-perigo" onClick=${() => { setErroLimpar(''); setLimpar({confirma: '', senha: '', modo: 'exemplo'}); }}>Apagar tudo...</button></div>
-        </section>
+        </section>`}
       </div>
       ${limpar && html`
         <${Modal} titulo="Apagar todos os dados" onFechar=${() => setLimpar(null)}>

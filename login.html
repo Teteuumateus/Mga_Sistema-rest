@@ -103,45 +103,42 @@
             <label class="remember-me"><input type="checkbox" id="lembrar"> Lembrar-me neste computador</label>
             <button type="button" class="login-esqueci" id="btnEsqueci">Esqueceu a senha?</button>
           </div>
-          <p class="login-dica" id="dicaSenha" hidden>A senha é redefinida pelo administrador em Cadastros › Usuários. Peça a ele uma nova senha.</p>
           <p class="login-erro" id="loginErro" role="alert" hidden></p>
           <button type="submit" class="submit-btn">Entrar <span class="arrow">→</span></button>
-          <p class="login-troca">Novo por aqui? <button type="button" class="login-esqueci" id="irCadastro">Criar conta do restaurante</button></p>
         </form>
 
-        <!-- Primeiro acesso: cria a conta, o restaurante e o administrador -->
-        <form class="login-form" id="primeiroForm" novalidate hidden>
-          <p class="login-dica">Crie a conta do seu restaurante. Você será o <b>administrador</b>: tem acesso a tudo e cadastra os demais usuários.</p>
-          <label class="input-field" aria-label="Nome do restaurante">
-            <span class="field-icon">🍽️</span>
-            <input id="paRestaurante" type="text" placeholder="Nome do restaurante" autocomplete="organization">
-          </label>
-          <label class="input-field" aria-label="Seu nome">
-            <span class="field-icon">🪪</span>
-            <input id="paNome" type="text" placeholder="Seu nome" autocomplete="name">
-          </label>
+        <!-- Esqueceu a senha: o Supabase envia um link de redefinição para o e-mail -->
+        <form class="login-form" id="esqueciForm" novalidate hidden>
           <label class="input-field" aria-label="E-mail">
             <span class="field-icon">👤</span>
-            <input id="paEmail" type="email" placeholder="E-mail" autocomplete="email" autocapitalize="none" spellcheck="false">
+            <input id="esqueciEmail" type="email" placeholder="E-mail" autocomplete="email" autocapitalize="none" spellcheck="false">
           </label>
-          <label class="input-field" aria-label="Senha">
+          <p class="login-dica" id="esqueciOk" role="status" hidden></p>
+          <p class="login-erro" id="esqueciErro" role="alert" hidden></p>
+          <button type="submit" class="submit-btn">Enviar link por e-mail <span class="arrow">→</span></button>
+          <p class="login-troca">Lembrou? <button type="button" class="login-esqueci" data-voltar>Voltar para entrar</button></p>
+        </form>
+
+        <!-- Chegou pelo link do e-mail: cadastra a nova senha -->
+        <form class="login-form" id="novaSenhaForm" novalidate hidden>
+          <label class="input-field" aria-label="Nova senha">
             <span class="field-icon">🔒</span>
-            <input id="paSenha" type="password" placeholder="Senha (mínimo 6 caracteres)" autocomplete="new-password">
-            <button type="button" class="password-toggle" data-alvo="paSenha" aria-label="Mostrar senha">👁️</button>
+            <input id="novaSenha" type="password" placeholder="Nova senha (mínimo 6 caracteres)" autocomplete="new-password">
+            <button type="button" class="password-toggle" data-alvo="novaSenha" aria-label="Mostrar senha">👁️</button>
           </label>
-          <label class="input-field" aria-label="Confirmar senha">
+          <label class="input-field" aria-label="Repita a nova senha">
             <span class="field-icon">🔒</span>
-            <input id="paConfirmar" type="password" placeholder="Repita a senha" autocomplete="new-password">
+            <input id="novaSenhaConfirmar" type="password" placeholder="Repita a nova senha" autocomplete="new-password">
           </label>
-          <p class="login-erro" id="paErro" role="alert" hidden></p>
-          <button type="submit" class="submit-btn">Criar conta e entrar <span class="arrow">→</span></button>
-          <p class="login-troca">Já tem conta? <button type="button" class="login-esqueci" id="irLogin">Entrar</button></p>
+          <p class="login-erro" id="novaSenhaErro" role="alert" hidden></p>
+          <button type="submit" class="submit-btn">Salvar nova senha e entrar <span class="arrow">→</span></button>
         </form>
       </div>
     </main>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" crossorigin></script>
+  <script>window.MGA_LINK_SENHA = location.hash + location.search;</script>
   <script src="supabase-config.js"></script>
   <script src="restaurante-dados.js"></script>
   <script>
@@ -158,34 +155,12 @@
         document.title = marca + ' | Entrar';
       }
 
-      // Já logado (ex.: "lembrar-me"): vai direto para o sistema. Se só uma das sessões sobrou, começa do zero.
-      const { data: { session } } = await supa.auth.getSession();
-      if (session && D.sessaoAtual()) { location.replace('mga-sistema.html'); return; }
-      if (session) await supa.auth.signOut({ scope: 'local' });
-
-      function mostrarCadastro(cadastro){
-        $('loginForm').hidden = cadastro;
-        $('primeiroForm').hidden = !cadastro;
-        $('loginTitulo').textContent = cadastro ? 'Primeiro acesso' : 'Entrar';
-        $('loginSub').textContent = cadastro ? 'Configure o sistema em menos de um minuto.' : 'Informe seu e-mail e senha.';
-        (cadastro ? $('paRestaurante') : $('loginInput')).focus();
-      }
-      mostrarCadastro(false);
-      $('irCadastro').addEventListener('click', () => mostrarCadastro(true));
-      $('irLogin').addEventListener('click', () => mostrarCadastro(false));
-
-      document.querySelectorAll('.password-toggle').forEach(b => b.addEventListener('click', () => {
-        const inp = $(b.dataset.alvo), mostrar = inp.type === 'password';
-        inp.type = mostrar ? 'text' : 'password';
-        b.textContent = mostrar ? '🙈' : '👁️';
-        b.setAttribute('aria-label', mostrar ? 'Ocultar senha' : 'Mostrar senha');
-      }));
-      $('btnEsqueci').addEventListener('click', () => { $('dicaSenha').hidden = !$('dicaSenha').hidden; });
+      // Conta master (MGA Tecnologia): vai sempre para o painel de empresas, mesmo se também estiver num restaurante
+      const souMaster = async id => !!(await supa.from('masters').select('id').eq('id', id).maybeSingle()).data;
 
       // Mensagens do Supabase em português
       const traducoes = {
         'Invalid login credentials': 'E-mail ou senha incorretos.',
-        'User already registered': 'Este e-mail já tem conta. Use "Entrar".',
         'Email not confirmed': 'Confirme seu e-mail (veja a caixa de entrada) e tente de novo.',
         'Unable to validate email address: invalid format': 'E-mail inválido.'
       };
@@ -194,25 +169,18 @@
         const botao = form.querySelector('.submit-btn');
         mostrarErro(idErro, '');
         botao.disabled = true;
-        try { await acao(); location.replace('mga-sistema.html'); }
+        try { location.replace(await acao() || 'mga-sistema.html'); }
         catch (e) { mostrarErro(idErro, e.regra ? e.message : (traducoes[e.message] || 'Não foi possível entrar: ' + e.message)); botao.disabled = false; }
       }
 
-      // Lê o usuário no banco e abre a sessão do sistema. Cria o restaurante se o cadastro parou antes disso.
+      // Lê o usuário no banco e abre a sessão do sistema (ou manda o master para o painel dele)
       async function entrarNoSistema(lembrar){
         const { data: { user } } = await supa.auth.getUser();
-        const buscar = () => supa.from('usuarios')
+        if (await souMaster(user.id)) return 'master.html';
+        const { data: u, error } = await supa.from('usuarios')
           .select('id, nome, login, perfil, empresa_id, usuario_modulos(modulo)')
           .eq('id', user.id).maybeSingle();
-        let { data: u, error } = await buscar();
         if (error) throw error;
-        const meta = user.user_metadata || {};
-        if (!u && meta.restaurante) {
-          const r = await supa.rpc('criar_empresa', { p_nome: meta.restaurante, p_nome_admin: meta.nome || user.email, p_login: user.email });
-          if (r.error) throw r.error;
-          ({ data: u, error } = await buscar());
-          if (error) throw error;
-        }
         if (!u) {
           await supa.auth.signOut({ scope: 'local' });
           throw regra('Este usuário não tem acesso: está inativo ou não pertence a nenhum restaurante.');
@@ -223,31 +191,100 @@
         }, lembrar);
       }
 
-      $('loginForm').addEventListener('submit', e => {
-        e.preventDefault();
-        enviar(e.target, 'loginErro', async () => {
-          const email = $('loginInput').value.trim().toLowerCase(), senha = $('passwordInput').value;
-          if (!email || !senha) throw regra('Informe e-mail e senha.');
-          const { error } = await supa.auth.signInWithPassword({ email, password: senha });
-          if (error) throw error;
-          await entrarNoSistema($('lembrar').checked);
-        });
-      });
+      // Telas do login: entrar, esqueci a senha, nova senha
+      const TELAS = {
+        loginForm: ['Entrar', 'Informe seu e-mail e senha.'],
+        esqueciForm: ['Esqueceu a senha?', 'Informe seu e-mail. Vamos enviar um link para você criar uma nova senha.'],
+        novaSenhaForm: ['Nova senha', 'Crie a sua nova senha.']
+      };
+      function mostrarTela(id){
+        Object.keys(TELAS).forEach(t => { $(t).hidden = t !== id; });
+        $('loginTitulo').textContent = TELAS[id][0];
+        $('loginSub').textContent = TELAS[id][1];
+        $(id).querySelector('input').focus();
+      }
 
-      $('primeiroForm').addEventListener('submit', e => {
-        e.preventDefault();
-        enviar(e.target, 'paErro', async () => {
-          const restaurante = $('paRestaurante').value.trim(), nome = $('paNome').value.trim();
-          const email = $('paEmail').value.trim().toLowerCase(), senha = $('paSenha').value;
-          if (!restaurante || !nome || !email || !senha) throw regra('Preencha todos os campos.');
-          if (senha.length < 6) throw regra('A senha precisa ter pelo menos 6 caracteres.');
-          if (senha !== $('paConfirmar').value) throw regra('As senhas não conferem.');
-          const { data, error } = await supa.auth.signUp({ email, password: senha, options: { data: { restaurante, nome } } });
-          if (error) throw error;
-          if (!data.session) throw regra('Enviamos um e-mail de confirmação. Confirme e depois use "Entrar".');
-          await entrarNoSistema(false);
+      // Veio pelo link do e-mail de redefinição
+      const link = window.MGA_LINK_SENHA || '';
+      if (/type=recovery/.test(link)) {
+        await supa.auth.getSession(); // espera o Supabase ler o link
+        mostrarTela('novaSenhaForm');
+        iniciarEventos();
+        return;
+      }
+      const linkComErro = /error_code=otp_expired|error=access_denied/.test(link);
+
+      // Já logado (ex.: "lembrar-me"): vai direto para o sistema. Se só uma das sessões sobrou, começa do zero.
+      const { data: { session } } = await supa.auth.getSession();
+      if (session && await souMaster(session.user.id)) { location.replace('master.html'); return; }
+      if (session && D.sessaoAtual()) { location.replace('mga-sistema.html'); return; }
+      if (session) await supa.auth.signOut({ scope: 'local' });
+      mostrarTela('loginForm');
+      iniciarEventos();
+      if (linkComErro) mostrarErro('loginErro', 'O link de redefinição expirou ou já foi usado. Clique em "Esqueceu a senha?" e peça outro.');
+
+      function iniciarEventos(){
+        document.querySelectorAll('.password-toggle').forEach(b => b.addEventListener('click', () => {
+          const inp = $(b.dataset.alvo), mostrar = inp.type === 'password';
+          inp.type = mostrar ? 'text' : 'password';
+          b.textContent = mostrar ? '🙈' : '👁️';
+          b.setAttribute('aria-label', mostrar ? 'Ocultar senha' : 'Mostrar senha');
+        }));
+        $('btnEsqueci').addEventListener('click', () => {
+          $('esqueciEmail').value = $('loginInput').value.trim();
+          mostrarErro('esqueciErro', ''); $('esqueciOk').hidden = true;
+          mostrarTela('esqueciForm');
         });
-      });
+        document.querySelectorAll('[data-voltar]').forEach(b => b.addEventListener('click', () => mostrarTela('loginForm')));
+
+        $('esqueciForm').addEventListener('submit', async e => {
+          e.preventDefault();
+          const botao = e.target.querySelector('.submit-btn'), email = $('esqueciEmail').value.trim().toLowerCase();
+          mostrarErro('esqueciErro', ''); $('esqueciOk').hidden = true;
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { mostrarErro('esqueciErro', 'Informe um e-mail válido.'); return; }
+          // O link do e-mail volta para esta mesma página (precisa estar num endereço http/https)
+          if (!/^https?:/.test(location.protocol)) {
+            mostrarErro('esqueciErro', 'A redefinição por e-mail só funciona com o sistema publicado na internet (endereço http/https). Por enquanto, peça uma nova senha ao administrador do restaurante.');
+            return;
+          }
+          botao.disabled = true;
+          const { error } = await supa.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+          botao.disabled = false;
+          if (error) {
+            mostrarErro('esqueciErro', /rate limit|security purposes/i.test(error.message)
+              ? 'Muitos pedidos seguidos. Aguarde alguns minutos e tente de novo.' : 'Não foi possível enviar: ' + error.message);
+            return;
+          }
+          $('esqueciOk').textContent = `Se ${email} estiver cadastrado, você vai receber um e-mail com o link para criar a nova senha. Veja também a caixa de spam. Funcionários também podem pedir a nova senha ao administrador do restaurante.`;
+          $('esqueciOk').hidden = false;
+        });
+
+        $('novaSenhaForm').addEventListener('submit', e => {
+          e.preventDefault();
+          enviar(e.target, 'novaSenhaErro', async () => {
+            const senha = $('novaSenha').value;
+            if (senha.length < 6) throw regra('A senha precisa ter pelo menos 6 caracteres.');
+            if (senha !== $('novaSenhaConfirmar').value) throw regra('As senhas não conferem.');
+            const { data: { session } } = await supa.auth.getSession();
+            if (!session) throw regra('O link expirou ou já foi usado. Volte para "Entrar" e clique em "Esqueceu a senha?" de novo.');
+            const { error } = await supa.auth.updateUser({ password: senha });
+            if (error) throw /different from the old/i.test(error.message) ? regra('A nova senha precisa ser diferente da anterior.') : error;
+            history.replaceState(null, '', location.pathname);
+            return entrarNoSistema(false);
+          });
+        });
+
+        $('loginForm').addEventListener('submit', e => {
+          e.preventDefault();
+          enviar(e.target, 'loginErro', async () => {
+            const email = $('loginInput').value.trim().toLowerCase(), senha = $('passwordInput').value;
+            if (!email || !senha) throw regra('Informe e-mail e senha.');
+            const { error } = await supa.auth.signInWithPassword({ email, password: senha });
+            if (error) throw error;
+            return entrarNoSistema($('lembrar').checked);
+          });
+        });
+      }
     })();
   </script>
 </body>

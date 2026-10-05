@@ -10,7 +10,7 @@
   const dataHora = iso => iso ? new Date(iso).toLocaleString('pt-BR', {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'}) : '—';
   const sinal = v => (v > 0.001 ? '+ ' : v < -0.001 ? '− ' : '') + D.moedaBR(Math.abs(v));
   // Usuários que podem operar caixa (ativos, com acesso a Vendas)
-  const operadoresCaixa = () => D.usuarios().filter(u => u.ativo && u.hash && D.podeAcessar('vendas', u));
+  const operadoresCaixa = () => D.usuarios().filter(u => u.ativo && (u.hash || u.nuvem) && D.podeAcessar('vendas', u));
 
   // ---- Abertura (também usada pelo PDV quando o caixa está fechado) ----
   function AbrirCaixa({onAberto, compacto}){

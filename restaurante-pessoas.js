@@ -77,7 +77,7 @@
     const excluir = f => { if (confirmar(`Excluir o funcionário "${f.nome}"? Para quem saiu da empresa, prefira desativar e manter o histórico.`)) tentar(() => D.excluirFuncionario(f.id), `Funcionário "${f.nome}" excluído.`); };
     const editar = f => setForm({...FUNCIONARIO_VAZIO, ...f, salario: f.salario ? D.valorBR(f.salario) : '', usuarioId: f.usuarioId || ''});
     const campo = form && texto(form, setForm);
-    const usuarios = D.usuarios().filter(u => u.hash);
+    const usuarios = D.usuarios().filter(u => u.hash || u.nuvem);
     const podeFinanceiro = D.podeAcessar('financeiro');
     return html`
       <${Cabecalho} titulo="Funcionários" sub=${todos.length ? `${plural(ativos.length, 'funcionário ativo', 'funcionários ativos')}${podeFinanceiro && folha ? ` · folha mensal ${D.moedaBR(folha)}` : ''}` : 'A equipe do restaurante (quem entra no sistema fica em Usuários)'}>

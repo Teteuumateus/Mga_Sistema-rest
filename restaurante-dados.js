@@ -72,7 +72,11 @@
   // ---- Armazenamento ----
   const ler = (k, def) => { try { const raw = localStorage.getItem('mga_' + k); return raw !== null ? JSON.parse(raw) : def; } catch (e) { return def; } };
   const gravar = (k, v) => { try { localStorage.setItem('mga_' + k, JSON.stringify(v)); } catch (e) { /* storage indisponível */ } };
-  const novoId = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  // Supabase (restaurante-nuvem.js): recebe as chaves salvas para gravar no banco
+  const aoSalvarFns = new Set();
+  // Ids no formato uuid, o mesmo usado no Supabase (o prefixo antigo só fica nos dados anteriores)
+  const novoId = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID()
+    : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); });
   const r2 = v => Math.round((Number(v) || 0) * 100) / 100;
   const r3 = v => Math.round((Number(v) || 0) * 1000) / 1000; // quantidades (0,350 KG)
   const agora = () => new Date().toISOString();
@@ -113,8 +117,9 @@
   const LIMITE_AUDITORIA = 5000; // mantém os mais recentes para não estourar o armazenamento local
   function registrarAuditoria(modulo, descricao, extra){
     const lista = ler('auditoria', []);
-    lista.push({data: agora(), usuario: usuario(), modulo, descricao, ...(extra || {})});
+    lista.push({id: novoId(), data: agora(), usuario: usuario(), modulo, descricao, ...(extra || {})});
     gravar('auditoria', lista.slice(-LIMITE_AUDITORIA));
+    aoSalvarFns.forEach(fn => { try { fn(['auditoria']); } catch (e) { console.error(e); } });
   }
   let moduloAuditoria = 'Cadastros';
   // Cada bloco de funções marca o próprio módulo antes de auditar
@@ -142,6 +147,7 @@
     gravar('restGrupos', grupos);
   }
   if (!Array.isArray(produtos)) {
+    gravar('cadastrosExemplo', true);
     produtos = [];
     let cod = 0;
     Object.entries(SEED).forEach(([grupo, itens]) => {
@@ -214,6 +220,41 @@
       restFornecedores: fornecedores, restFuncionarios: funcionarios, restRegioes: regioes, restAdicionais: adicionais, restPromocoes: promocoes,
       restAplicativos: aplicativos, restEmbalagens: embalagens, restContasBancarias: contasBancarias, restMovConta: movConta};
     chaves.forEach(k => gravar(k, mapa[k]));
+    versao++;
+    ouvintes.forEach(fn => fn(versao));
+    aoSalvarFns.forEach(fn => { try { fn(chaves); } catch (e) { console.error(e); } });
+  }
+  const aoSalvar = fn => { aoSalvarFns.add(fn); return () => aoSalvarFns.delete(fn); };
+  // Troca coleções pelas que vieram do banco (sem disparar nova gravação no banco)
+  function substituirCadastros(d){
+    const trocar = {
+      grupos: v => { grupos = v; return 'restGrupos'; }, produtos: v => { produtos = v; return 'restProdutos'; },
+      adicionais: v => { adicionais = v; return 'restAdicionais'; }, mesas: v => { mesas = v; return 'restMesas'; },
+      formas: v => { formas = v; return 'restFormas'; }, clientes: v => { listaClientesArr.splice(0, listaClientesArr.length, ...v); return 'clientes'; },
+      fornecedores: v => { fornecedores = v; return 'restFornecedores'; }, funcionarios: v => { funcionarios = v; return 'restFuncionarios'; },
+      entregadores: v => { entregadores = v; return 'restEntregadores'; }, regioes: v => { regioes = v; return 'restRegioes'; },
+      aplicativos: v => { aplicativos = v; return 'restAplicativos'; }, embalagens: v => { embalagens = v; return 'restEmbalagens'; },
+      promocoes: v => { promocoes = v; return 'restPromocoes'; }, contasBancarias: v => { contasBancarias = v; return 'restContasBancarias'; },
+      caixas: v => { caixas = v; return 'restCaixas'; }, movCaixa: v => { movCaixa = v; return 'restMovCaixa'; }, vendas: v => { vendas = v; return 'restVendas'; },
+      contas: v => { contas = v; return 'restContas'; }, movEstoque: v => { movEstoque = v; return 'restMovEstoque'; }, movConta: v => { movConta = v; return 'restMovConta'; },
+      categorias: v => { categorias = v; return 'restCategorias'; }, config: v => { config = v; return 'restConfig'; },
+      usuarios: v => { usuarios = v; return 'restUsuarios'; }
+    };
+    const mapa = () => ({restGrupos: grupos, restProdutos: produtos, restAdicionais: adicionais, restMesas: mesas, restFormas: formas, clientes: listaClientes(),
+      restFornecedores: fornecedores, restFuncionarios: funcionarios, restEntregadores: entregadores, restRegioes: regioes, restAplicativos: aplicativos,
+      restEmbalagens: embalagens, restPromocoes: promocoes, restContasBancarias: contasBancarias, restCaixas: caixas, restMovCaixa: movCaixa,
+      restVendas: vendas, restContas: contas, restMovEstoque: movEstoque, restMovConta: movConta, restCategorias: categorias, restConfig: config, restUsuarios: usuarios});
+    const chaves = Object.keys(d).filter(k => trocar[k]).map(k => trocar[k](d[k]));
+    if (d.seq) Object.assign(seq, d.seq);
+    // Numeração continua do maior número existente
+    seq.produto = Math.max(seq.produto || 0, produtos.reduce((m, p) => Math.max(m, Number(p.codigo) || 0), 0));
+    seq.venda = Math.max(seq.venda || 0, vendas.reduce((m, v) => Math.max(m, v.numero || 0), 0));
+    seq.caixa = Math.max(seq.caixa || 0, caixas.reduce((m, c) => Math.max(m, c.numero || 0), 0));
+    const m = mapa();
+    chaves.forEach(k => gravar(k, m[k]));
+    gravar('restSeq', seq);
+    if (d.auditoria) gravar('auditoria', d.auditoria.slice(-LIMITE_AUDITORIA));
+    if (d.grupos || d.produtos) gravar('cadastrosExemplo', false);
     versao++;
     ouvintes.forEach(fn => fn(versao));
   }
@@ -291,7 +332,7 @@
   }
   // Login pelo Supabase: guarda o usuário do banco na lista local (sem senha) para sessaoAtual() achá-lo
   function iniciarSessaoSupabase(d, lembrar){
-    const u = {id: d.id, nome: d.nome, login: d.login, perfil: PERFIS[d.perfil] ? d.perfil : 'CAIXA', ativo: true, empresaId: d.empresaId};
+    const u = {id: d.id, nome: d.nome, login: d.login, perfil: PERFIS[d.perfil] ? d.perfil : 'CAIXA', ativo: true, empresaId: d.empresaId, master: !!d.master};
     u.modulos = ehAdmin(u) ? Object.keys(MODULOS) : (d.modulos?.length ? d.modulos : PERFIS[u.perfil].modulos).filter(m => MODULOS[m]);
     usuarios = usuarioPorId(u.id) ? usuarios.map(x => x.id === u.id ? {...x, ...u} : x) : [...usuarios, {...u, criadoEm: agora()}];
     salvar('restUsuarios');
@@ -949,7 +990,7 @@
       salvar('clientes');
       return existente;
     }
-    const novo = {id: 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), doc: '', email: '', obs: '', ...c, dataCadastro: agora()};
+    const novo = {id: novoId(), doc: '', email: '', obs: '', ...c, dataCadastro: agora()};
     listaClientes().push(novo);
     auditar(`Cliente ${c.nome} cadastrado`, {detalhe: [c.telefone, c.bairro].filter(Boolean).join(' · ')});
     salvar('clientes');
@@ -2422,13 +2463,13 @@
     TIPOS_VENDA, STATUS_VENDA, TIPOS_FORMA, TIPOS_MOV_CAIXA, MOV_ENTRADA, MOV_SAIDA, VEICULOS, UNIDADES, TIPOS_CONTA, FORMAS_BAIXA, CATEGORIA_PRAZO,
     MODULOS, PERFIS, LIMITE_FOTO, TIPOS_MOV_ESTOQUE, MOTIVOS_SAIDA,
     on, versao: () => versao, norm, lerValor, moedaBR, valorBR, qtdBR, mascaraTelefone, mascaraCep, diaISO, hojeISO, dataBR,
-    usuario, registrarAuditoria, auditoria,
+    usuario, registrarAuditoria, auditoria, novoId, aoSalvar, substituirCadastros,
     // Usuários, sessão e permissões
     usuarios: () => usuarios, usuarioPorId, temUsuarios, sessaoAtual, podeAcessar, modulosDo, ehAdmin,
     criarPrimeiroAdmin, autenticar, iniciarSessao, iniciarSessaoSupabase, encerrarSessao, salvarUsuario, excluirUsuario,
     grupos: () => grupos, produtos: () => produtos, clientes: listaClientes, entregadores: () => entregadores,
     formas: () => formas, formasAtivas, formaPorId, prazoHabilitado, tipoPagamento,
-    caixas: () => caixas, movCaixa: () => movCaixa, vendas: () => vendas, contas: () => contas, categorias: () => categorias,
+    seq: () => seq, caixas: () => caixas, movCaixa: () => movCaixa, vendas: () => vendas, contas: () => contas, categorias: () => categorias,
     grupoPorId, produtoPorId, clientePorId, entregadorPorId, vendaPorId, contaPorId, caixaPorId, produtosDoGrupo, produtoVendido, contaVencida, proximoCodigo,
     salvarGrupo: cad(salvarGrupo), excluirGrupo: cad(excluirGrupo), salvarProduto: cad(salvarProduto), excluirProduto: cad(excluirProduto),
     salvarCliente: cad(salvarClienteRest), excluirCliente: cad(excluirClienteRest), salvarEntregador: cad(salvarEntregador), excluirEntregador: cad(excluirEntregador),

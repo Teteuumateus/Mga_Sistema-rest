@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>MGA | Painel master</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="theme.js"></script>
+  <style>
+    :root { --fundo: #edf1f6; --card: #ffffff; --texto: #1f2d3d; --suave: #69778d; --linha: #dfe7f1; --azul: #1f90ff; --azul-escuro: #071d3d;
+      --campo: #ffffff; --erro-fundo: #fbe4e8; --erro: #b4233f; --ok-fundo: #e3f6ec; --ok: #16794a; --chip: #ecf6ff; --chip-texto: #1d5fb0; }
+    [data-theme="dark"] { --fundo: #0b1220; --card: #121b2c; --texto: #e3eaf5; --suave: #8fa0b8; --linha: #26344d; --campo: #0e1626;
+      --erro-fundo: #3a1520; --erro: #fca5b5; --ok-fundo: #10301f; --ok: #7ee2a8; --chip: #13233d; --chip-texto: #9ccaff; color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--fundo); color: var(--texto); font: 15px/1.45 Inter, system-ui, sans-serif; }
+    button, input { font: inherit; }
+    .topo { display: flex; align-items: center; gap: 12px; padding: 14px 24px; background: var(--azul-escuro); color: #fff; }
+    .topo .marca { display: flex; align-items: center; gap: 10px; }
+    .topo .barras { display: flex; align-items: flex-end; gap: 3px; height: 30px; }
+    .topo .barras i { display: block; width: 6px; border-radius: 3px 3px 0 0; background: linear-gradient(180deg, #4dc0ff 0%, #2d8ef7 100%); }
+    .topo .barras i:nth-child(1) { height: 16px; } .topo .barras i:nth-child(2) { height: 22px; }
+    .topo .barras i:nth-child(3) { height: 26px; } .topo .barras i:nth-child(4) { height: 30px; }
+    .topo .nome { display: grid; line-height: 1.1; }
+    .topo .nome b { font: 800 1.35rem Sora, sans-serif; }
+    .topo .nome span { font-size: 0.85rem; font-weight: 600; opacity: 0.85; }
+    .topo .selo { margin-left: 4px; padding: 3px 10px; border-radius: 999px; background: rgba(77, 192, 255, 0.18); color: #9ccaff; font-size: 0.78rem; font-weight: 700; }
+    .topo .quem { margin-left: auto; font-size: 0.88rem; opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    .topo .btn { background: rgba(255,255,255,0.12); color: #fff; border-color: transparent; }
+    main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+    h1 { font: 700 1.6rem Sora, sans-serif; margin: 0 0 4px; }
+    .sub { color: var(--suave); margin: 0 0 20px; }
+    .barra { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+    .barra input { flex: 1 1 240px; }
+    input { width: 100%; padding: 10px 12px; border: 1px solid var(--linha); border-radius: 10px; background: var(--campo); color: var(--texto); }
+    input:focus { outline: 2px solid var(--azul); outline-offset: -1px; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 9px 16px; border-radius: 10px; border: 1px solid var(--linha);
+      background: var(--card); color: var(--texto); font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .btn:disabled { opacity: 0.6; cursor: wait; }
+    .btn-azul { background: var(--azul); border-color: var(--azul); color: #fff; }
+    .btn-mini { padding: 4px 10px; font-size: 0.83rem; border-radius: 8px; }
+    .aviso { margin: 0 0 16px; padding: 10px 14px; border-radius: 10px; font-weight: 600; }
+    .aviso.erro { background: var(--erro-fundo); color: var(--erro); }
+    .aviso.ok { background: var(--ok-fundo); color: var(--ok); }
+    .lista { display: grid; gap: 12px; }
+    .empresa { background: var(--card); border: 1px solid var(--linha); border-radius: 14px; padding: 16px 18px; }
+    .empresa-topo { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+    .empresa h2 { font: 700 1.1rem Sora, sans-serif; margin: 0; }
+    .empresa .meta { color: var(--suave); font-size: 0.86rem; margin-top: 2px; }
+    .empresa-topo .botoes { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+    .admins { margin-top: 12px; display: grid; gap: 6px; }
+    .admin { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 10px; border-radius: 10px; background: var(--chip); color: var(--chip-texto); font-size: 0.9rem; }
+    .admin b { color: var(--texto); }
+    .admin .btn { margin-left: auto; }
+    .admin.inativo { opacity: 0.6; }
+    .vazio { text-align: center; color: var(--suave); padding: 40px 16px; background: var(--card); border: 1px dashed var(--linha); border-radius: 14px; }
+    dialog { width: min(520px, calc(100vw - 32px)); border: 0; border-radius: 16px; padding: 22px; background: var(--card); color: var(--texto); box-shadow: 0 20px 60px rgba(0,0,0,0.35); }
+    dialog::backdrop { background: rgba(7, 18, 36, 0.55); }
+    dialog h3 { font: 700 1.2rem Sora, sans-serif; margin: 0 0 4px; }
+    dialog .sub { margin-bottom: 14px; }
+    .campos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .campos .inteiro { grid-column: 1 / -1; }
+    .campos label { display: grid; gap: 4px; font-size: 0.85rem; font-weight: 600; color: var(--suave); }
+    .secao { grid-column: 1 / -1; margin: 6px 0 -4px; font-weight: 700; font-size: 0.9rem; }
+    .acoes { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+    .carregando { padding: 60px 16px; text-align: center; color: var(--suave); }
+    @media (max-width: 560px) {
+      .topo { padding: 12px 16px; }
+      .topo .selo { display: none; }
+      .campos { grid-template-columns: 1fr; }
+      .empresa-topo .botoes, .admin .btn { margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topo">
+    <div class="marca" aria-label="MGA Restaurante · Painel master">
+      <span class="barras" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      <span class="nome"><b>MGA</b><span>Restaurante</span></span>
+      <span class="selo">Painel master</span>
+    </div>
+    <span class="quem" id="quem"></span>
+    <button type="button" class="btn" id="btnSair">Sair</button>
+  </header>
+  <main>
+    <h1>Empresas clientes</h1>
+    <p class="sub">Cada empresa tem os próprios dados. O administrador que você cadastra aqui entra no sistema e cadastra a equipe dele.</p>
+    <div class="barra">
+      <input type="search" id="busca" placeholder="Buscar empresa, CNPJ ou e-mail..." aria-label="Buscar">
+      <button type="button" class="btn btn-azul" id="btnNova">+ Nova empresa</button>
+    </div>
+    <p class="aviso" id="aviso" role="status" hidden></p>
+    <div class="lista" id="lista"><div class="carregando">Carregando...</div></div>
+  </main>
+
+  <!-- Nova empresa + administrador -->
+  <dialog id="dlgEmpresa">
+    <form id="formEmpresa" novalidate>
+      <h3>Nova empresa</h3>
+      <p class="sub">Cria o restaurante (com formas de pagamento, mesas e categorias financeiras iniciais) e o login do administrador.</p>
+      <div class="campos">
+        <div class="secao">Restaurante</div>
+        <label class="inteiro">Nome do restaurante *<input name="nome" maxlength="80" required></label>
+        <label>CNPJ<input name="cnpj" maxlength="18" inputmode="numeric"></label>
+        <label>Telefone<input name="telefone" maxlength="20" inputmode="tel"></label>
+        <div class="secao">Administrador (o cliente)</div>
+        <label class="inteiro">Nome *<input name="admin_nome" maxlength="60" required></label>
+        <label class="inteiro">E-mail (para entrar) *<input name="admin_email" type="email" maxlength="80" autocapitalize="none" spellcheck="false" required></label>
+        <label>Senha * (mín. 6)<input name="admin_senha" type="password" autocomplete="new-password" required></label>
+        <label>Repita a senha *<input name="confirmar" type="password" autocomplete="new-password" required></label>
+      </div>
+      <p class="aviso erro" data-erro hidden></p>
+      <div class="acoes"><button type="button" class="btn" data-fechar>Cancelar</button><button type="submit" class="btn btn-azul">Criar empresa</button></div>
+    </form>
+  </dialog>
+
+  <!-- Mais um administrador numa empresa -->
+  <dialog id="dlgAdmin">
+    <form id="formAdmin" novalidate>
+      <h3>Novo administrador</h3>
+      <p class="sub" data-empresa></p>
+      <div class="campos">
+        <label class="inteiro">Nome *<input name="nome" maxlength="60" required></label>
+        <label class="inteiro">E-mail (para entrar) *<input name="email" type="email" maxlength="80" autocapitalize="none" spellcheck="false" required></label>
+        <label>Senha * (mín. 6)<input name="senha" type="password" autocomplete="new-password" required></label>
+        <label>Repita a senha *<input name="confirmar" type="password" autocomplete="new-password" required></label>
+      </div>
+      <p class="aviso erro" data-erro hidden></p>
+      <div class="acoes"><button type="button" class="btn" data-fechar>Cancelar</button><button type="submit" class="btn btn-azul">Cadastrar administrador</button></div>
+    </form>
+  </dialog>
+
+  <!-- Nova senha para um administrador -->
+  <dialog id="dlgSenha">
+    <form id="formSenha" novalidate>
+      <h3>Nova senha</h3>
+      <p class="sub" data-quem></p>
+      <div class="campos">
+        <label>Nova senha * (mín. 6)<input name="senha" type="password" autocomplete="new-password" required></label>
+        <label>Repita a senha *<input name="confirmar" type="password" autocomplete="new-password" required></label>
+      </div>
+      <p class="aviso erro" data-erro hidden></p>
+      <div class="acoes"><button type="button" class="btn" data-fechar>Cancelar</button><button type="submit" class="btn btn-azul">Trocar senha</button></div>
+    </form>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" crossorigin></script>
+  <script src="supabase-config.js"></script>
+  <script src="restaurante-dados.js"></script>
+  <script>
+    (async function(){
+      const $ = id => document.getElementById(id);
+      const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+      const regra = msg => Object.assign(new Error(msg), {regra: true});
+      const data = v => v ? new Date(v).toLocaleDateString('pt-BR') : '';
+      if (!window.supa) { $('lista').innerHTML = '<div class="vazio">Sem conexão com o banco (supabase-config.js).</div>'; return; }
+
+      // Só o master fica nesta página
+      const { data: { session } } = await supa.auth.getSession();
+      if (!session) { location.replace('login.html'); return; }
+      const { data: master } = await supa.from('masters').select('id, nome').eq('id', session.user.id).maybeSingle();
+      if (!master) { location.replace('login.html'); return; }
+      $('quem').textContent = `${master.nome} · ${session.user.email}`;
+      $('btnSair').addEventListener('click', async () => { await supa.auth.signOut(); location.replace('login.html'); });
+
+      let empresas = [];
+      let tempoAviso = null;
+      function aviso(msg, tipo = 'ok'){
+        const el = $('aviso');
+        el.textContent = msg; el.className = 'aviso ' + tipo; el.hidden = !msg;
+        clearTimeout(tempoAviso);
+        if (msg && tipo === 'ok') tempoAviso = setTimeout(() => { el.hidden = true; }, 6000);
+      }
+      async function chamar(corpo){
+        const { data, error } = await supa.functions.invoke('master', { body: corpo });
+        if (error) {
+          let msg = error.message;
+          try { msg = (await error.context.json()).erro || msg; } catch (e) { /* resposta sem JSON */ }
+          if (/Failed to send|fetch|NetworkError|not found|404/i.test(msg)) msg = 'Não foi possível falar com o servidor. Confira a internet e se a função "master" foi publicada no Supabase.';
+          throw regra(msg);
+        }
+        if (data?.erro) throw regra(data.erro);
+        return data;
+      }
+
+      function desenhar(){
+        const termo = $('busca').value.trim().toLowerCase();
+        const lista = empresas.filter(e => !termo || [e.nome, e.cnpj, e.telefone, ...e.admins.flatMap(a => [a.nome, a.login])].some(v => String(v || '').toLowerCase().includes(termo)));
+        if (!empresas.length) { $('lista').innerHTML = '<div class="vazio">Nenhuma empresa ainda. Clique em <b>+ Nova empresa</b> para cadastrar o primeiro cliente.</div>'; return; }
+        if (!lista.length) { $('lista').innerHTML = '<div class="vazio">Nenhuma empresa encontrada.</div>'; return; }
+        $('lista').innerHTML = lista.map(e => `
+          <article class="empresa">
+            <div class="empresa-topo">
+              <div>
+                <h2>${esc(e.nome)}</h2>
+                <div class="meta">${[e.cnpj && 'CNPJ ' + esc(e.cnpj), e.telefone && esc(e.telefone), 'Criada em ' + data(e.criado_em), e.usuarios + (e.usuarios === 1 ? ' usuário' : ' usuários')].filter(Boolean).join(' · ')}</div>
+              </div>
+              <div class="botoes">
+                <button type="button" class="btn btn-mini btn-azul" data-entrar="${esc(e.id)}">Entrar na empresa →</button>
+                <button type="button" class="btn btn-mini" data-novo-admin="${esc(e.id)}">+ Administrador</button>
+              </div>
+            </div>
+            <div class="admins">
+              ${e.admins.length ? e.admins.map(a => `
+                <div class="admin${a.ativo ? '' : ' inativo'}">👤 <b>${esc(a.nome)}</b> ${esc(a.login)}${a.ativo ? '' : ' (inativo)'}
+                  <button type="button" class="btn btn-mini" data-senha="${esc(a.id)}" data-empresa="${esc(e.id)}">Nova senha</button>
+                </div>`).join('') : '<div class="admin">Sem administrador. Cadastre um para o cliente conseguir entrar.</div>'}
+            </div>
+          </article>`).join('');
+      }
+      async function carregar(){
+        const [e, u] = await Promise.all([
+          supa.from('empresas').select('id, nome, cnpj, telefone, ativo, criado_em').order('criado_em', { ascending: false }),
+          supa.from('usuarios').select('id, empresa_id, nome, login, perfil, ativo')
+        ]);
+        const erro = e.error || u.error;
+        if (erro) { $('lista').innerHTML = ''; aviso('Não foi possível ler as empresas: ' + erro.message + ' (rode a migração 05 no Supabase).', 'erro'); return; }
+        empresas = e.data.map(emp => {
+          const daEmpresa = u.data.filter(x => x.empresa_id === emp.id && x.id !== session.user.id);
+          return { ...emp, usuarios: daEmpresa.length, admins: daEmpresa.filter(x => x.perfil === 'ADMIN') };
+        });
+        if (!empresas.length && !u.data.length) aviso('Nenhuma empresa visível. Se você já tem empresas, rode a migração 05 no Supabase.', 'erro');
+        desenhar();
+      }
+
+      // Entrar na empresa como master (suporte): o banco passa a tratar o master como usuário dela
+      async function entrar(emp, botao){
+        botao.disabled = true;
+        const { error } = await supa.rpc('master_entrar', { p_empresa: emp.id });
+        if (error) { botao.disabled = false; aviso('Não foi possível entrar: ' + error.message + ' (rode a migração 05 no Supabase).', 'erro'); return; }
+        // Dados de outra empresa neste navegador não vão para esta
+        try {
+          if (localStorage.getItem('mga_nuvemEmpresa') !== emp.id) localStorage.setItem('mga_nuvemEmpresa', 'trocou');
+          localStorage.setItem('mga_nuvemVersao', '2');
+        } catch (x) { /* storage indisponível */ }
+        RestDados.iniciarSessaoSupabase({ id: session.user.id, nome: 'MGA Tecnologia (suporte)', login: session.user.email, perfil: 'ADMIN', ativo: true,
+          empresaId: emp.id, modulos: [], master: true }, false);
+        location.href = 'mga-sistema.html';
+      }
+      $('busca').addEventListener('input', desenhar);
+
+      // Diálogos
+      const abrir = (id, preparar) => {
+        const dlg = $(id), form = dlg.querySelector('form');
+        form.reset();
+        const erro = form.querySelector('[data-erro]'); erro.hidden = true;
+        preparar?.(dlg);
+        dlg.showModal();
+        form.querySelector('input').focus();
+      };
+      document.querySelectorAll('[data-fechar]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
+      function aoEnviar(id, acao){
+        const form = $(id);
+        form.addEventListener('submit', async ev => {
+          ev.preventDefault();
+          const botao = form.querySelector('[type=submit]'), erro = form.querySelector('[data-erro]');
+          const v = Object.fromEntries(new FormData(form));
+          erro.hidden = true; botao.disabled = true;
+          try { const msg = await acao(v, form); form.closest('dialog').close(); aviso(msg, 'ok'); await carregar(); aviso(msg, 'ok'); }
+          catch (e) { erro.textContent = e.regra ? e.message : 'Erro: ' + e.message; erro.hidden = false; }
+          finally { botao.disabled = false; }
+        });
+      }
+      const conferirSenha = (senha, confirmar) => {
+        if (String(senha).length < 6) throw regra('A senha precisa ter pelo menos 6 caracteres.');
+        if (senha !== confirmar) throw regra('As senhas não conferem.');
+      };
+
+      $('btnNova').addEventListener('click', () => abrir('dlgEmpresa'));
+      aoEnviar('formEmpresa', async v => {
+        if (!v.nome.trim()) throw regra('Informe o nome do restaurante.');
+        if (!v.admin_nome.trim() || !v.admin_email.trim()) throw regra('Informe o nome e o e-mail do administrador.');
+        conferirSenha(v.admin_senha, v.confirmar);
+        await chamar({ acao: 'criar_empresa', nome: v.nome, cnpj: v.cnpj, telefone: v.telefone, admin_nome: v.admin_nome, admin_email: v.admin_email, admin_senha: v.admin_senha });
+        return `Empresa "${v.nome.trim()}" criada. O administrador entra com o e-mail ${v.admin_email.trim().toLowerCase()} e a senha que você definiu.`;
+      });
+
+      let empresaAlvo = null, adminAlvo = null;
+      $('lista').addEventListener('click', ev => {
+        const b = ev.target.closest('button');
+        if (!b) return;
+        if (b.dataset.entrar) entrar(empresas.find(e => e.id === b.dataset.entrar), b);
+        if (b.dataset.novoAdmin) {
+          empresaAlvo = empresas.find(e => e.id === b.dataset.novoAdmin);
+          abrir('dlgAdmin', dlg => { dlg.querySelector('[data-empresa]').textContent = 'Empresa: ' + empresaAlvo.nome; });
+        }
+        if (b.dataset.senha) {
+          adminAlvo = empresas.find(e => e.id === b.dataset.empresa).admins.find(a => a.id === b.dataset.senha);
+          abrir('dlgSenha', dlg => { dlg.querySelector('[data-quem]').textContent = `${adminAlvo.nome} · ${adminAlvo.login}`; });
+        }
+      });
+      aoEnviar('formAdmin', async v => {
+        if (!v.nome.trim() || !v.email.trim()) throw regra('Informe o nome e o e-mail.');
+        conferirSenha(v.senha, v.confirmar);
+        await chamar({ acao: 'criar_admin', empresa_id: empresaAlvo.id, nome: v.nome, email: v.email, senha: v.senha });
+        return `Administrador cadastrado em "${empresaAlvo.nome}". Ele entra com o e-mail ${v.email.trim().toLowerCase()}.`;
+      });
+      aoEnviar('formSenha', async v => {
+        conferirSenha(v.senha, v.confirmar);
+        await chamar({ acao: 'redefinir_senha', usuario_id: adminAlvo.id, senha: v.senha });
+        return `Senha de ${adminAlvo.nome} trocada. Passe a nova senha para o cliente.`;
+      });
+
+      await carregar();
+    })();
+  </script>
+</body>
+</html>
