@@ -38,13 +38,14 @@
     const baixadasMes = todas.filter(c => c.status === 'PAGA' && (c.pagoEm || '').startsWith(mes));
     const porFiltro = {
       abertas: c => c.status === 'ABERTA', vencidas: c => D.contaVencida(c), hoje: c => c.status === 'ABERTA' && c.vencimento === hoje,
-      mes: c => c.vencimento.startsWith(mes), pagas: c => c.status === 'PAGA', todas: () => true
-    }[filtro];
+      mes: c => c.vencimento.startsWith(mes), pagas: c => c.status === 'PAGA', todas: () => true,
+      prox7: c => c.status === 'ABERTA' && c.vencimento > hoje && c.vencimento <= em7, pagasMes: c => c.status === 'PAGA' && (c.pagoEm || '').startsWith(mes)
+    }[filtro] || (() => true);
     const b = D.norm(busca);
     const lista = todas.filter(porFiltro)
       .filter(c => !categoria || c.categoria === categoria)
       .filter(c => !busca || D.norm([c.descricao, c.categoria, D.clientePorId(c.clienteId)?.nome, D.fornecedorPorId(c.fornecedorId)?.nome].join(' ')).includes(b))
-      .sort((x, y) => filtro === 'pagas' ? String(y.pagoEm).localeCompare(String(x.pagoEm)) : x.vencimento.localeCompare(y.vencimento));
+      .sort((x, y) => ['pagas', 'pagasMes'].includes(filtro) ? String(y.pagoEm).localeCompare(String(x.pagoEm)) : x.vencimento.localeCompare(y.vencimento));
     const cats = D.categorias()[tipo];
     const nomeBaixa = pagar ? 'Pagar' : 'Receber';
 
@@ -70,14 +71,14 @@
       <div className="rest-kpis-mini">
         ${kpi('Vencidas', vencidas, n => plural(n, 'conta', 'contas'), true, 'vencidas')}
         ${kpi('Vencem hoje', venceHoje, n => plural(n, 'conta', 'contas'), false, 'hoje')}
-        ${kpi('Próximos 7 dias', proximas, n => plural(n, 'conta', 'contas'), false, 'abertas')}
-        ${kpi(pagar ? 'Pagas no mês' : 'Recebidas no mês', baixadasMes, n => plural(n, 'baixa', 'baixas'), false, 'pagas')}
+        ${kpi('Próximos 7 dias', proximas, n => plural(n, 'conta', 'contas'), false, 'prox7')}
+        ${kpi(pagar ? 'Pagas no mês' : 'Recebidas no mês', baixadasMes, n => plural(n, 'baixa', 'baixas'), false, 'pagasMes')}
       </div>
       ${form && html`
         <${FormCard} titulo=${form.id ? 'Editar conta' : pagar ? 'Nova conta a pagar' : 'Nova conta a receber'} onSalvar=${salvar} onCancelar=${() => setForm(null)}>
           <${Campo} rotulo="Descrição" largo><input type="text" value=${form.descricao} maxLength="100" placeholder=${pagar ? 'Ex.: Conta de luz de setembro' : 'Ex.: Evento da empresa X'} onInput=${e => setForm({...form, descricao: e.target.value})} /><//>
           <${Campo} rotulo="Categoria">
-            <select value=${form.categoria} onChange=${e => setForm({...form, categoria: e.target.value})}>${cats.map(c => html`<option key=${c}>${c}</option>`)}</select>
+            <select value=${form.categoria} onChange=${e => setForm({...form, categoria: e.target.value})}>${(cats.includes(form.categoria) || !form.categoria ? cats : [form.categoria, ...cats]).map(c => html`<option key=${c}>${c}</option>`)}</select>
           <//>
           <${Campo} rotulo="Valor (R$)"><${CampoValor} valor=${form.valor} onChange=${v => setForm(f => ({...f, valor: v}))} /><//>
           <${Campo} rotulo="Vencimento"><input type="date" value=${form.vencimento} onChange=${e => setForm({...form, vencimento: e.target.value})} /><//>

@@ -98,12 +98,12 @@
         <${FormCard} titulo=${form.id ? `Editar promoção — ${form.nome}` : 'Nova promoção'} onSalvar=${salvar} onCancelar=${() => setForm(null)}>
           <${Campo} rotulo="Nome"><input type="text" value=${form.nome} maxLength="40" placeholder="Ex.: Happy hour, Prato do dia" onInput=${e => setForm({...form, nome: e.target.value})} /><//>
           <${Campo} rotulo="Vale para">
-            <select value=${form.alvo} onChange=${e => setForm({...form, alvo: e.target.value, ids: [], tipo: e.target.value === 'CATEGORIA' ? 'PERCENTUAL' : form.tipo})}>
+            <select value=${form.alvo} onChange=${e => { const tipo = e.target.value === 'CATEGORIA' ? 'PERCENTUAL' : form.tipo; setForm({...form, alvo: e.target.value, ids: [], tipo, valor: tipo === form.tipo ? form.valor : ''}); }}>
               <option value="PRODUTO">Produtos escolhidos</option><option value="CATEGORIA">Categorias inteiras</option>
             </select>
           <//>
           <${Campo} rotulo="Tipo de desconto">
-            <select value=${form.tipo} onChange=${e => setForm({...form, tipo: e.target.value})}>
+            <select value=${form.tipo} onChange=${e => setForm({...form, tipo: e.target.value, valor: ''})}>
               <option value="PERCENTUAL">Desconto em %</option>
               ${form.alvo === 'PRODUTO' && html`<option value="PRECO">Preço fixo (R$)</option>`}
             </select>

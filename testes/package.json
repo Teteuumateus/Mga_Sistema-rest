@@ -1,0 +1,13 @@
+{
+  "name": "mga-testes",
+  "private": true,
+  "description": "Testes automáticos do MGA Restaurante",
+  "scripts": {
+    "test": "node rodar.js",
+    "navegador": "node navegador.js",
+    "banco": "node banco.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.2.17"
+  }
+}

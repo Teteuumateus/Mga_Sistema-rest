@@ -52,7 +52,7 @@
           <td><b>${f.nome}</b>${f.cidade || f.obs ? html`<small className="history-date">${[f.cidade, f.obs].filter(Boolean).join(' · ')}</small>` : null}</td>
           <td className="nowrap">${f.documento || '—'}</td>
           <td>${f.telefone || '—'}${f.contato || f.email ? html`<small className="history-date">${[f.contato, f.email].filter(Boolean).join(' · ')}</small>` : null}</td>
-          <td>${compras(f.id) ? html`<button type="button" className="rest-link" onClick=${() => ir('estoque/movimentos')}>${plural(compras(f.id), 'entrada', 'entradas')}</button>` : '—'}</td>
+          <td>${compras(f.id) ? (D.podeAcessar('estoque') ? html`<button type="button" className="rest-link" onClick=${() => ir('estoque/entradas')}>${plural(compras(f.id), 'entrada', 'entradas')}</button>` : plural(compras(f.id), 'entrada', 'entradas')) : '—'}</td>
           <td className="nowrap">${emAberto(f.id) ? D.moedaBR(emAberto(f.id)) : '—'}</td>
           <td><${StatusAtivo} ativo=${f.ativo} /></td>
           <td><${Acoes} nome=${f.nome} onEditar=${() => setForm({...FORNECEDOR_VAZIO, ...f})} onExcluir=${() => excluir(f)} /></td>

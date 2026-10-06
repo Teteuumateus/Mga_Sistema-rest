@@ -302,7 +302,7 @@
     useDados();
     const {el: aviso, mostrar} = useAviso();
     const cx = D.caixaAberto();
-    const [periodo, setPeriodo] = useState(PERIODOS.some(([p]) => p === params.p) ? params.p : cx ? 'caixa' : 'hoje');
+    const [periodo, setPeriodo] = useState(PERIODOS.some(([p]) => p === params.p) && (params.p !== 'caixa' || cx) ? params.p : cx ? 'caixa' : 'hoje');
     const [busca, setBusca] = useState('');
     const [sel, setSel] = useState(null);
     const [limite, setLimite] = useState(100);

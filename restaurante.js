@@ -33,7 +33,8 @@
       ['mesas', 'Mesas', 'mesas', 'Vendas das mesas do salão'],
       ['delivery', 'Delivery', 'delivery', 'Pedidos feitos pelo WhatsApp ou por telefone'],
       ['vendas/pdv', 'Venda balcão'], ['vendas/cozinha', 'Fila de produção', 'cozinha', 'O que a cozinha tem para preparar'], ['vendas/caixa', 'Caixa'], ['vendas/lista', 'Vendas realizadas'], ['vendas/caixas', 'Caixas anteriores']]},
-    {grupo: 'est', nome: 'Estoque', ic: '📦', modulo: 'estoque', itens: [['estoque', 'Posição do estoque'], ['estoque/movimentos', 'Movimentações']]},
+    {grupo: 'est', nome: 'Estoque', ic: '📦', modulo: 'estoque', itens: [['estoque/dashboard', 'Dashboard do estoque', null, 'O que entrou, o que saiu e o saldo'],
+      ['estoque/entradas', 'Entrada de estoque', null, 'Entrada de produtos do cadastro (compras)'], ['estoque/saidas', 'Saída de estoque', null, 'Vendas (baixa automática), perdas e consumo']]},
     {grupo: 'fin', nome: 'Financeiro', ic: '💰', modulo: 'financeiro', itens: [['fin/pagar', 'Contas a pagar'], ['fin/receber', 'Contas a receber'], ['fin/contas', 'Contas bancárias'],
       ['fin/extrato', 'Movimento de conta', null, 'Extrato, lançamentos e transferências'], ['fin/categorias', 'Categorias financeiras']]},
     {grupo: 'rel', nome: 'Relatórios', ic: '📈', modulo: 'relatorios', itens: [['rel/vendas', 'Vendas'], ['rel/produtos', 'Produtos'], ['rel/cardapio', 'Engenharia de cardápio', null, 'CMV: o que vende e o que dá lucro'],
@@ -49,6 +50,9 @@
   // Rotas fora do menu (abertas a partir de outra tela)
   ROTAS['mesas/pedido'] = {titulo: 'Vendas › Mesas › Pedido', modulo: 'mesas', grupo: 'vendas', pai: 'mesas'};
   ROTAS['delivery/novo'] = {titulo: 'Vendas › Delivery › Novo pedido', modulo: 'delivery', grupo: 'vendas', pai: 'delivery'};
+  // Fora do menu, abertas pelo Dashboard do estoque (ajuste de inventário, mínimo, produção e histórico do produto)
+  ROTAS['estoque'] = {titulo: 'Estoque › Posição do estoque', modulo: 'estoque', grupo: 'est', pai: 'estoque/dashboard'};
+  ROTAS['estoque/movimentos'] = {titulo: 'Estoque › Movimentações', modulo: 'estoque', grupo: 'est', pai: 'estoque/dashboard'};
   const pode = rota => !!ROTAS[rota] && D.podeAcessar(ROTAS[rota].modulo);
 
   // ---- Rotas no endereço ----
@@ -165,7 +169,8 @@
 
   // ---- Barra superior: título, saudação, status do caixa e operador ----
   // Menu lateral escondido ou à mostra: lembrado neste navegador (mga_menuOculto)
-  const lerMenuOculto = () => { try { return localStorage.getItem('mga_menuOculto') === '1'; } catch (e) { return false; } };
+  // No celular o sistema abre com o menu escondido (o botão ☰ mostra)
+  const lerMenuOculto = () => { if (window.matchMedia?.('(max-width: 980px)').matches) return true; try { return localStorage.getItem('mga_menuOculto') === '1'; } catch (e) { return false; } };
   function BarraSuperior({rota, menuOculto, alternarMenu}){
     useDados();
     const [agora, setAgora] = useState(new Date());
@@ -230,7 +235,11 @@
     const [menuOculto, setMenuOculto] = useState(lerMenuOculto);
     const alternarMenu = () => setMenuOculto(o => { try { localStorage.setItem('mga_menuOculto', o ? '0' : '1'); } catch (e) { /* storage indisponível */ } return !o; });
     useEffect(() => {
-      const mudou = () => { const l = lerRota(); setLocal(l); setAberto(g => ROTAS[l.rota].grupo || g); window.scrollTo(0, 0); };
+      const mudou = () => {
+        const l = lerRota(); setLocal(l); setAberto(g => ROTAS[l.rota].grupo || g); window.scrollTo(0, 0);
+        // Celular: o menu fica em cima da tela; depois de escolher, esconde para mostrar a tela
+        if (window.matchMedia?.('(max-width: 980px)').matches) setMenuOculto(true);
+      };
       window.addEventListener('hashchange', mudou);
       return () => window.removeEventListener('hashchange', mudou);
     }, []);
@@ -243,7 +252,7 @@
       <div className=${'main' + (['vendas/pdv', 'mesas/pedido', 'delivery/novo'].includes(rota) ? ' rest-main-pdv' : '') + (rota === 'vendas/cozinha' ? ' rest-main-cozinha' : '')}>
         <${BarraSuperior} rota=${rota} menuOculto=${menuOculto} alternarMenu=${alternarMenu} />
         <main className="content">
-          ${!pode(rota) ? html`<${SemAcesso} rota=${rota} />` : Tela ? html`<${Tela} key=${rota} params=${params} ir=${ir} />` : html`<${TelaEmBreve} rota=${rota} />`}
+          ${!pode(rota) ? html`<${SemAcesso} rota=${rota} />` : Tela ? html`<${Tela} key=${rota === 'mesas/pedido' ? rota + params.id : rota} params=${params} ir=${ir} />` : html`<${TelaEmBreve} rota=${rota} />`}
         </main>
       </div>`;
   }

@@ -27,7 +27,7 @@
   }
   let filtroGuardado = {atalho: 'mes', ...datasDo('mes'), operador: '', grupoId: ''};
   function useFiltro(){
-    const [f, setF] = useState(filtroGuardado);
+    const [f, setF] = useState(() => filtroGuardado.atalho ? (filtroGuardado = {...filtroGuardado, ...datasDo(filtroGuardado.atalho)}) : filtroGuardado);
     const mudar = novo => { filtroGuardado = {...f, ...novo}; setF(filtroGuardado); };
     return [f, mudar];
   }
@@ -48,8 +48,8 @@
     if (tipo === 'pct') return Number(v).toFixed(1).replace('.', ',');
     if (tipo === 'qtd') return String(v).replace('.', ',');
     if (tipo === 'dataHora') return dataHoraBR(v);
-    const t = String(v);
-    return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+    const t = /^[=+\-@\t\r]/.test(String(v)) ? "'" + String(v) : String(v);
+    return /[;"\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
   };
   // CSV com ";" e BOM: o Excel em português abre com acentos e colunas certas
   function baixarCsv(nome, colunas, linhas, total){

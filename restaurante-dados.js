@@ -92,7 +92,9 @@
     if (typeof v === 'number') return v;
     const t = txt(v).replace(/^R\$\s*/i, '');
     if (!t) return NaN;
-    const n = Number(t.includes(',') ? t.replace(/[.\s]/g, '').replace(',', '.') : t);
+    // "1.250" (pontos a cada 3 dígitos, sem vírgula) é milhar: 1250, como o qtdBR escreve
+    const milhar = /^-?[1-9]\d{0,2}(\.\d{3})+$/.test(t);
+    const n = Number(t.includes(',') || milhar ? t.replace(/[.\s]/g, '').replace(',', '.') : t);
     return Number.isFinite(n) ? n : NaN;
   }
   // ---- Usuários e sessão ----
@@ -262,8 +264,14 @@
   if (typeof window.addEventListener === 'function') window.addEventListener('storage', e => {
     if (!e.key || !e.key.startsWith('mga_') || e.newValue === null) return;
     const novo = ler(e.key.slice(4), null);
-    const trocar = {restVendas: v => { vendas = v; }, restProdutos: v => { produtos = v; }, restCaixas: v => { caixas = v; }, restMovCaixa: v => { movCaixa = v; },
-      restContas: v => { contas = v; }, restMovEstoque: v => { movEstoque = v; }, restMesas: v => { mesas = v; }, restSeq: v => { seq = v; }}[e.key.slice(4)];
+    // Todas as coleções: uma aba com lista velha regravaria por cima do que a outra salvou
+    const trocar = {restGrupos: v => { grupos = v; }, restProdutos: v => { produtos = v; }, restAdicionais: v => { adicionais = v; }, restMesas: v => { mesas = v; },
+      restFormas: v => { formas = v; }, clientes: v => { listaClientesArr.splice(0, listaClientesArr.length, ...v); },
+      restFornecedores: v => { fornecedores = v; }, restFuncionarios: v => { funcionarios = v; }, restEntregadores: v => { entregadores = v; },
+      restRegioes: v => { regioes = v; }, restAplicativos: v => { aplicativos = v; }, restEmbalagens: v => { embalagens = v; }, restPromocoes: v => { promocoes = v; },
+      restContasBancarias: v => { contasBancarias = v; }, restCaixas: v => { caixas = v; }, restMovCaixa: v => { movCaixa = v; }, restVendas: v => { vendas = v; },
+      restContas: v => { contas = v; }, restMovEstoque: v => { movEstoque = v; }, restMovConta: v => { movConta = v; }, restCategorias: v => { categorias = v; },
+      restConfig: v => { config = Object.assign({}, config, v); }, restUsuarios: v => { usuarios = v; }, restSeq: v => { seq = v; }}[e.key.slice(4)];
     if (!trocar || novo === null) return;
     trocar(novo);
     versao++;
@@ -287,7 +295,8 @@
   // Quem não tem o módulo não executa a ação, mesmo chamando a função direto
   function exigir(modulo){
     const u = sessaoAtual();
-    if (u && !podeAcessar(modulo, u)) erro(`Seu usuário não tem acesso a ${MODULOS[modulo]}. Fale com o administrador.`);
+    if (!u) { if (temUsuarios()) erro('Sua sessão terminou. Entre de novo no sistema.'); return; }
+    if (!podeAcessar(modulo, u)) erro(`Seu usuário não tem acesso a ${MODULOS[modulo]}. Fale com o administrador.`);
   }
 
   function validarUsuario(d, id){
@@ -347,6 +356,7 @@
     exigir('configuracoes');
     const u = validarUsuario(d, id);
     const existente = id && usuarioPorId(id);
+    if ((ehAdmin(u) || ehAdmin(existente)) && temUsuarios() && !ehAdmin(sessaoAtual())) erro('Só um administrador cadastra ou altera administradores.');
     if (!existente || d.senha) { validarSenha(d.senha); if (d.senha !== d.confirmar) erro('As senhas não conferem.'); }
     if (existente && ehAdmin(existente) && (!ehAdmin(u) || !u.ativo) && adminsAtivos().length === 1)
       erro('Este é o único administrador ativo. Cadastre outro administrador antes de mudar o perfil ou desativar.');
@@ -554,9 +564,11 @@
       const alteracoes = Object.keys(rotulo).filter(k => !igual(p[k], campos[k]))
         .map(k => ({campo: rotulo[k], antes: (fmt[k] || String)(p[k] ?? '—'), depois: (fmt[k] || String)(campos[k] ?? '—')}));
       Object.assign(p, campos);
-      // Saldo mudado no cadastro também fica no histórico do estoque (ajuste)
+      // Saldo mudado no cadastro também fica no histórico do estoque (ajuste). Só se o campo foi
+      // mexido: senão uma venda feita com o formulário aberto seria desfeita pelo saldo antigo
       const saldoAntes = r3(p.estoque);
-      if (controlaEstoque && saldo !== saldoAntes) {
+      const mexeuSaldo = dados.estoqueAberto === undefined || txt(dados.estoque) !== txt(dados.estoqueAberto);
+      if (controlaEstoque && mexeuSaldo && saldo !== saldoAntes) {
         lancarEstoque(p, 'AJUSTE', saldo - saldoAntes, {motivo: 'Alterado no cadastro do produto'});
         alteracoes.push({campo: 'Estoque', antes: qtdBR(saldoAntes), depois: qtdBR(saldo)});
       }
@@ -712,10 +724,12 @@
     return m;
   }
   // Compra (nota com vários itens): uma entrada por item e, se pedir, uma única conta a pagar
-  function compraEstoque({fornecedorId = null, documento = '', itens = [], conta = null}){
+  // Com ligarControle, o produto cadastrado que ainda não controla estoque passa a controlar
+  function compraEstoque({fornecedorId = null, documento = '', itens = [], conta = null, ligarControle = false}){
     exigir('estoque');
     const forn = fornecedorId ? fornecedorPorId(fornecedorId) || erro('Fornecedor não encontrado.') : null;
-    const linhas = itens.filter(i => i.produtoId).map(i => ({p: produtoComEstoque(i.produtoId), qtd: lerQtd(i.quantidade, `a quantidade de ${produtoPorId(i.produtoId)?.nome || 'um item'}`),
+    const doItem = id => { const p = produtoPorId(id) || erro('Produto não encontrado. Cadastre-o em Cadastros › Produtos.'); return ligarControle ? p : produtoComEstoque(id); };
+    const linhas = itens.filter(i => i.produtoId).map(i => ({p: doItem(i.produtoId), qtd: lerQtd(i.quantidade, `a quantidade de ${produtoPorId(i.produtoId)?.nome || 'um item'}`),
       custo: txt(i.custo) === '' ? 0 : r2(lerValor(i.custo))}));
     if (!linhas.length) erro('Adicione ao menos um item à compra.');
     if (linhas.some(l => !Number.isFinite(l.custo) || l.custo < 0)) erro('Custo unitário inválido.');
@@ -729,6 +743,10 @@
     }
     const lote = novoId('cp');
     const motivo = [forn?.nome, txt(documento)].filter(Boolean).join(' · ') || 'Compra';
+    linhas.filter(l => !l.p.controlaEstoque).forEach(l => {
+      l.p.controlaEstoque = true;
+      auditar(`Estoque de "${l.p.nome}" configurado`, {alteracoes: [{campo: 'Controla estoque', antes: 'Não', depois: 'Sim'}]});
+    });
     linhas.forEach(l => { l.p.custo = custoMedio(l.p, l.qtd, l.custo); lancarEstoque(l.p, 'ENTRADA', l.qtd, {lote, custoUnitario: l.custo || null, fornecedorId: forn?.id || null, motivo}); });
     auditar(`Compra registrada — ${linhas.length} ${linhas.length === 1 ? 'item' : 'itens'}, ${moedaBR(total)}`,
       {detalhe: `${motivo} · ` + linhas.map(l => `${qtdBR(l.qtd)} ${l.p.unidade} ${l.p.nome}`).join(', ')});
@@ -847,8 +865,10 @@
   // Promoção que vale agora para o produto (a que deixa mais barato)
   function promocoesVigentes(p, quando = new Date()){
     const dia = quando.getDay(), hm = hhmm(quando), data = diaISO(quando);
+    // Ex.: sexta 22:00–02:00 — sábado à 01:00 ainda é a promoção de sexta
+    const madrugada = x => x.horaIni && x.horaIni > x.horaFim && hm < x.horaFim;
     return promocoes.filter(x => x.ativo && (x.alvo === 'PRODUTO' ? x.ids.includes(p.id) : x.ids.includes(p.grupoId))
-      && (!x.dias.length || x.dias.includes(dia)) && (!x.de || data >= x.de) && (!x.ate || data <= x.ate)
+      && (!x.dias.length || x.dias.includes(madrugada(x) ? (dia + 6) % 7 : dia)) && (!x.de || data >= x.de) && (!x.ate || data <= x.ate)
       && (!x.horaIni || (x.horaIni < x.horaFim ? hm >= x.horaIni && hm < x.horaFim : hm >= x.horaIni || hm < x.horaFim)));
   }
   // Preço da unidade (sem adicionais): tamanho escolhido e a melhor promoção do momento
@@ -1000,6 +1020,7 @@
     const c = clientePorId(id);
     if (!c) return;
     if (vendas.some(v => v.clienteId === id && v.status === 'ABERTA')) erro(`${c.nome} tem uma venda em aberto no Restaurante. Finalize ou cancele antes.`);
+    if (contas.some(x => x.clienteId === id && x.status === 'ABERTA')) erro(`${c.nome} tem conta a receber em aberto. Receba ou exclua a conta antes.`);
     const lista = listaClientes();
     lista.splice(lista.indexOf(c), 1);
     auditar(`Cliente ${c.nome} excluído`);
@@ -1222,7 +1243,7 @@
     if (!(v > 0)) erro('Informe um valor maior que R$ 0,00.');
     if (txt(motivo).length < 3) erro(`Informe o motivo ${tipo === 'SANGRIA' ? 'da sangria' : 'do suprimento'}.`);
     if (tipo === 'SANGRIA' && v > resumoCaixa(cx.id).saldoDinheiro + 0.001) erro(`A sangria passa do dinheiro no caixa (${moedaBR(resumoCaixa(cx.id).saldoDinheiro)}).`);
-    if (contaBancariaId) exigir('financeiro');
+    if (contaBancariaId) { exigir('financeiro'); contaAtiva(contaBancariaId); }
     const m = lancarMov(cx, tipo, v, 'DINHEIRO', txt(motivo));
     // Sangria vai para a conta (ex.: cofre, depósito no banco); suprimento sai da conta
     if (contaBancariaId) m.movContaId = lancarConta(contaBancariaId, tipo === 'SANGRIA' ? 'ENTRADA' : 'SAIDA', v,
@@ -1338,7 +1359,7 @@
     const {tamanho, adicionais: escolhidos} = opcoesDoItem(p, opcoes);
     const pr = precoBase(p, tamanho?.id);
     const extra = r2(escolhidos.reduce((s, o) => s + o.preco, 0));
-    return {id: novoId('i'), produtoId: p.id, codigo: p.codigo, nome: p.nome + (tamanho ? ` (${tamanho.nome})` : ''), quantidade: r2(qtd),
+    return {id: novoId('i'), produtoId: p.id, codigo: p.codigo, nome: p.nome + (tamanho ? ` (${tamanho.nome})` : ''), quantidade: r3(qtd),
       precoUnitario: r2(pr.preco + extra), custoUnitario: custoProduto(p), desconto: 0, observacao: txt(observacao), pago: false,
       ...(tamanho ? {tamanho: tamanho.nome} : {}), ...(escolhidos.length ? {adicionais: escolhidos} : {}),
       ...(pr.promo ? {promocao: pr.promo.nome, precoTabela: r2(pr.tabela + extra)} : {}),
@@ -1440,7 +1461,7 @@
     if (quantidade !== undefined) {
       const q = typeof quantidade === 'number' ? quantidade : lerValor(quantidade);
       if (!(q > 0)) erro('Quantidade inválida. Para tirar o item, use excluir.');
-      i.quantidade = r2(q);
+      i.quantidade = r3(q);
     }
     if (observacao !== undefined) i.observacao = txt(observacao);
     if (precoUnitario !== undefined) {
@@ -1480,6 +1501,9 @@
     const antes = {desconto: v.desconto, acrescimo: v.acrescimo};
     Object.assign(v, {desconto: desc, acrescimo: acr});
     try { conferirPago(v); } catch (e) { Object.assign(v, antes); throw e; }
+    const alteracoes = [['desconto', 'Desconto'], ['acrescimo', 'Acréscimo']].filter(([k]) => r2(antes[k] || 0) !== r2(v[k] || 0))
+      .map(([k, campo]) => ({campo, antes: moedaBR(antes[k] || 0), depois: moedaBR(v[k] || 0)}));
+    if (alteracoes.length) auditar(`${nomeVenda(v)}: ${alteracoes.map(a => a.campo.toLowerCase()).join(' e ')} alterado`, {alteracoes});
     salvar('restVendas');
     return totaisVenda(v);
   }
@@ -1574,7 +1598,10 @@
     salvar('restVendas');
   }
   function adicionarPagamento(vendaId, {formaId, valor}){
+    exigir('vendas');
     const v = vendaEditavel(vendaPorId(vendaId));
+    if (caixaExigido().id !== v.caixaId) erro('O caixa desta venda não está mais aberto.');
+    if (v.tipo === 'ENCOMENDA') erro('Encomenda é recebida na entrega ou na retirada.');
     const pag = montarPagamento(totaisVenda(v).restante, formaId, valor);
     if (pag.tipo === 'PRAZO' && !v.clienteId) erro('Venda a prazo precisa de um cliente.');
     v.pagamentos.push(pag);
@@ -1582,6 +1609,7 @@
     return pag;
   }
   function finalizarVenda(vendaId){
+    exigir('vendas');
     const v = vendaEditavel(vendaPorId(vendaId));
     const cx = caixaAberto();
     if (!cx || cx.id !== v.caixaId) erro('O caixa desta venda não está mais aberto.');
@@ -1741,7 +1769,7 @@
     return lista;
   }
   // Entregue (ou retirado): recebe o que falta e vira venda finalizada no caixa aberto
-  function entregarPedido(id, {pagamentos = []} = {}){
+  function entregarPedido(id, {pagamentos = [], clienteId = null} = {}){
     exigir('vendas');
     const v = pedidoAberto(id);
     const cx = caixaExigido();
@@ -1751,13 +1779,17 @@
     const novos = [];
     pagamentos.forEach(p => { const pg = montarPagamento(falta, p.formaId, p.valor); falta = r2(falta - pg.valor); novos.push(pg); });
     if (falta > 0.001) erro(`Falta receber ${moedaBR(falta)}.`);
-    if (novos.some(p => p.tipo === 'PRAZO') && !v.clienteId) erro('Pagamento a prazo precisa de um cliente.');
+    if (clienteId && !clientePorId(clienteId)) erro('Cliente não encontrado.');
+    if (novos.some(p => p.tipo === 'PRAZO') && !(clienteId || v.clienteId)) erro('Pagamento a prazo precisa de um cliente.');
+    const clienteAntes = v.clienteId;
+    if (clienteId) v.clienteId = clienteId;
     // Encomenda pode ter sido feita em outro caixa: a venda entra no caixa de agora
+    const caixaAntes = v.caixaId;
     if (v.tipo === 'ENCOMENDA') v.caixaId = cx.id;
     novos.forEach(p => { p.recebidoPor = usuario(); v.pagamentos.push(p); });
     const status = v.statusDelivery;
     marcarStatus(v, 'ENTREGUE');
-    try { concluir(v); } catch (e) { v.pagamentos.splice(v.pagamentos.length - novos.length); v.historico.pop(); v.statusDelivery = status; throw e; }
+    try { concluir(v); } catch (e) { v.pagamentos.splice(v.pagamentos.length - novos.length); v.historico.pop(); v.statusDelivery = status; v.caixaId = caixaAntes; v.clienteId = clienteAntes; throw e; }
     salvar('restVendas', 'restContas', 'restProdutos', 'restMovEstoque');
     return {venda: v, troco: r2(novos.reduce((s, p) => s + (p.troco || 0), 0))};
   }
@@ -1871,7 +1903,7 @@
   // =====================================================================
   // ---- Financeiro: contas a pagar e a receber ----
   const contaPorId = id => contas.find(c => c.id === id);
-  const dataValida = d => /^\d{4}-\d{2}-\d{2}$/.test(d) && !isNaN(new Date(d + 'T12:00:00'));
+  const dataValida = d => /^\d{4}-\d{2}-\d{2}$/.test(d) && !isNaN(new Date(d + 'T12:00:00')) && diaISO(new Date(d + 'T12:00:00')) === d;
   function salvarConta(dados, id){
     const tipo = dados.tipo;
     if (!TIPOS_CONTA[tipo]) erro('Tipo de conta inválido.');
@@ -1963,6 +1995,7 @@
     if (lista.some(x => x !== antigo && norm(x) === norm(nome))) erro(`Já existe a categoria "${nome}".`);
     if (antigo) {
       if (antigo === CATEGORIA_PRAZO) erro(`"${CATEGORIA_PRAZO}" é usada pelas vendas e não pode ser renomeada.`);
+      if (tipo === 'PAGAR' && antigo === CATEGORIA_COMPRAS) erro(`"${CATEGORIA_COMPRAS}" é usada nas compras de mercadoria e no relatório financeiro e não pode ser renomeada.`);
       lista[lista.indexOf(antigo)] = nome;
       contas.filter(c => c.tipo === tipo && c.categoria === antigo).forEach(c => { c.categoria = nome; });
       auditar(`Categoria "${antigo}" renomeada para "${nome}"`);
@@ -1974,6 +2007,7 @@
   }
   function excluirCategoria(tipo, nome){
     if (nome === CATEGORIA_PRAZO) erro(`"${CATEGORIA_PRAZO}" é usada pelas vendas e não pode ser excluída.`);
+    if (tipo === 'PAGAR' && nome === CATEGORIA_COMPRAS) erro(`"${CATEGORIA_COMPRAS}" é usada nas compras de mercadoria e não pode ser excluída.`);
     const n = contas.filter(c => c.tipo === tipo && c.categoria === nome).length;
     if (n) erro(`"${nome}" tem ${n} conta${n === 1 ? '' : 's'}. Mude a categoria delas antes de excluir.`);
     categorias[tipo] = categorias[tipo].filter(x => x !== nome);
@@ -2023,9 +2057,9 @@
     salvar('restContasBancarias');
   }
   // Lança no extrato (usado pelas baixas, sangrias e lançamentos avulsos)
+  const contaAtiva = id => { const c = contaBancariaPorId(id); if (!c || !c.ativo) erro('Escolha uma conta bancária ativa.'); return c; };
   function lancarConta(contaId, tipo, valor, descricao, extra = {}){
-    const c = contaBancariaPorId(contaId);
-    if (!c || !c.ativo) erro('Escolha uma conta bancária ativa.');
+    contaAtiva(contaId);
     const m = {id: novoId('mc'), contaId, tipo, valor: r2(valor), descricao: txt(descricao), data: extra.data || hojeISO(), usuario: usuario(), criadoEm: agora(), ...extra};
     movConta.push(m);
     return m;
@@ -2049,7 +2083,7 @@
     const v = r2(lerValor(valor));
     if (!(v > 0)) erro('Informe um valor maior que R$ 0,00.');
     if (!dataValida(data)) erro('Informe a data.');
-    const o = contaBancariaPorId(origemId), dd = contaBancariaPorId(destinoId);
+    const o = contaAtiva(origemId), dd = contaAtiva(destinoId);
     const transferencia = novoId('tf');
     lancarConta(origemId, 'SAIDA', v, txt(descricao) || `Transferência para ${dd?.nome}`, {data, transferencia, origem: 'TRANSFERENCIA'});
     lancarConta(destinoId, 'ENTRADA', v, txt(descricao) || `Transferência de ${o?.nome}`, {data, transferencia, origem: 'TRANSFERENCIA'});
@@ -2315,6 +2349,7 @@
   // ---- Dados de demonstração (marcados com demo: true; saem com um clique) ----
   const temDemo = () => vendas.some(v => v.demo) || contas.some(c => c.demo);
   function gerarDemonstracao(ref = new Date()){
+    exigir('configuracoes');
     if (temDemo()) erro('Os dados de demonstração já existem. Remova-os antes de gerar de novo.');
     const ativos = produtos.filter(p => p.ativo && p.tipo !== 'INSUMO');
     if (!ativos.length) erro('Cadastre ao menos um produto ativo antes de gerar a demonstração.');
@@ -2322,13 +2357,12 @@
     const umDe = lista => lista[Math.floor(Math.random() * lista.length)];
     const backup = {vendas: vendas.slice(), caixas: caixas.slice(), movCaixa: movCaixa.slice(), contas: contas.slice(), seq: {...seq}};
     const hoje = diaISO(ref);
-    const temCaixaReal = !!caixaAberto();
     // Vendas do dia 1º de janeiro do ano passado até agora; o ano atual vende ~15% mais
     for (let d = new Date(ref.getFullYear() - 1, 0, 1); diaISO(d) <= hoje; d.setDate(d.getDate() + 1)) {
       const dia = diaISO(d), ehHoje = dia === hoje;
       seq.caixa++;
       const cx = {id: novoId('cx'), numero: seq.caixa, operador: usuario(), abertura: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 10, 30).toISOString(),
-        valorInicial: 150, status: ehHoje && !temCaixaReal ? 'ABERTO' : 'FECHADO', fechamento: null, valorContado: null, demo: true};
+        valorInicial: 150, status: 'FECHADO', fechamento: null, valorContado: null, demo: true};
       caixas.push(cx);
       const fimSemana = [0, 5, 6].includes(d.getDay());
       const n = Math.round(sorte(2, fimSemana ? 7 : 4.5) * (d.getFullYear() === ref.getFullYear() ? 1.15 : 1));
@@ -2350,7 +2384,7 @@
           pagamentos: [{id: novoId('pg'), formaId: f.id, tipo: f.tipo, nome: f.nome, valor, recebido: valor, troco: 0, data: hora.toISOString()}], demo: true});
         if (f.tipo === 'DINHEIRO') total += valor; // só o dinheiro fica na gaveta
       }
-      if (cx.status === 'FECHADO') { cx.fechamento = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 30).toISOString(); cx.valorContado = r2(150 + total); cx.diferenca = 0; }
+      cx.fechamento = (ehHoje ? new Date(ref) : new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 30)).toISOString(); cx.valorContado = r2(150 + total); cx.diferenca = 0;
     }
     // Contas: 2 meses atrás até o mês que vem; o que venceu antes de hoje está pago (menos uma, vencida)
     const fixas = [['Aluguel', 'Aluguel', 5, 3500, 3500], ['Folha de pagamento', 'Salários', 5, 6800, 6800], ['Conta de luz', 'Energia', 10, 780, 1050],
@@ -2385,9 +2419,11 @@
     return resumo;
   }
   function removerDemonstracao(){
+    exigir('configuracoes');
     const antes = {vendas: vendas.length, contas: contas.length};
     vendas = vendas.filter(v => !v.demo);
-    caixas = caixas.filter(c => !c.demo);
+    const usados = new Set([...vendas.map(v => v.caixaId), ...movCaixa.map(m => m.caixaId)]);
+    caixas = caixas.filter(c => !c.demo || usados.has(c.id));
     contas = contas.filter(c => !c.demo);
     const resumo = {vendas: antes.vendas - vendas.length, contas: antes.contas - contas.length};
     auditar('Dados de demonstração removidos', {detalhe: `${resumo.vendas} vendas e ${resumo.contas} contas`});
@@ -2398,7 +2434,7 @@
   // =====================================================================
   // ---- Dados do sistema: resumo, backup e limpeza ----
   // Tema e usuário logado são preferências deste navegador: ficam ao limpar/restaurar.
-  const CHAVES_PRESERVADAS = ['mga_tema', 'mga_usuario'];
+  const CHAVES_PRESERVADAS = ['mga_tema', 'mga_usuario', 'mga_sessao', 'mga_menuOculto'];
   function chavesSistema(){
     const lista = [];
     for (let i = 0; i < localStorage.length; i++) {
@@ -2425,21 +2461,30 @@
     try { b = JSON.parse(texto); } catch (e) { erro('Arquivo inválido: não é um backup do MGA.'); }
     if (!b || b.sistema !== 'MGA' || !b.dados || !Object.keys(b.dados).every(k => k.startsWith('mga_'))) erro('Arquivo inválido: não é um backup do MGA.');
     return {geradoEm: b.geradoEm || null, conjuntos: Object.keys(b.dados).length, aplicar(){
-      chavesSistema().forEach(k => localStorage.removeItem(k));
-      Object.entries(b.dados).forEach(([k, v]) => { if (!CHAVES_PRESERVADAS.includes(k)) localStorage.setItem(k, v); });
+      const antes = Object.fromEntries(chavesSistema().map(k => [k, localStorage.getItem(k)]));
+      try {
+        chavesSistema().forEach(k => localStorage.removeItem(k));
+        Object.entries(b.dados).forEach(([k, v]) => { if (!CHAVES_PRESERVADAS.includes(k)) localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v)); });
+      } catch (e) {
+        chavesSistema().forEach(k => localStorage.removeItem(k));
+        Object.entries(antes).forEach(([k, v]) => { try { localStorage.setItem(k, v); } catch (x) { /* sem espaço */ } });
+        erro('Não foi possível restaurar: falta espaço no navegador. Os dados atuais foram mantidos.');
+      }
       registrarAuditoria('Sistema', 'Backup restaurado', {detalhe: `Backup de ${b.geradoEm ? new Date(b.geradoEm).toLocaleString('pt-BR') : 'data desconhecida'}`});
     }};
   }
   // modo "exemplo": recomeça com os grupos e produtos de exemplo · "vazio": sem nada
-  function limparTudo({modo, senha}){
-    if (String(senha) !== String(ler('senhaSupervisor', '1234'))) erro('Senha do supervisor incorreta.');
+  async function limparTudo({modo, senha}){
+    const u = sessaoAtual();
+    if (temUsuarios() && !ehAdmin(u)) erro('Só o administrador pode apagar os dados.');
+    if (u?.hash && await hashSenha(String(senha || ''), u.sal) !== u.hash) erro('Senha incorreta. Use a senha do seu login.');
     const resumo = resumoDados();
     // Usuários ficam: sem eles ninguém entraria de novo no sistema
     chavesSistema().filter(k => k !== 'mga_restUsuarios').forEach(k => localStorage.removeItem(k));
     if (modo === 'vazio') ['restGrupos', 'restProdutos'].forEach(k => gravar(k, []));
     gravar('auditoria', [{data: agora(), usuario: usuario(), modulo: 'Sistema',
       descricao: `Todos os dados foram apagados (${modo === 'vazio' ? 'recomeço vazio' : 'recomeço com produtos de exemplo'})`,
-      detalhe: `Antes: ${resumo.vendas} vendas, ${resumo.produtos} produtos, ${resumo.clientes} clientes, ${resumo.contas} contas · autorizado com senha do supervisor`}]);
+      detalhe: `Antes: ${resumo.vendas} vendas, ${resumo.produtos} produtos, ${resumo.clientes} clientes, ${resumo.contas} contas · autorizado com a senha de ${usuario()}`}]);
   }
   const auditoria = () => ler('auditoria', []);
 
@@ -2457,7 +2502,8 @@
   const mascaraCep = v => { const d = digitos(v).slice(0, 8); return d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d; };
 
   // Cada grupo de funções aparece na auditoria com o próprio módulo
-  const cad = fn => comModulo('Cadastros', fn), fin = fn => comModulo('Financeiro', fn), vnd = fn => comModulo('Vendas', fn), sis = fn => comModulo('Sistema', fn), mes = fn => comModulo('Mesas', fn), dlv = fn => comModulo('Delivery', fn), est = fn => comModulo('Estoque', fn);
+  const exigindo = (modulo, fn) => (...a) => { exigir(modulo); return fn(...a); };
+  const cad = fn => comModulo('Cadastros', exigindo('cadastros', fn)), fin = fn => comModulo('Financeiro', exigindo('financeiro', fn)), vnd = fn => comModulo('Vendas', fn), sis = fn => comModulo('Sistema', fn), mes = fn => comModulo('Mesas', fn), dlv = fn => comModulo('Delivery', fn), est = fn => comModulo('Estoque', fn);
   const porVenda = fn => (id, ...r) => { const t = vendaPorId(id)?.tipo; return (t === 'MESA' ? mes : t === 'DELIVERY' || t === 'ENCOMENDA' ? dlv : vnd)(fn)(id, ...r); };
   window.RestDados = {
     TIPOS_VENDA, STATUS_VENDA, TIPOS_FORMA, TIPOS_MOV_CAIXA, MOV_ENTRADA, MOV_SAIDA, VEICULOS, UNIDADES, TIPOS_CONTA, FORMAS_BAIXA, CATEGORIA_PRAZO,

@@ -80,8 +80,7 @@
         if (!b) return;
         const quando = b.geradoEm ? new Date(b.geradoEm).toLocaleString('pt-BR') : 'data desconhecida';
         if (!confirmar(`Restaurar o backup de ${quando}?\n\nOs dados atuais deste navegador serão substituídos pelos do arquivo.`)) return;
-        b.aplicar();
-        location.reload();
+        if (tentar(() => { b.aplicar(); return true; })) location.reload();
       };
       leitor.readAsText(f);
     };
@@ -92,8 +91,7 @@
     const removerDemo = () => { if (confirmar('Remover todos os dados de demonstração?')) tentar(() => D.removerDemonstracao(), x => `Removidos: ${x.vendas.toLocaleString('pt-BR')} vendas e ${x.contas} contas de demonstração.`); };
     const confirmarLimpar = () => {
       if (limpar.confirma.trim().toUpperCase() !== 'LIMPAR') { setErroLimpar('Digite LIMPAR para confirmar.'); return; }
-      try { D.limparTudo({modo: limpar.modo, senha: limpar.senha}); location.reload(); }
-      catch (e) { setErroLimpar(e.message); }
+      D.limparTudo({modo: limpar.modo, senha: limpar.senha}).then(() => location.reload(), e => setErroLimpar(e.message));
     };
     return html`
       <${Cabecalho} titulo="Dados do sistema" sub=${nuvem ? 'Os dados ficam guardados no banco de dados (nuvem) e aparecem em todos os computadores da empresa.' : 'Tudo fica guardado neste navegador. Faça backup com frequência.'} />
@@ -131,7 +129,7 @@
           <label className="rest-check rest-radio"><input type="radio" name="modoLimpar" checked=${limpar.modo === 'vazio'} onChange=${() => setLimpar({...limpar, modo: 'vazio'})} /> Totalmente vazio</label>
           <div className="form-grid rest-limpar-campos">
             <div className="field"><label htmlFor="ldConfirma">Digite LIMPAR</label><input id="ldConfirma" type="text" autoComplete="off" value=${limpar.confirma} onInput=${e => setLimpar({...limpar, confirma: e.target.value})} /></div>
-            <div className="field"><label htmlFor="ldSenha">Senha do supervisor</label><input id="ldSenha" type="password" value=${limpar.senha} onInput=${e => setLimpar({...limpar, senha: e.target.value})}
+            <div className="field"><label htmlFor="ldSenha">Sua senha (administrador)</label><input id="ldSenha" type="password" value=${limpar.senha} onInput=${e => setLimpar({...limpar, senha: e.target.value})}
               onKeyDown=${e => { if (e.key === 'Enter') confirmarLimpar(); }} /></div>
           </div>
           ${erroLimpar && html`<div className="toast rest-toast toast-erro" role="alert">${erroLimpar}</div>`}

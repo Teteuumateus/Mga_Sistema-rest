@@ -21,6 +21,11 @@
   const ehUuid = v => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v));
   const vazio = o => !o || !Object.keys(o).length;
   const CHAVE_MARCA = 'mga_nuvemEmpresa', CHAVE_VERSAO = 'mga_nuvemVersao', VERSAO = '2';
+  // Alteração feita neste navegador e ainda não confirmada pelo banco (sem internet, erro, aba fechada):
+  // guarda o id da empresa; na próxima abertura com internet ela é enviada antes de carregar do banco
+  const CHAVE_PENDENTE = 'mga_nuvemPendente';
+  const marcarPendente = id => { try { if (id) localStorage.setItem(CHAVE_PENDENTE, id); } catch (e) { /* storage indisponível */ } };
+  const limparPendente = () => { try { localStorage.removeItem(CHAVE_PENDENTE); } catch (e) { /* storage indisponível */ } };
 
   // ---- Aviso discreto no canto da tela (salvando / erro) ----
   let elAviso = null;
@@ -202,6 +207,9 @@
     const e = {};
     SPECS.forEach(s => { e[s.col] = (b[s.nome] || []).map(l => objetoDe(s.nome, l, f)).filter(Boolean); });
     e.auditoria = e.auditoria.slice().sort((x, y) => String(x.data).localeCompare(String(y.data)));
+    // O banco devolve na ordem dos ids (aleatória): movimentos em ordem de data, como o sistema grava
+    const porData = (x, y) => String(x.data || x.criadoEm || '').localeCompare(String(y.data || y.criadoEm || ''));
+    ['movEstoque', 'movCaixa', 'movConta'].forEach(k => { if (e[k]) e[k] = e[k].slice().sort(porData); });
     return e;
   }
   // Configurações do restaurante (tabela empresas): colunas são o que vale para o nome e os dados da empresa
@@ -232,6 +240,7 @@
 
   async function enviarEstado(e, {semExcluir = false} = {}){
     const x = contexto(e);
+    const daEmpresa = l => ({...l, empresa_id: empresaAtual});
     const plano = SPECS.map(s => {
       const antes = espelho[s.nome] || new Map();
       const itens = itensDe(s, e, x);
@@ -243,11 +252,11 @@
     // 1. Inclui/altera dos pais para os filhos (os filhos de cada pai alterado são regravados)
     for (const {s, mudou} of plano) {
       if (!mudou.length) continue;
-      for (const lote of lotes(mudou, 300)) await pedir(supa.from(s.nome).upsert(lote.map(o => linhaDe(s, o, x)), {onConflict: 'id'}), s.nome);
+      for (const lote of lotes(mudou, 300)) await pedir(supa.from(s.nome).upsert(lote.map(o => daEmpresa(linhaDe(s, o, x))), {onConflict: 'id', ignoreDuplicates: !!s.soInclui}), s.nome);
       for (const f of s.filhos || []) {
-        if (f.por) for (const lote of lotes(mudou.map(o => o.id), 150)) await pedir(supa.from(f.nome).delete().in(f.por, lote), f.nome);
+        if (f.por && !s.soInclui) for (const lote of lotes(mudou.map(o => o.id), 150)) await pedir(supa.from(f.nome).delete().in(f.por, lote), f.nome);
         const linhas = mudou.flatMap(o => f.linhas(o, x));
-        for (const lote of lotes(linhas, 500)) await pedir(supa.from(f.nome).insert(lote), f.nome);
+        for (const lote of lotes(linhas, 500)) await pedir(supa.from(f.nome).insert(lote.map(daEmpresa)), f.nome);
       }
       mudou.forEach(o => (espelho[s.nome] ||= new Map()).set(o.id, assinatura(o)));
     }
@@ -262,7 +271,7 @@
     if (cfg !== espelhoConfig && empresaAtual) { await pedir(supa.from('empresas').update(linhaEmpresa(D.config())).eq('id', empresaAtual), 'empresas'); espelhoConfig = cfg; }
     const cats = linhasCategorias(D.categorias());
     const novasCats = cats.filter(c => !espelhoCategorias.has(c.tipo + '|' + c.nome));
-    if (novasCats.length) await pedir(supa.from('categorias_financeiras').upsert(novasCats, {onConflict: 'empresa_id,tipo,nome'}), 'categorias_financeiras');
+    if (novasCats.length) await pedir(supa.from('categorias_financeiras').upsert(novasCats.map(daEmpresa), {onConflict: 'empresa_id,tipo,nome'}), 'categorias_financeiras');
     if (!semExcluir) for (const k of [...espelhoCategorias].filter(k => !cats.some(c => c.tipo + '|' + c.nome === k))) {
       const [tipo, nome] = k.split('|');
       await pedir(supa.from('categorias_financeiras').delete().eq('tipo', tipo).eq('nome', nome), 'categorias_financeiras');
@@ -270,7 +279,7 @@
     espelhoCategorias = new Set(cats.map(c => c.tipo + '|' + c.nome));
     const seq = D.seq(), sseq = assinatura(seq);
     if (sseq !== espelhoSeq) {
-      await pedir(supa.from('sequencias').upsert(['produto', 'caixa', 'venda'].map(nome => ({nome, valor: r(seq[nome])})), {onConflict: 'empresa_id,nome'}), 'sequencias');
+      await pedir(supa.from('sequencias').upsert(['produto', 'caixa', 'venda'].map(nome => daEmpresa({nome, valor: r(seq[nome])})), {onConflict: 'empresa_id,nome'}), 'sequencias');
       espelhoSeq = sseq;
     }
   }
@@ -294,19 +303,20 @@
     if (data !== empresaAtual) throw Object.assign(new Error('O master entrou em outra empresa.'), {trocouEmpresa: true});
   }
   function saiuDaEmpresa(){
-    aviso('Você entrou em outra empresa pelo painel master. Esta tela foi fechada sem salvar, para não misturar os dados.', 'erro');
+    aviso('Você voltou ao painel master ou entrou em outra empresa. Esta tela foi fechada sem salvar, para não misturar os dados.', 'erro');
     setTimeout(() => { D.encerrarSessao(); location.replace('master.html'); }, 4000);
   }
 
   // Fila: uma gravação por vez; se falhar, tenta de novo (o espelho só muda quando o banco confirma)
   let fila = Promise.resolve(), pendente = false, ocupado = false, tentarDeNovo = null;
   function agendar(){
+    marcarPendente(empresaAtual);
     if (pendente) return;
     pendente = true;
     fila = fila.then(async () => {
       pendente = false; ocupado = true;
       aviso('Salvando…');
-      try { await conferirEmpresaDoMaster(); await enviarEstado(coletar()); aviso(''); clearTimeout(tentarDeNovo); }
+      try { await conferirEmpresaDoMaster(); await enviarEstado(coletar()); aviso(''); clearTimeout(tentarDeNovo); if (!pendente) limparPendente(); }
       catch (e) {
         if (e.trocouEmpresa) { saiuDaEmpresa(); return; }
         console.error('Supabase:', e);
@@ -330,6 +340,7 @@
   function aoMudarNoBanco(tabela, payload){
     if (tabela === 'empresas') { remotos.empresas = true; }
     else {
+      if (payload.new?.empresa_id && payload.new.empresa_id !== empresaAtual) return;
       const id = payload.new?.id || payload.old?.id;
       if (!id) return;
       (remotos[tabela] ||= new Set()).add(id);
@@ -501,7 +512,7 @@
     const u = D.sessaoAtual();
     if (!supa || !u?.empresaId) return; // sem Supabase (offline ou login antigo): segue com o navegador
     const {data: {session}} = await supa.auth.getSession();
-    if (!session) return;
+    if (!session) { soNesteNavegador(u.empresaId, 'Sem conexão com o servidor.'); return; }
     empresaAtual = u.empresaId;
     try { await conferirEmpresaDoMaster(); } catch (e) { if (e.trocouEmpresa) { saiuDaEmpresa(); return new Promise(() => {}); } throw e; }
     aviso('Carregando os dados do restaurante…');
@@ -514,6 +525,18 @@
       location.reload();
       return new Promise(() => {}); // a página vai recarregar
     }
+    // Alterações deste navegador que não chegaram ao banco (sem internet, erro, página fechada): envia antes
+    let banco2 = banco;
+    if (marca === u.empresaId && localStorage.getItem(CHAVE_PENDENTE) === u.empresaId) {
+      aviso('Enviando alterações feitas sem conexão…');
+      montarEspelho(estadoDoBanco(banco));
+      await enviarEstado(coletar(), {semExcluir: true});
+      limparPendente();
+      banco2 = await baixarTudo(u.empresaId);
+    }
+    return carregarDoBanco(u, banco2, marca);
+  }
+  async function carregarDoBanco(u, banco, marca){
     // Daqui em diante vale o que está no banco (outro restaurante neste navegador também cai aqui)
     const mesmaEmpresa = marca === u.empresaId;
     localStorage.setItem(CHAVE_MARCA, u.empresaId);
@@ -542,11 +565,26 @@
     aviso('');
   }
 
+  // Sem servidor: só segue com os dados deste navegador se forem desta mesma empresa
+  function soNesteNavegador(empresaId, motivo){
+    const marca = localStorage.getItem(CHAVE_MARCA);
+    if (marca && marca !== empresaId) {
+      const raiz = document.getElementById('appShell');
+      if (raiz) raiz.innerHTML = '<div class="content"><div class="card rest-offline"><b>Não foi possível carregar os dados da empresa.</b><p>' + motivo
+        + ' Confira a internet e recarregue a página (F5).</p></div></div>';
+      return true;
+    }
+    D.aoSalvar(() => marcarPendente(empresaId)); // o que for feito agora vai para o banco na próxima abertura com internet
+    aviso(motivo + ' Usando os dados deste navegador; eles serão enviados quando a conexão voltar (recarregue a página).', 'erro');
+    if (supa?.auth?.onAuthStateChange) supa.auth.onAuthStateChange((ev, s) => { if (s && ev !== 'INITIAL_SESSION') aviso('A conexão voltou. Recarregue a página (F5) para enviar as alterações.', 'erro'); });
+    return false;
+  }
+
   window.MGA_NUVEM = {ativa: false, baixarTudo, estadoDoBanco, aoMudarNoBanco, aplicarRemotos, agendar};
   // A tela só é montada depois que os dados chegam (restaurante.js espera esta promessa)
   window.MGA_PRONTO = iniciar().catch(e => {
     console.error('Supabase:', e);
-    aviso('Não foi possível carregar do servidor (' + traduzir(e.message) + '). Usando os dados deste navegador.', 'erro');
-    setTimeout(() => aviso(''), 8000);
+    const u = D.sessaoAtual();
+    if (u?.empresaId && soNesteNavegador(u.empresaId, 'Não foi possível carregar do servidor (' + traduzir(e.supa?.message || e.message) + ').')) return new Promise(() => {});
   });
 })();

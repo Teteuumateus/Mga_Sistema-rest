@@ -18,6 +18,15 @@
   const ajuste = (entrada, base) => { try { return D.valorAjuste(entrada, base); } catch (e) { return NaN; } };
 
   // ---- Janela de pagamento: várias formas, valor pago, pendente e troco ----
+  // Quantidade digitada no carrinho: vale ao sair do campo ou no Enter (dá para digitar "1,5");
+  // zero ou valor inválido volta ao que estava (para tirar o item use o ✕)
+  function QtdCampo({valor, rotulo, onMudar}){
+    const [t, setT] = useState(null);
+    const aplicar = () => { const q = D.lerValor(t); if (t !== null && Number.isFinite(q) && q > 0 && q !== valor) onMudar(q); setT(null); };
+    return html`<input type="text" inputMode="decimal" value=${t ?? D.qtdBR(valor)} aria-label=${rotulo}
+      onInput=${e => setT(e.target.value)} onBlur=${aplicar} onKeyDown=${e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setT(null); }} onFocus=${e => e.target.select()} />`;
+  }
+
   function Pagamento({total, onConcluir, onFechar, erro, titulo = 'Pagamento', rotulo = 'Concluir venda', subtitulo = '', formaInicial = null}){
     useDados();
     const formas = D.formasAtivas();
@@ -240,7 +249,7 @@
       setCar({...car, itens});
       return true;
     };
-    const mudarQtd = (key, q) => setCar({...car, itens: car.itens.map(i => i.key === key ? {...i, quantidade: r2(Math.max(q, 0))} : i).filter(i => i.quantidade > 0)});
+    const mudarQtd = (key, q) => setCar({...car, itens: car.itens.map(i => i.key === key ? {...i, quantidade: Math.round(Math.max(q, 0) * 1000) / 1000} : i).filter(i => i.quantidade > 0)});
     const remover = key => setCar({...car, itens: car.itens.filter(i => i.key !== key)});
     const limpar = () => { if (!car.itens.length || window.confirm('Descartar a venda atual?')) { setCar({itens: [], desconto: '', acrescimo: '', obs: ''}); setObsAberta(null); } };
     const finalizar = () => {
@@ -251,13 +260,13 @@
     };
     const paraDelivery = () => {
       if (!linhas.length) return mostrar('Adicione ao menos um produto.', true);
-      window.RestUI.rascunhoDelivery?.({itens: car.itens.map(i => ({...i}))});
+      window.RestUI.rascunhoDelivery?.({itens: linhas.map(({p, preco, rot, ...i}) => i), desconto: car.desconto, acrescimo: car.acrescimo, obs: car.obs});
       setCar({itens: [], desconto: '', acrescimo: '', obs: ''});
       ir('delivery/novo', {tipo: 'DELIVERY'});
     };
     const concluir = ({pagamentos, clienteId}) => {
       try {
-        const v = D.registrarVenda({tipo: 'BALCAO', itens: car.itens.map(i => ({produtoId: i.produtoId, quantidade: i.quantidade, observacao: i.observacao, tamanhoId: i.tamanhoId, adicionais: i.adicionais})),
+        const v = D.registrarVenda({tipo: 'BALCAO', itens: linhas.map(i => ({produtoId: i.produtoId, quantidade: i.quantidade, observacao: i.observacao, tamanhoId: i.tamanhoId, adicionais: i.adicionais})),
           desconto: car.desconto, acrescimo: car.acrescimo, obs: car.obs, pagamentos, clienteId});
         setPagando(false); setCar({itens: [], desconto: '', acrescimo: '', obs: ''}); setObsAberta(null);
         setConcluida(v);
@@ -316,8 +325,7 @@
               </div>
               <div className="rest-car-acoes">
                 <button type="button" aria-label="Diminuir" onClick=${() => mudarQtd(i.key, i.quantidade - 1)}>−</button>
-                <input type="text" inputMode="decimal" value=${qtdBR(i.quantidade)} aria-label=${'Quantidade de ' + i.p.nome}
-                  onChange=${e => { const q = D.lerValor(e.target.value); if (Number.isFinite(q)) mudarQtd(i.key, q); }} onFocus=${e => e.target.select()} />
+                <${QtdCampo} valor=${i.quantidade} rotulo=${'Quantidade de ' + i.p.nome} onMudar=${q => mudarQtd(i.key, q)} />
                 <button type="button" aria-label="Aumentar" onClick=${() => mudarQtd(i.key, i.quantidade + 1)}>+</button>
                 <button type="button" className=${'rest-car-obs-btn' + (i.observacao ? ' com' : '')} onClick=${() => setObsAberta(obsAberta === i.key ? null : i.key)}>${i.observacao ? '✎ obs.' : '+ obs.'}</button>
                 <button type="button" className="rest-car-rm" aria-label=${'Excluir ' + i.p.nome} onClick=${() => remover(i.key)}>✕</button>

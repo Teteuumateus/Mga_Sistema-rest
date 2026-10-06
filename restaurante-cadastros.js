@@ -37,7 +37,7 @@
               ${plural(prods.length, 'produto', 'produtos')}${prods.length !== ativos ? ` (${ativos} ativos)` : ''} →</button></td>
             <td>${g.cozinha !== false ? '👨‍🍳 Sim' : html`<span className="rest-cod">Não</span>`}</td>
             <td>${g.ativo ? html`<span className="badge b-ok">Ativa</span>` : html`<span className="badge b-wait">Inativa</span>`}</td>
-            <td><${Acoes} nome=${g.nome} onEditar=${() => setForm({id: g.id, nome: g.nome, ativo: g.ativo})} onExcluir=${() => excluir(g)} /></td>
+            <td><${Acoes} nome=${g.nome} onEditar=${() => setForm({id: g.id, nome: g.nome, ativo: g.ativo, cozinha: g.cozinha !== false})} onExcluir=${() => excluir(g)} /></td>
           </tr>`;
         })}
       <//>`;
@@ -93,7 +93,7 @@
     const nInativos = todos.filter(p => !p.ativo).length;
     const num = v => v === '' || v == null ? '' : D.valorBR(v);
     const novo = () => setForm({...PRODUTO_VAZIO, codigo: D.proximoCodigo(), grupoId: grupo || grupos.find(g => g.ativo)?.id || ''});
-    const editar = p => setForm({...PRODUTO_VAZIO, ...p, preco: num(p.preco), custo: p.custo ? num(p.custo) : '', estoque: D.qtdBR(p.estoque), estoqueMinimo: p.estoqueMinimo ? D.qtdBR(p.estoqueMinimo) : '',
+    const editar = p => setForm({...PRODUTO_VAZIO, ...p, preco: num(p.preco), custo: p.custo ? num(p.custo) : '', estoque: D.qtdBR(p.estoque), estoqueAberto: D.qtdBR(p.estoque), estoqueMinimo: p.estoqueMinimo ? D.qtdBR(p.estoqueMinimo) : '',
       tamanhos: (p.tamanhos || []).map(t => ({...t, key: t.id, preco: num(t.preco)})), gruposAdicionais: [...(p.gruposAdicionais || [])],
       ficha: (p.ficha || []).map(c => ({...c, key: linhaKey(), quantidade: D.qtdBR(c.quantidade)}))});
     // Tamanhos e ficha técnica: adicionar, mudar e tirar linhas
@@ -332,6 +332,7 @@
     const mudarPerfil = perfil => setForm({...form, perfil, modulos: D.PERFIS[perfil].modulos});
     const alternarModulo = m => setForm({...form, modulos: form.modulos.includes(m) ? form.modulos.filter(x => x !== m) : [...form.modulos, m]});
     const salvar = async () => {
+      if (salvando) return;
       setSalvando(true);
       try { const u = await D.salvarUsuario(form, form.id); mostrar(form.id ? `Usuário "${u.nome}" atualizado.` : `Usuário "${u.nome}" cadastrado. Ele entra com ${nuvem ? 'o e-mail' : 'o login'} "${u.login}".`); setForm(null); }
       catch (e) { mostrar(e.regra ? e.message : 'Erro inesperado: ' + e.message, true); }

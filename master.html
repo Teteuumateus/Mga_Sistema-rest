@@ -161,7 +161,9 @@
       const { data: master } = await supa.from('masters').select('id, nome').eq('id', session.user.id).maybeSingle();
       if (!master) { location.replace('login.html'); return; }
       $('quem').textContent = `${master.nome} · ${session.user.email}`;
-      $('btnSair').addEventListener('click', async () => { await supa.auth.signOut(); location.replace('login.html'); });
+      // No painel o master não fica dentro de nenhuma empresa (o acesso só vale enquanto está no modo suporte)
+      const saiuDaEmpresa = supa.rpc('master_entrar', { p_empresa: null }).then(({ error }) => { if (error) console.error(error); });
+      $('btnSair').addEventListener('click', async () => { await supa.rpc('master_entrar', { p_empresa: null }); await supa.auth.signOut(); location.replace('login.html'); });
 
       let empresas = [];
       let tempoAviso = null;
@@ -226,6 +228,7 @@
       // Entrar na empresa como master (suporte): o banco passa a tratar o master como usuário dela
       async function entrar(emp, botao){
         botao.disabled = true;
+        await saiuDaEmpresa; // a saída feita ao abrir o painel termina antes da entrada
         const { error } = await supa.rpc('master_entrar', { p_empresa: emp.id });
         if (error) { botao.disabled = false; aviso('Não foi possível entrar: ' + error.message + ' (rode a migração 05 no Supabase).', 'erro'); return; }
         // Dados de outra empresa neste navegador não vão para esta

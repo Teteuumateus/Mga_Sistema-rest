@@ -60,7 +60,7 @@
     useEffect(() => {
       const m = params?.abrir && D.mesaPorId(params.abrir);
       if (m && !D.vendaDaMesa(m.id)) setAbrindo(m);
-      if (params?.abrir) history.replaceState(null, '', '#/mesas');
+      if (params?.abrir) ir('mesas');
     }, [params?.abrir]);
     const lista = D.mesas().filter(m => m.ativo).map(m => ({m, v: D.vendaDaMesa(m.id)})).map(x => ({...x, s: situacao(x.v)}));
     const ocupadas = lista.filter(x => x.v);
@@ -104,10 +104,14 @@
   function FecharConta({v, onFechar, onFinalizada}){
     useDados();
     const t = D.totaisVenda(v);
-    const [modo, setModo] = useState('inteira');
-    const [n, setN] = useState(Math.max(2, v.pessoas || 2));
-    const [base, setBase] = useState(null);     // valor dividido (o que faltava ao começar a divisão)
-    const [recebidas, setRecebidas] = useState([]); // pessoas já recebidas nesta divisão
+    // Divisão já começada (pagamentos "Pessoa k/n"): retoma com as mesmas partes
+    const feitas = v.pagamentos.map(p => /^Pessoa (\d+)\/(\d+)$/.exec(p.parte || '')).filter(Boolean);
+    const nFeito = feitas.length ? Number(feitas[feitas.length - 1][2]) : 0;
+    const daDivisao = v.pagamentos.filter(p => new RegExp(`^Pessoa \\d+/${nFeito}$`).test(p.parte || ''));
+    const [modo, setModo] = useState(nFeito ? 'pessoas' : 'inteira');
+    const [n, setN] = useState(nFeito || Math.max(2, v.pessoas || 2));
+    const [base, setBase] = useState(nFeito ? r2(t.restante + daDivisao.reduce((s, p) => s + p.valor, 0)) : null); // valor dividido (o que faltava ao começar a divisão)
+    const [recebidas, setRecebidas] = useState(nFeito ? [...new Set(feitas.filter(x => Number(x[2]) === nFeito).map(x => Number(x[1])))] : []); // pessoas já recebidas
     const [sel, setSel] = useState([]);
     const [receber, setReceber] = useState(null); // {valor, itemIds, parte, titulo}
     const [erro, setErro] = useState('');
@@ -116,7 +120,7 @@
     // Divisão igual: centavos que sobram vão para a última pessoa
     const valorBase = base ?? t.restante;
     const cada = Math.floor(valorBase / n * 100) / 100;
-    const partes = Array.from({length: n}, (_, k) => k < n - 1 ? cada : r2(valorBase - cada * (n - 1)));
+    const partes = Array.from({length: n}, (_, k) => Math.min(k < n - 1 ? cada : r2(valorBase - cada * (n - 1)), t.restante));
     const valorSel = D.valorDosItens(v, sel);
     const confirmarReceber = ({pagamentos, clienteId}) => {
       try {

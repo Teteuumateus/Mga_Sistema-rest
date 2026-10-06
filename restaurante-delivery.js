@@ -147,8 +147,8 @@
       if (D.totaisVenda(v).restante <= 0.001) { if (confirmar(`Confirmar ${v.modo === 'RETIRAR' ? 'retirada' : 'entrega'} do pedido #${v.numero}? Ele já está pago.`)) tentar(() => D.entregarPedido(v.id), `Pedido #${v.numero} concluído.`); return; }
       setErroPag(''); setPagando(v);
     };
-    const receber = ({pagamentos}) => {
-      try { const r = D.entregarPedido(pagando.id, {pagamentos}); setPagando(null); mostrar(`Pedido #${r.venda.numero} concluído${r.troco > 0 ? ` · troco ${D.moedaBR(r.troco)}` : ''}.`); }
+    const receber = ({pagamentos, clienteId}) => {
+      try { const r = D.entregarPedido(pagando.id, {pagamentos, clienteId}); setPagando(null); mostrar(`Pedido #${r.venda.numero} concluído${r.troco > 0 ? ` · troco ${D.moedaBR(r.troco)}` : ''}.`); }
       catch (e) { setErroPag(e.regra ? e.message : 'Erro inesperado: ' + e.message); if (!e.regra) console.error(e); }
     };
     const voltarStatus = v => {
@@ -223,13 +223,15 @@
     const forma = D.formaPorId(f.formaPrevistaId);
     const taxa = f.modo === 'ENTREGAR' ? (D.lerValor(f.taxaEntrega) || 0) : 0;
     const embalagem = D.taxaEmbalagemDe(rascunho.itens);
-    const total = r2(totalProdutos + taxa + embalagem);
+    const base = r2(totalProdutos), ajuste = v => { const t = String(v || '').trim(); return !t ? 0 : t.endsWith('%') ? r2(base * (D.lerValor(t.slice(0, -1)) || 0) / 100) : (D.lerValor(t) || 0); };
+    const total = r2(totalProdutos - ajuste(rascunho.desconto) + ajuste(rascunho.acrescimo) + taxa + embalagem);
     const apps = D.aplicativos().filter(a => a.ativo);
     const salvar = () => {
       try {
         const v = D.registrarDelivery({tipo, itens: rascunho.itens.map(i => ({produtoId: i.produtoId, quantidade: i.quantidade, observacao: i.observacao, tamanhoId: i.tamanhoId, adicionais: i.adicionais})),
           cliente: f, modo: f.modo, agendadoPara: f.agendadoPara, taxaEntrega: f.taxaEntrega, formaPrevistaId: f.formaPrevistaId,
-          trocoPara: forma?.tipo === 'DINHEIRO' ? f.trocoPara : '', levarMaquina: f.levarMaquina, obs: f.obs, salvarCliente: f.salvarCliente, aplicativoId: f.aplicativoId || null});
+          trocoPara: forma?.tipo === 'DINHEIRO' ? f.trocoPara : '', levarMaquina: f.levarMaquina, obs: [rascunho.obs, f.obs].map(x => (x || '').trim()).filter(Boolean).join(' · '),
+          salvarCliente: f.salvarCliente, aplicativoId: f.aplicativoId || null, desconto: rascunho.desconto || '', acrescimo: rascunho.acrescimo || ''});
         onSalvo(v);
       } catch (e) { setErro(e.regra ? e.message : 'Erro inesperado: ' + e.message); if (!e.regra) console.error(e); }
     };

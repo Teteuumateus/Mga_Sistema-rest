@@ -1037,3 +1037,18 @@
 #appShell .rest-suporte-card button { margin-top: 6px; padding: 7px 10px; border-radius: 8px; border: 0; background: #f5b54a; color: #3a2600;
   font: inherit; font-size: 0.82rem; font-weight: 700; cursor: pointer; text-align: center; }
 #appShell .rest-suporte-card button:hover { background: #ffc566; }
+
+/* Dashboard do estoque: o que mais saiu e o que precisa repor */
+#appShell .rest-est-dash { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+#appShell .rest-est-dash h3 { margin: 0 0 10px; font-size: 0.95rem; }
+#appShell .rest-est-top { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+#appShell .rest-est-top li > span:first-child { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+#appShell .rest-est-top small { color: #69778d; }
+#appShell .rest-est-barra i { margin-left: 0; }
+#appShell .rest-compra-aviso { grid-column: 1 / -1; color: #8a5a00; font-size: 0.78rem; }
+[data-theme="dark"] #appShell .rest-est-top small { color: #8596ae; }
+[data-theme="dark"] #appShell .rest-compra-aviso { color: #ffd27a; }
+@media (max-width: 720px) { #appShell .rest-est-dash { grid-template-columns: minmax(0, 1fr); } }
+
+/* Caixas de seleção com texto longo nos formulários quebram a linha (celular sem rolagem lateral) */
+#appShell .rest-config-form .rest-check, #appShell .form-grid .rest-check, #appShell .rest-no-caixa { white-space: normal; }

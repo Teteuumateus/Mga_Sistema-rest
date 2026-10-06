@@ -80,7 +80,7 @@
     const excluir = m => { if (confirmar(`Excluir "${m.descricao}" (${D.moedaBR(m.valor)})${m.transferencia ? ' e a outra ponta da transferência' : ''}?`)) tentar(() => D.excluirMovConta(m.id), 'Lançamento excluído.'); };
     return html`
       <${Cabecalho} titulo="Movimento de conta" sub=${`${c.nome} · saldo atual ${D.moedaBR(D.saldoConta(c.id))}`}>
-        <button type="button" className="btn btn-ghost" disabled=${contas.length < 2} onClick=${() => setJanela({tipo: 'transf', destinoId: contas.find(x => x.id !== c.id)?.id || '', valor: '', data: hoje, descricao: ''})}>⇄ Transferir</button>
+        <button type="button" className="btn btn-ghost" disabled=${contas.length < 2} onClick=${() => setJanela({tipo: 'transf', destinoId: contas.find(x => x.id !== c.id && x.ativo)?.id || '', valor: '', data: hoje, descricao: ''})}>⇄ Transferir</button>
         <button type="button" className="btn" onClick=${() => setJanela({tipo: 'lanc', tipoMov: 'SAIDA', valor: '', data: hoje, descricao: ''})}>+ Lançamento</button>
       <//>
       ${aviso}

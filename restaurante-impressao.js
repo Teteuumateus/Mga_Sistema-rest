@@ -121,12 +121,13 @@
   }
 
   // ---- Ações usadas pelas telas ----
-  const pendentes = v => v.itens.filter(i => !i.impressoEm);
+  const daCozinha = i => !!i.preparo || (i.preparo === undefined && D.grupoPorId(D.produtoPorId(i.produtoId)?.grupoId)?.cozinha !== false);
+  const pendentes = v => v.itens.filter(i => daCozinha(i) && !i.impressoEm);
   // Cupom ao concluir: nunca, sempre ou pergunta (como "Deseja imprimir o comprovante de venda?")
   const querCupom = (pergunta = 'Deseja imprimir o comprovante de venda?') => cfg().cupomModo === 'SEMPRE' || (cfg().cupomModo === 'PERGUNTAR' && window.confirm(pergunta));
   // Comandas (já com as vias); marca os itens como enviados à cozinha
   function paginasComanda(v, {todos = false} = {}){
-    const itens = todos ? v.itens : pendentes(v);
+    const itens = todos ? v.itens.filter(daCozinha) : pendentes(v);
     if (!itens.length) return [];
     const reimpressao = todos && itens.some(i => i.impressoEm);
     D.marcarImpresso(v.id, itens.map(i => i.id));
@@ -140,7 +141,7 @@
     conferencia: v => imprimir(html`<${Cupom} v=${v} conferencia />`),
     entrega: v => imprimir(html`<${Cupom} v=${v} entrega />`),
     // Retorna quantos itens foram para a cozinha (0 = nada novo)
-    comanda(v, opcoes = {}){ const n = (opcoes.todos ? v.itens : pendentes(v)).length; const p = paginasComanda(v, opcoes); if (p.length) imprimir(p); return n; },
+    comanda(v, opcoes = {}){ const n = (opcoes.todos ? v.itens.filter(daCozinha) : pendentes(v)).length; const p = paginasComanda(v, opcoes); if (p.length) imprimir(p); return n; },
     // Automáticos (Configurações › Impressão), num só trabalho de impressão:
     // venda de balcão concluída → comanda + cupom; mesa fechada → cupom; delivery gravado → comanda + pedido para entrega
     aposBalcao(v){ const p = [...(cfg().comandaAuto ? paginasComanda(v) : []), ...(querCupom() ? [html`<${Cupom} v=${v} />`] : [])]; if (p.length) imprimir(p); },
