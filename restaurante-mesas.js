@@ -305,8 +305,8 @@
           <form onSubmit=${e => { e.preventDefault(); salvarItem(); }}>
             <div className="form-grid">
               <div className="field"><label htmlFor="eiQtd">Quantidade</label><input id="eiQtd" type="text" inputMode="decimal" value=${editando.quantidade} onInput=${e => setEditando({...editando, quantidade: e.target.value})} /></div>
-              <div className="field"><label htmlFor="eiPreco">Preço unitário (R$)</label><input id="eiPreco" type="text" inputMode="decimal" value=${editando.preco} onInput=${e => setEditando({...editando, preco: e.target.value})} /></div>
-              <div className="field"><label htmlFor="eiDesc">Desconto no item (R$)</label><input id="eiDesc" type="text" inputMode="decimal" placeholder="0,00" value=${editando.desconto} onInput=${e => setEditando({...editando, desconto: e.target.value})} /></div>
+              <div className="field"><label htmlFor="eiPreco">Preço unitário (R$)</label><input id="eiPreco" type="text" inputMode="decimal" value=${editando.preco} disabled=${!D.podeAcessar('vendas')} title=${D.podeAcessar('vendas') ? null : 'Só o caixa ou o gerente muda o preço'} onInput=${e => setEditando({...editando, preco: e.target.value})} /></div>
+              <div className="field"><label htmlFor="eiDesc">Desconto no item (R$)</label><input id="eiDesc" type="text" inputMode="decimal" placeholder="0,00" value=${editando.desconto} disabled=${!D.podeAcessar('vendas')} onInput=${e => setEditando({...editando, desconto: e.target.value})} /></div>
               <div className="field rest-largo"><label htmlFor="eiObs">Observação</label><input id="eiObs" type="text" maxLength="100" value=${editando.observacao} onInput=${e => setEditando({...editando, observacao: e.target.value})} /></div>
             </div>
             <p className="dv-ajuda">Total do item: <b>${D.moedaBR(Math.max(totalItem, 0))}</b>. Mudanças de preço e desconto ficam registradas na auditoria.</p>

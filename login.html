@@ -178,7 +178,7 @@
         const { data: { user } } = await supa.auth.getUser();
         if (await souMaster(user.id)) return 'master.html';
         const { data: u, error } = await supa.from('usuarios')
-          .select('id, nome, login, perfil, empresa_id, usuario_modulos(modulo)')
+          .select('id, nome, login, perfil, empresa_id, usuario_modulos!usuario_modulos_usuario_id_mesma_empresa(modulo)')
           .eq('id', user.id).maybeSingle();
         if (error) throw error;
         if (!u) {

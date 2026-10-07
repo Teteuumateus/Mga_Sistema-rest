@@ -85,13 +85,14 @@
   const hojeISO = () => diaISO(new Date());
   const dataBR = iso => iso ? iso.slice(0, 10).split('-').reverse().join('/') : '—';
   const txt = v => String(v ?? '').trim();
-  const norm = v => txt(v).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const norm = v => txt(v).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ');
   const digitos = v => String(v ?? '').replace(/\D/g, '');
   // "1.234,56" / "1234,5" (vírgula decimal) ou "1234.56" (ponto decimal)
   function lerValor(v){
     if (typeof v === 'number') return v;
     const t = txt(v).replace(/^R\$\s*/i, '');
-    if (!t) return NaN;
+    if (!t || !/^-?[\d.,\s]+$/.test(t)) return NaN;
+    if (/^-?\d{1,3}(,\d{3})+\.\d+$/.test(t)) return Number(t.replace(/,/g, '')); // 1,234.56
     // "1.250" (pontos a cada 3 dígitos, sem vírgula) é milhar: 1250, como o qtdBR escreve
     const milhar = /^-?[1-9]\d{0,2}(\.\d{3})+$/.test(t);
     const n = Number(t.includes(',') || milhar ? t.replace(/[.\s]/g, '').replace(',', '.') : t);
@@ -585,6 +586,76 @@
     salvar('restProdutos', 'restSeq', 'restMovEstoque');
     return novo;
   }
+  // ---- Importação de produtos por planilha (Excel) ----
+  // Cada linha: {linha, codigo, nome, categoria, tipo, preco, custo, unidade, controla, estoque, minimo, descricao, ativo}.
+  // Produto já cadastrado (mesmo código ou, sem código, mesmo nome) é atualizado só nas colunas preenchidas;
+  // categoria que não existe é criada. aplicar=false só confere e devolve a prévia.
+  // "1" e "001" são o mesmo código (o Excel tira os zeros); código novo só com números fica com 3 dígitos
+  const mesmoCodigo = (a, b) => a === b || (/^\d+$/.test(a) && /^\d+$/.test(b) && Number(a) === Number(b));
+  const codigoDaPlanilha = v => { const c = txt(v).toUpperCase().replace(/\s/g, '').replace(/\.0+$/, ''); return /^\d{1,2}$/.test(c) ? c.padStart(3, '0') : c; };
+  const simNao = v => { const t = norm(v); return t === '' ? null : ['sim', 's', 'x', 'true', '1', 'yes', 'verdadeiro'].includes(t) ? true : ['nao', 'n', 'false', '0', 'no', 'falso'].includes(t) ? false : undefined; };
+  function importarProdutos(linhas, {aplicar = false} = {}){
+    exigir('cadastros');
+    const vazio = v => txt(v) === '';
+    const numero = (v, rotulo, erros) => { if (vazio(v)) return null; const n = lerValor(v); if (!Number.isFinite(n) || n < 0) erros.push(`${rotulo} inválido(a): "${txt(v)}"`); return n; };
+    const itens = [], codigos = new Map(), nomes = new Map(), catsNovas = new Map();
+    (linhas || []).forEach(l => {
+      if (['codigo', 'nome', 'categoria', 'preco', 'custo'].every(k => vazio(l[k]))) return; // linha em branco
+      const erros = [];
+      const codigo = codigoDaPlanilha(l.codigo);
+      const nome = txt(l.nome);
+      const p = (codigo && produtos.find(x => mesmoCodigo(x.codigo, codigo))) || (!codigo && nome && produtos.find(x => norm(x.nome) === norm(nome))) || null;
+      if (!nome && !p) erros.push('informe o nome');
+      if (codigo && !/^[A-Z0-9._-]{1,20}$/.test(codigo)) erros.push(`código "${codigo}" inválido (até 20 letras ou números)`);
+      const tipoTxt = norm(l.tipo);
+      const tipo = !tipoTxt ? (p?.tipo || 'VENDA') : tipoTxt.startsWith('insumo') ? 'INSUMO' : tipoTxt.startsWith('venda') || tipoTxt === 'produto' ? 'VENDA' : (erros.push(`tipo "${txt(l.tipo)}" (use Venda ou Insumo)`), 'VENDA');
+      const catNome = txt(l.categoria);
+      const g = catNome ? grupos.find(x => norm(x.nome) === norm(catNome)) : (p ? grupoPorId(p.grupoId) : null);
+      if (!catNome && !p) erros.push('informe a categoria');
+      if (catNome && !g) catsNovas.set(norm(catNome), catNome);
+      const preco = numero(l.preco, 'preço', erros), custo = numero(l.custo, 'custo', erros);
+      const estoque = numero(l.estoque, 'estoque', erros), minimo = numero(l.minimo, 'estoque mínimo', erros);
+      if (tipo === 'VENDA' && !(preco > 0) && !(p && preco === null && p.preco > 0) && !(p?.tamanhos || []).length) erros.push('informe o preço de venda (maior que zero)');
+      const uniTxt = txt(l.unidade).toUpperCase().replace('PORCAO', 'PORÇÃO');
+      if (uniTxt && !UNIDADES.includes(uniTxt)) erros.push(`unidade "${txt(l.unidade)}" (use ${UNIDADES.join(', ')})`);
+      const controla = simNao(l.controla), ativo = simNao(l.ativo);
+      if (controla === undefined) erros.push(`"controla estoque" deve ser Sim ou Não`);
+      if (ativo === undefined) erros.push(`"ativo" deve ser Sim ou Não`);
+      // Repetido dentro da própria planilha
+      const chave = codigo || norm(nome);
+      if (codigo && codigos.has(codigo)) erros.push(`código ${codigo} repetido (linha ${codigos.get(codigo)})`);
+      if (nome && nomes.has(norm(nome))) erros.push(`nome repetido (linha ${nomes.get(norm(nome))})`);
+      if (codigo) codigos.set(codigo, l.linha);
+      if (nome) nomes.set(norm(nome), l.linha);
+      const outro = nome && produtos.find(x => x !== p && norm(x.nome) === norm(nome));
+      if (outro) erros.push(`já existe outro produto "${outro.nome}" (cód. ${outro.codigo})`);
+      itens.push({linha: l.linha, chave, acao: p ? 'ATUALIZAR' : 'NOVO', produto: p, nome: nome || p?.nome || '', categoria: catNome || g?.nome || '', erros,
+        campos: {codigo, nome, tipo, catNome, preco, custo, estoque, minimo, unidade: uniTxt, controla, ativo, descricao: vazio(l.descricao) ? null : txt(l.descricao)}});
+    });
+    const validos = itens.filter(i => !i.erros.length);
+    const previa = {itens, novos: validos.filter(i => i.acao === 'NOVO').length, atualizados: validos.filter(i => i.acao === 'ATUALIZAR').length,
+      categoriasNovas: [...catsNovas.values()].filter(n => validos.some(i => norm(i.campos.catNome) === norm(n))), erros: itens.filter(i => i.erros.length).length};
+    if (!aplicar) return previa;
+    if (!validos.length) erro('Nenhuma linha válida para importar.');
+    previa.categoriasNovas.forEach(nome => salvarGrupo({nome, ativo: true, cozinha: true}));
+    const falhas = [];
+    let feitos = 0;
+    validos.forEach(i => {
+      const c = i.campos, p = i.produto && produtoPorId(i.produto.id);
+      const g = c.catNome ? grupos.find(x => norm(x.nome) === norm(c.catNome)) : grupoPorId(p.grupoId);
+      const v = (novo, antigo) => novo === null || novo === undefined || novo === '' ? antigo : novo;
+      const controla = c.controla ?? (c.estoque !== null && c.estoque > 0 ? true : p ? p.controlaEstoque : false);
+      const dados = {...(p || {}), codigo: p ? p.codigo : v(c.codigo, ''), nome: v(c.nome, p?.nome), tipo: c.tipo, grupoId: g.id,
+        preco: v(c.preco, p?.preco ?? ''), custo: v(c.custo, p?.custo ?? ''), unidade: v(c.unidade, p?.unidade || 'UN'), descricao: v(c.descricao, p?.descricao || ''),
+        ativo: c.ativo ?? (p ? p.ativo : true), controlaEstoque: controla, estoqueMinimo: v(c.minimo, p?.estoqueMinimo ?? ''),
+        // Estoque: só muda o saldo do produto já cadastrado se a coluna veio preenchida
+        estoque: c.estoque !== null ? c.estoque : p ? p.estoque : '', ...(p && c.estoque === null ? {estoqueAberto: txt(p.estoque), estoque: txt(p.estoque)} : {})};
+      if (!p && !dados.codigo) dados.codigo = proximoCodigo();
+      try { salvarProduto(dados, p?.id); feitos++; } catch (e) { if (!e.regra) throw e; falhas.push({linha: i.linha, nome: i.nome, msg: e.message}); }
+    });
+    auditar(`Produtos importados por planilha: ${feitos} de ${validos.length}`, {detalhe: `${previa.novos} novos, ${previa.atualizados} atualizados${previa.categoriasNovas.length ? `, categorias criadas: ${previa.categoriasNovas.join(', ')}` : ''}`});
+    return {...previa, feitos, falhas};
+  }
   function excluirProduto(id){
     const p = produtoPorId(id);
     if (!p) return;
@@ -752,6 +823,60 @@
       {detalhe: `${motivo} · ` + linhas.map(l => `${qtdBR(l.qtd)} ${l.p.unidade} ${l.p.nome}`).join(', ')});
     salvar('restProdutos', 'restMovEstoque');
     return {itens: linhas.length, total};
+  }
+  // Entrada de estoque por planilha. Cada linha: {linha, codigo, produto, quantidade, custo, fornecedor, documento}.
+  // O produto precisa estar cadastrado (código ou nome). Linha sem quantidade é ignorada (o modelo traz
+  // todos os produtos). As linhas viram uma compra por fornecedor + nota (custo médio e, se pedir, conta a pagar).
+  // aplicar=false só confere e devolve a prévia.
+  function importarEntradas(linhas, {aplicar = false, conta = null} = {}){
+    exigir('estoque');
+    const itens = [];
+    (linhas || []).forEach(l => {
+      if (txt(l.quantidade) === '') return; // sem quantidade: não entra (linha do modelo não preenchida)
+      const erros = [];
+      const codigo = codigoDaPlanilha(l.codigo);
+      const nome = txt(l.produto);
+      const p = (codigo && produtos.find(x => mesmoCodigo(x.codigo, codigo))) || (nome && produtos.find(x => norm(x.nome) === norm(nome))) || null;
+      if (!p) erros.push(codigo || nome ? `produto "${codigo || nome}" não está cadastrado (cadastre em Cadastros › Produtos)` : 'informe o código ou o nome do produto');
+      const qtd = r3(lerValor(l.quantidade));
+      if (!(qtd > 0)) erros.push(`quantidade inválida: "${txt(l.quantidade)}"`);
+      const custo = txt(l.custo) === '' ? 0 : r2(lerValor(l.custo));
+      if (!Number.isFinite(custo) || custo < 0) erros.push(`custo inválido: "${txt(l.custo)}"`);
+      const fornNome = txt(l.fornecedor);
+      const forn = fornNome ? fornecedores.find(f => norm(f.nome) === norm(fornNome) || (digitos(f.documento) && digitos(f.documento) === digitos(fornNome))) : null;
+      if (fornNome && !forn) erros.push(`fornecedor "${fornNome}" não está cadastrado (cadastre em Cadastros › Fornecedores ou deixe em branco)`);
+      const documento = txt(l.documento);
+      itens.push({linha: l.linha, produto: p, nome: p?.nome || nome || codigo, quantidade: qtd, custo, fornecedor: forn, documento, erros,
+        nota: `${forn?.id || ''}|${norm(documento)}`});
+    });
+    // Mesmo produto duas vezes na mesma nota: some numa linha só
+    const vistos = new Map();
+    itens.filter(i => !i.erros.length).forEach(i => {
+      const k = i.nota + '|' + i.produto.id;
+      if (vistos.has(k)) i.erros.push(`produto repetido na mesma nota (linha ${vistos.get(k)}); some as quantidades numa linha só`);
+      else vistos.set(k, i.linha);
+    });
+    const validos = itens.filter(i => !i.erros.length);
+    const notas = [...new Set(validos.map(i => i.nota))];
+    // Nota já lançada antes (mesmo fornecedor e documento): importar de novo dobraria o estoque
+    const repetidas = [...new Set(validos.filter(i => i.documento).map(i => [i.fornecedor?.nome, i.documento].filter(Boolean).join(' · ')))]
+      .filter(motivo => movEstoque.some(m => m.tipo === 'ENTRADA' && m.motivo === motivo));
+    const previa = {itens, validos: validos.length, erros: itens.length - validos.length, notas: notas.length, repetidas,
+      total: r2(validos.reduce((s, i) => s + i.quantidade * i.custo, 0)), passamAControlar: [...new Set(validos.filter(i => !i.produto.controlaEstoque).map(i => i.produto.nome))]};
+    if (!aplicar) return previa;
+    if (!validos.length) erro('Nenhuma linha válida para dar entrada.');
+    if (conta) exigir('financeiro');
+    const feitas = [], falhas = [];
+    notas.forEach(n => {
+      const doGrupo = validos.filter(i => i.nota === n);
+      const {fornecedor, documento} = doGrupo[0];
+      try {
+        const r = compraEstoque({fornecedorId: fornecedor?.id || null, documento: documento || 'Importação de planilha', ligarControle: true,
+          itens: doGrupo.map(i => ({produtoId: i.produto.id, quantidade: i.quantidade, custo: i.custo})), conta: conta && doGrupo.some(i => i.custo > 0) ? conta : null});
+        feitas.push({fornecedor: fornecedor?.nome || '', documento, itens: r.itens, total: r.total});
+      } catch (e) { if (!e.regra) throw e; falhas.push({linhas: doGrupo.map(i => i.linha), msg: e.message}); }
+    });
+    return {...previa, feitas, falhas};
   }
   // Zerar estoque (todos os produtos controlados ou só de uma categoria): um ajuste para cada um
   function zerarEstoque({grupoId = '', motivo = ''} = {}){
@@ -1475,6 +1600,9 @@
       i.desconto = dsc;
     }
     if (r2(i.desconto || 0) > r2(i.quantidade * i.precoUnitario)) { Object.assign(i, antes); erro('O desconto passa do valor do item.'); }
+    if ((antes.precoUnitario !== i.precoUnitario || r2(antes.desconto || 0) !== r2(i.desconto || 0)) && !podeAcessar('vendas')) {
+      Object.assign(i, antes); erro('Mudar preço ou dar desconto é com o caixa ou o gerente.');
+    }
     try { conferirPago(v); } catch (e) { Object.assign(i, antes); throw e; }
     // Preço e desconto mudados à mão ficam na auditoria
     const alteracoes = [];
@@ -1488,6 +1616,8 @@
     const v = editavelPor(vendaId);
     const i = itemDe(v, itemId);
     if (i.pago) erro(`"${i.nome}" já foi pago e não pode ser excluído.`);
+    if ((i.impressoEm || (i.preparo && i.preparo.estado !== 'FILA')) && !podeAcessar('vendas'))
+      erro(`"${i.nome}" já foi para a cozinha: só o caixa ou o gerente tira o item.`);
     v.itens.splice(v.itens.indexOf(i), 1);
     try { conferirPago(v); } catch (e) { v.itens.push(i); throw e; }
     auditar(`${nomeVenda(v)}: item excluído — ${i.quantidade}× ${i.nome}`, {detalhe: txt(motivo)});
@@ -1622,6 +1752,8 @@
     const v = vendaPorId(vendaId);
     if (!v) erro('Venda não encontrada.');
     exigir(v.status === 'ABERTA' ? moduloDaVenda(v.tipo) : 'vendas');
+    if (v.status === 'ABERTA' && v.tipo === 'MESA' && v.itens.some(i => i.impressoEm || (i.preparo && i.preparo.estado !== 'FILA')) && !podeAcessar('vendas'))
+      erro('A mesa já tem pedido na cozinha: só o caixa ou o gerente cancela.');
     if (v.status === 'CANCELADA') erro(`A venda #${v.numero} já está cancelada.`);
     if (txt(motivo).length < 3) erro('Informe o motivo do cancelamento.');
     const eraAberta = v.status === 'ABERTA';
@@ -1830,6 +1962,74 @@
     mesas.splice(mesas.indexOf(m), 1);
     auditar(`Mesa ${m.numero} excluída`);
     salvar('restMesas');
+  }
+  // ---- Cardápio digital ----
+  // Produto aparece no cardápio se for de venda, ativo e não estiver marcado "fora do cardápio" (cardapio === false).
+  // A ordem dentro da categoria fica em ordemCardapio; a das categorias, em ordem.
+  const noCardapio = p => !!p && p.ativo && (p.tipo || 'VENDA') !== 'INSUMO' && p.cardapio !== false;
+  function configurarCardapio({ativo, mensagem}){
+    exigir('cadastros');
+    const antes = config.cardapio || {};
+    const novo = {...antes, ativo: !!ativo, mensagem: txt(mensagem).slice(0, 200)};
+    config = {...config, cardapio: novo};
+    if (!!antes.ativo !== novo.ativo) auditar(`Cardápio digital ${novo.ativo ? 'aberto para pedidos' : 'fechado para pedidos'}`);
+    salvar('restConfig');
+    return novo;
+  }
+  function mostrarNoCardapio(produtoId, mostrar){
+    exigir('cadastros');
+    const p = produtoPorId(produtoId) || erro('Produto não encontrado.');
+    if (mostrar && (p.tipo || 'VENDA') === 'INSUMO') erro('Insumo não aparece no cardápio.');
+    p.cardapio = !!mostrar;
+    auditar(`"${p.nome}" ${mostrar ? 'aparece no' : 'saiu do'} cardápio digital`);
+    salvar('restProdutos');
+    return p;
+  }
+  // Nova ordem dos produtos de uma categoria (lista de ids na ordem desejada)
+  function ordenarCardapio(ids){
+    exigir('cadastros');
+    ids.forEach((id, k) => { const p = produtoPorId(id); if (p) p.ordemCardapio = k + 1; });
+    salvar('restProdutos');
+  }
+  function ordenarCategorias(ids){
+    exigir('cadastros');
+    ids.forEach((id, k) => { const g = grupoPorId(id); if (g) g.ordem = k + 1; });
+    salvar('restGrupos');
+  }
+  // Alteração rápida pela tela do cardápio: nome, descrição, preço e foto (o resto do cadastro fica igual)
+  function editarNoCardapio(id, {nome, descricao, preco, foto}){
+    const p = produtoPorId(id) || erro('Produto não encontrado.');
+    return salvarProduto({...p, nome, descricao, preco, foto: foto ?? p.foto, estoque: txt(p.estoque), estoqueAberto: txt(p.estoque)}, id);
+  }
+  // Lança um pedido do cardápio na conta da mesa (abre a mesa se precisar). Se algum item falhar, desfaz os já lançados.
+  function lancarPedidoCardapio(pedido){
+    exigir('mesas');
+    const m = mesaPorId(pedido.mesaId);
+    if (!m || !m.ativo) erro(`Mesa ${pedido.mesaNumero} não encontrada no cadastro.`);
+    const aberta = vendaDaMesa(m.id);
+    // Já lançado (ex.: a confirmação no banco falhou e alguém tentou de novo): não lança em dobro
+    if (aberta && aberta.itens.some(i => i.cardapio === pedido.numero)) return aberta;
+    const v = aberta || novaVenda({tipo: 'MESA', mesaId: m.id});
+    const lancados = [];
+    try {
+      (pedido.itens || []).forEach((it, k) => {
+        const obs = [txt(it.observacao), k === 0 && txt(pedido.obs) ? `Pedido: ${txt(pedido.obs)}` : ''].filter(Boolean).join(' · ');
+        const item = adicionarItem(v.id, it.produtoId, {quantidade: it.quantidade, observacao: obs.slice(0, 100), tamanhoId: it.tamanhoId || null,
+          adicionais: (it.adicionais || []).map(a => a.id)});
+        item.cardapio = pedido.numero;
+        // Preço: o que o cliente viu no cardápio, a não ser que o do sistema esteja menor (promoção)
+        const visto = Number(it.preco);
+        if (visto > 0 && item.precoUnitario > visto) item.precoUnitario = r2(visto);
+        lancados.push(item.id);
+      });
+    } catch (e) {
+      lancados.forEach(id => { try { removerItem(v.id, id, 'Pedido do cardápio não lançado'); } catch (x) { /* item já saiu */ } });
+      if (!aberta) try { cancelarVenda(v.id, 'Pedido do cardápio não lançado'); } catch (x) { /* fica aberta, sem itens */ }
+      throw e;
+    }
+    auditar(`Pedido #${pedido.numero} do cardápio lançado na mesa ${m.numero}`, {detalhe: (pedido.itens || []).map(i => `${i.quantidade}x ${i.nome}`).join(', ')});
+    salvar('restVendas');
+    return v;
   }
   function salvarConfig(d){
     exigir('configuracoes');
@@ -2517,7 +2717,7 @@
     formas: () => formas, formasAtivas, formaPorId, prazoHabilitado, tipoPagamento,
     seq: () => seq, caixas: () => caixas, movCaixa: () => movCaixa, vendas: () => vendas, contas: () => contas, categorias: () => categorias,
     grupoPorId, produtoPorId, clientePorId, entregadorPorId, vendaPorId, contaPorId, caixaPorId, produtosDoGrupo, produtoVendido, contaVencida, proximoCodigo,
-    salvarGrupo: cad(salvarGrupo), excluirGrupo: cad(excluirGrupo), salvarProduto: cad(salvarProduto), excluirProduto: cad(excluirProduto),
+    salvarGrupo: cad(salvarGrupo), excluirGrupo: cad(excluirGrupo), salvarProduto: cad(salvarProduto), excluirProduto: cad(excluirProduto), importarProdutos: cad(importarProdutos),
     salvarCliente: cad(salvarClienteRest), excluirCliente: cad(excluirClienteRest), salvarEntregador: cad(salvarEntregador), excluirEntregador: cad(excluirEntregador),
     salvarForma: cad(salvarForma), excluirForma: cad(excluirForma),
     // Pessoas, regiões de entrega, empresa e impressão
@@ -2528,7 +2728,7 @@
     salvarEmpresa, cabecalhoEmpresa, nomeMarca, salvarImpressao, marcarImpresso,
     // Estoque
     movEstoque: () => movEstoque, estoqueBaixo, custoMedio, custoProduto, TIPOS_PRODUTO,
-    produzir: est(produzir), compraEstoque: est(compraEstoque), zerarEstoque: est(zerarEstoque),
+    produzir: est(produzir), compraEstoque: est(compraEstoque), zerarEstoque: est(zerarEstoque), importarEntradas: est(importarEntradas),
     // Cardápio: adicionais/etapas, tamanhos e promoções
     DIAS_SEMANA, adicionais: () => adicionais, grupoAdicionalPorId, salvarGrupoAdicional: cad(salvarGrupoAdicional), excluirGrupoAdicional: cad(excluirGrupoAdicional),
     promocoes: () => promocoes, promocaoPorId, salvarPromocao: cad(salvarPromocao), excluirPromocao: cad(excluirPromocao), descreverPromocao,
@@ -2547,6 +2747,9 @@
     // Mesas: cadastro, pedido aberto, divisão da conta e taxa de serviço
     mesas: mesasOrdenadas, mesaPorId, vendaDaMesa, config: () => config, valorDosItens,
     salvarMesa: cad(salvarMesa), excluirMesa: cad(excluirMesa), salvarConfig,
+    // Cardápio digital
+    noCardapio, configurarCardapio, mostrarNoCardapio: cad(mostrarNoCardapio), ordenarCardapio: cad(ordenarCardapio), ordenarCategorias: cad(ordenarCategorias),
+    editarNoCardapio: cad(editarNoCardapio), lancarPedidoCardapio: mes(lancarPedidoCardapio),
     alterarItem: mes(alterarItem), removerItem: mes(removerItem), definirServico: mes(definirServico), pedirConta: mes(pedirConta),
     definirPessoas: mes(definirPessoas), transferirMesa: mes(transferirMesa), receberParcial: mes(receberParcial), removerPagamento: mes(removerPagamento),
     // Delivery e encomenda

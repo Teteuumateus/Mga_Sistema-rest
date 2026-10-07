@@ -114,6 +114,7 @@
       onBlur=${() => { const v = D.lerValor(form[k]); if (Number.isFinite(v)) setForm(f => ({...f, [k]: D.valorBR(v)})); }} />`;
     return html`
       <${Cabecalho} titulo="Produtos" sub=${`${plural(todos.length - nInativos, 'produto ativo', 'produtos ativos')}${nInativos ? ` · ${nInativos} inativo${nInativos === 1 ? '' : 's'}` : ''} em ${plural(grupos.length, 'categoria', 'categorias')}`}>
+        ${window.RestUI.ImportarProdutos && html`<${window.RestUI.ImportarProdutos} mostrar=${mostrar} />`}
         <button type="button" className="btn" onClick=${novo} disabled=${!grupos.length} title=${grupos.length ? '' : 'Cadastre uma categoria primeiro'}>+ Novo produto</button>
       <//>
       ${aviso}
@@ -451,6 +452,7 @@
       <//>`;
   }
 
+  window.RestUI.lerFoto = lerFoto;
   Object.assign(window.RestUI.telas, {
     'cad/mesas': TelaCadMesas,
     'cad/usuarios': TelaUsuarios, 'cad/formas': TelaFormas,

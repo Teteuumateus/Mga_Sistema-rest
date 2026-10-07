@@ -55,8 +55,13 @@ function bancoFalso(){
     if (t === 'contas' && !(l.valor > 0)) return 'new row violates check constraint "contas_valor_check"';
     return null;
   }
-  function gravar(t, linhas, modo, onConflict){
+  // Como o banco real (migração 09): o que foi excluído fica anotado e não pode ser incluído de novo
+  const PAIS = ['categorias', 'grupos_adicionais', 'produtos', 'mesas', 'clientes', 'formas_pagamento', 'fornecedores', 'funcionarios', 'entregadores',
+    'regioes_entrega', 'aplicativos_delivery', 'embalagens', 'promocoes', 'contas_bancarias', 'caixas', 'vendas', 'contas', 'caixa_movimentos', 'estoque_movimentos', 'conta_bancaria_movimentos'];
+  const excluidos = new Set();
+  function gravar(t, linhas, modo, onConflict, ignorar, salvas = []){
     for (const l0 of linhas) {
+      if (PAIS.includes(t) && l0.id && excluidos.has(t + ':' + l0.id)) continue;
       const l = {...l0, empresa_id: empresa, ...(l0.extra ? {extra: jsonb(JSON.parse(JSON.stringify(l0.extra)))} : {})};
       if (!l.id && !['produto_ficha_tecnica', 'produto_grupos_adicionais', 'embalagem_produtos', 'promocao_dias', 'sequencias', 'venda_entrega'].includes(t)) l.id = crypto.randomUUID();
       const conf = modo === 'insert' ? null : (onConflict || 'id').split(',').filter(c => c !== 'empresa_id');
@@ -64,7 +69,9 @@ function bancoFalso(){
       if (modo === 'insert' && l.id && T[t].some(x => x.id === l.id)) return {message: `duplicate key value violates unique constraint "${t}_pkey"`};
       const erro = validar(t, l, existente);
       if (erro) return {message: erro};
+      if (existente && ignorar) continue;
       if (existente) { Object.assign(existente, l); avisar(t, 'UPDATE', existente); } else { T[t].push(l); avisar(t, 'INSERT', l); }
+      salvas.push({id: l.id});
     }
     return null;
   }
@@ -77,21 +84,22 @@ function bancoFalso(){
       if (modo === 'cascade') { const sai = T[filho].filter(x => x[c] === l.id); sai.forEach(x => excluir(filho, y => y === x)); }
     }
     T[t] = T[t].filter(l => !alvo.includes(l));
+    if (PAIS.includes(t)) alvo.forEach(l => excluidos.add(t + ':' + l.id));
     alvo.forEach(l => avisar(t, 'DELETE', null, {id: l.id}));
     return null;
   }
   const consulta = t => {
-    const filtros = []; let modo = 'select', dados = null, range = null, ordem = null, limite = null, umSo = false, conflito = null;
+    const filtros = []; let modo = 'select', dados = null, range = null, ordem = null, limite = null, umSo = false, conflito = null, ignorar = false;
     const q = {
       select(){ return q; }, order(c, o){ ordem = [c, o?.ascending !== false]; return q; }, range(a, b){ range = [a, b]; return q; }, limit(n){ limite = n; return q; },
       maybeSingle(){ umSo = true; return q; },
-      upsert(l, o){ modo = 'upsert'; dados = l; conflito = o?.onConflict; return q; }, insert(l){ modo = 'insert'; dados = l; return q; },
+      upsert(l, o){ modo = 'upsert'; dados = l; conflito = o?.onConflict; ignorar = !!o?.ignoreDuplicates; return q; }, insert(l){ modo = 'insert'; dados = l; return q; },
       update(l){ modo = 'update'; dados = l; return q; }, delete(){ modo = 'delete'; return q; },
       in(c, v){ filtros.push(l => v.includes(l[c])); return q; }, eq(c, v){ filtros.push(l => l[c] === v); return q; },
       then(res, rej){
         chamadas++;
         let r;
-        if (modo === 'upsert' || modo === 'insert') r = {error: gravar(t, dados, modo, conflito)};
+        if (modo === 'upsert' || modo === 'insert') { const salvas = []; const error = gravar(t, dados, modo, conflito, ignorar, salvas); r = {error, data: error ? null : salvas}; }
         else if (modo === 'delete') r = {error: excluir(t, l => filtros.every(f => f(l)))};
         else if (modo === 'update') { const alvo = (t === 'empresas' ? T[t] : minha(t)).filter(l => filtros.every(f => f(l))); alvo.forEach(l => { Object.assign(l, {...dados, config: jsonb(dados.config)}); avisar(t, 'UPDATE', l); }); r = {error: null}; }
         else {

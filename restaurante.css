@@ -1052,3 +1052,87 @@
 
 /* Caixas de seleção com texto longo nos formulários quebram a linha (celular sem rolagem lateral) */
 #appShell .rest-config-form .rest-check, #appShell .form-grid .rest-check, #appShell .rest-no-caixa { white-space: normal; }
+
+/* Importar produtos por planilha */
+#appShell .rest-imp-kpis { margin: 12px 0; }
+#appShell .rest-imp-filtro { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+#appShell .rest-imp-tabela { max-height: 46vh; overflow: auto; border: 1px solid #e3e9f1; border-radius: 10px; }
+#appShell .rest-imp-tabela th { position: sticky; top: 0; background: #f6f8fb; z-index: 1; }
+#appShell .rest-imp-erro td { background: rgba(194, 42, 78, 0.05); }
+#appShell .rest-imp-alerta { padding: 8px 12px; border-radius: 8px; background: #fff4dc; color: #8a5a00; font-size: 0.85rem; }
+[data-theme="dark"] #appShell .rest-imp-tabela { border-color: #223049; }
+[data-theme="dark"] #appShell .rest-imp-tabela th { background: #111a2b; }
+[data-theme="dark"] #appShell .rest-imp-erro td { background: rgba(217, 89, 120, 0.1); }
+[data-theme="dark"] #appShell .rest-imp-alerta { background: #3a2a08; color: #ffd27a; }
+#appShell .rest-imp-filtro .btn { padding: 6px 12px; font-size: 0.82rem; min-height: 0; }
+/* Janela da importação mais larga (tabela da prévia) */
+#appShell .conferencia-box:has(.rest-imp-kpis) { width: min(920px, calc(100vw - 32px)); max-width: none; }
+#appShell .rest-imp-tabela td:first-child { width: 56px; }
+
+/* ---- Cardápio digital (equipe) ---- */
+.rest-cd-avisos { position: fixed; right: 16px; bottom: 16px; z-index: 900; display: flex; flex-direction: column; gap: 8px; max-width: min(380px, calc(100vw - 32px)); }
+.rest-cd-aviso { display: flex; align-items: center; gap: 10px; text-align: left; border: 0; border-radius: 12px; padding: 12px 14px; background: #1f6feb; color: #fff;
+  font: inherit; font-weight: 700; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); cursor: pointer; animation: rest-cd-entra 0.2s; }
+.rest-cd-aviso.erro { background: #c22a4e; }
+.rest-cd-aviso span:nth-child(2) { flex: 1; }
+.rest-cd-aviso small { opacity: 0.8; text-decoration: underline; }
+@keyframes rest-cd-entra { from { transform: translateY(12px); opacity: 0; } }
+#appShell .rest-cd-chamados { display: grid; gap: 8px; margin-bottom: 14px; }
+#appShell .rest-cd-chamado { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border-radius: 12px; border: 1px solid #f5b54a; background: #fff4dc; }
+#appShell .rest-cd-chamado.conta { border-color: #7fb2ff; background: #e8f1ff; }
+#appShell .rest-cd-chamado > span:nth-child(2) { flex: 1; min-width: 160px; }
+#appShell .rest-cd-chamado small { display: block; color: #69778d; }
+#appShell .rest-cd-chamado-ic { font-size: 1.5rem; }
+#appShell .rest-cd-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+#appShell .rest-cd-pedido { display: flex; flex-direction: column; gap: 6px; padding: 14px; }
+#appShell .rest-cd-pedido.novo { border: 2px solid #1f90ff; }
+#appShell .rest-cd-pedido header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+#appShell .rest-cd-pedido ul { list-style: none; margin: 4px 0; padding: 0; display: grid; gap: 6px; }
+#appShell .rest-cd-pedido li small { display: block; color: #69778d; }
+#appShell .rest-cd-obs { margin: 0; padding: 6px 10px; border-radius: 8px; background: #f6f8fb; font-size: 0.88rem; }
+#appShell .rest-cd-total { display: flex; justify-content: space-between; border-top: 1px solid #e3e9f1; padding-top: 8px; margin-top: auto; }
+#appShell .rest-cd-pedido footer { display: flex; gap: 6px; flex-wrap: wrap; }
+#appShell .rest-cd-pedido footer .btn { padding: 8px 12px; font-size: 0.85rem; }
+#appShell .rest-cd-cancelar { color: #c22a4e; }
+#appShell .rest-cd-vazio { padding: 28px; text-align: center; color: #69778d; }
+#appShell .rest-cd-link { padding: 16px; margin-bottom: 16px; display: grid; gap: 12px; }
+#appShell .rest-cd-link-topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+#appShell .rest-cd-link-topo h3 { margin: 6px 0 2px; }
+#appShell .rest-cd-link-linha { display: flex; gap: 8px; flex-wrap: wrap; }
+#appShell .rest-cd-link-linha input { flex: 1; min-width: 200px; }
+#appShell .rest-cd-mesas { display: grid; gap: 8px; }
+#appShell .rest-cd-mesas-lista { display: flex; flex-wrap: wrap; gap: 6px; }
+#appShell .rest-cd-mesas-lista .btn { padding: 6px 12px; font-size: 0.85rem; }
+#appShell .rest-cd-cab-lista { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+#appShell .rest-cd-cab-lista h3 { margin: 0; }
+#appShell .rest-cd-cat { padding: 12px 14px; margin-bottom: 12px; }
+#appShell .rest-cd-cat > header { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+#appShell .rest-cd-cat > header small { display: block; }
+#appShell .rest-cd-produtos { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+#appShell .rest-cd-produtos li { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: 10px; border: 1px solid #e3e9f1; flex-wrap: wrap; }
+#appShell .rest-cd-produtos li.fora { opacity: 0.55; }
+#appShell .rest-cd-foto { width: 46px; height: 46px; border-radius: 8px; overflow: hidden; display: grid; place-items: center; background: #f1f4f8; flex: none; font-size: 1.3rem; }
+#appShell .rest-cd-foto img { width: 100%; height: 100%; object-fit: cover; }
+#appShell .rest-cd-nome { flex: 1; min-width: 160px; }
+#appShell .rest-cd-nome small { display: block; color: #69778d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 52ch; }
+#appShell .rest-cd-setas { display: flex; gap: 4px; align-items: center; }
+#appShell .rest-cd-setas > button:not(.btn) { width: 32px; height: 32px; border-radius: 8px; border: 1px solid #d5dce6; background: transparent; font: inherit; font-weight: 700; cursor: pointer; color: inherit; }
+#appShell .rest-cd-setas > button:disabled { opacity: 0.35; cursor: default; }
+#appShell .rest-cd-setas .btn { padding: 6px 12px; font-size: 0.85rem; }
+#appShell .rest-cd-previa { display: flex; justify-content: center; }
+#appShell .rest-cd-previa iframe { width: 390px; max-width: 100%; height: min(720px, 70vh); border: 1px solid #d5dce6; border-radius: 18px; background: #fff; }
+#appShell .rest-cd-qr { display: grid; place-items: center; margin-bottom: 12px; }
+#appShell .rest-cd-qr svg { width: 240px; height: 240px; background: #fff; border-radius: 8px; }
+#appShell .conferencia-box:has(.rest-cd-previa) { width: min(480px, calc(100vw - 32px)); max-width: none; }
+[data-theme="dark"] #appShell .rest-cd-chamado { background: #3a2a08; border-color: #8a6420; }
+[data-theme="dark"] #appShell .rest-cd-chamado.conta { background: #10264a; border-color: #2c5aa0; }
+[data-theme="dark"] #appShell .rest-cd-chamado small, [data-theme="dark"] #appShell .rest-cd-pedido li small, [data-theme="dark"] #appShell .rest-cd-nome small { color: #8596ae; }
+[data-theme="dark"] #appShell .rest-cd-obs, [data-theme="dark"] #appShell .rest-cd-foto { background: #0f1828; }
+[data-theme="dark"] #appShell .rest-cd-total, [data-theme="dark"] #appShell .rest-cd-produtos li { border-color: #223049; }
+[data-theme="dark"] #appShell .rest-cd-setas > button:not(.btn) { border-color: #2a3a55; }
+
+/* Título da barra de cima no celular: uma linha só, cortada com reticências */
+@media (max-width: 720px) {
+  #appShell .rest-topo-esq { min-width: 0; flex: 1; }
+  #appShell .rest-topo-esq h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}

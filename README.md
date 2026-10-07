@@ -95,6 +95,16 @@ por CDN, sem instalar nada.
 F2 ou / — busca · Enter na busca — adiciona o primeiro produto · F4 — finalizar · F11 — transformar em delivery · Enter no
 pagamento — adiciona o valor e, quando quitado, conclui a venda · Esc — fecha janelas.
 
+## Cardápio digital
+
+- O cliente abre `cardapio.html?e=<código>` (o link e os QR Codes das mesas ficam em **Cardápio digital**), escolhe a
+  mesa, vê os produtos do cadastro (com tamanhos e adicionais), faz o pedido, acompanha o andamento, chama o garçom e
+  pede a conta. A página não tem login: só usa as funções públicas do banco (`cardapio_*`), que não expõem custo,
+  estoque nem dados de outras empresas, e o preço é sempre calculado pelo banco.
+- O pedido entra sozinho na conta da mesa (vai para a fila da cozinha e baixa o estoque ao fechar a conta) e aparece em
+  **Vendas › Pedidos do cardápio** com aviso sonoro, junto com os chamados de garçom e os pedidos de conta.
+- O link só funciona para os clientes com o sistema publicado na internet (https).
+
 ## Dados e acesso
 
 - Cada restaurante é uma empresa no mesmo banco (Supabase/PostgreSQL); cada uma só enxerga os próprios
@@ -113,3 +123,6 @@ Na pasta `testes` (Node 22+; o teste do navegador usa o Google Chrome):
 - `node testes/rodar.js rapido` — só regras e nuvem (sem Chrome e sem banco)
 - `node testes/banco.mjs` — monta `supabase/schema.sql` num PostgreSQL de teste (antes: `cd testes && npm install`)
 - `node testes/navegador.js` — abre o sistema no Chrome sem janela e confere todas as telas
+- `node testes/banco-cardapio.mjs` — funções públicas do cardápio digital (o que o cliente sem login pode fazer)
+- `node testes/navegador-cardapio.js` e `navegador-cardapio-equipe.js` — página do cliente e telas da equipe do cardápio
+- `node testes/navegador-importar.js` — importação por planilha de produtos e de entrada de estoque

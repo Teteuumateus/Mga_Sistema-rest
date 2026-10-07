@@ -425,7 +425,7 @@
   // ---- 1. Entrada de estoque ----
   function TelaEntradas({ir}){
     useDados();
-    const {el: aviso, tentar} = useAviso();
+    const {el: aviso, tentar, mostrar} = useAviso();
     const [f, setF] = usePeriodo();
     const [produtoId, setProdutoId] = useState('');
     const [busca, setBusca] = useState('');
@@ -442,6 +442,7 @@
     return html`
       <${Cabecalho} titulo="Entrada de estoque" sub=${`${periodoBR(f)} · compras, estoque inicial e produção`}>
         <${BotoesEstoque} ir=${ir} atual="estoque/entradas" />
+        ${window.RestUI.ImportarEntradas && html`<${window.RestUI.ImportarEntradas} mostrar=${mostrar} />`}
         <button type="button" className="btn" onClick=${() => setNova(true)}>+ Nova entrada</button>
       <//>
       ${!nova && aviso}
@@ -552,7 +553,7 @@
   // Saldo de um produto ao fim de um dia: o saldo do último movimento até lá (movimentos em ordem)
   function saldoAte(movs, p, dia){
     if (!movs.length) return Number(p.estoque) || 0;
-    let saldo = 0;
+    let saldo = r3((movs[0].saldo || 0) - (movs[0].quantidade || 0)); // saldo antes do primeiro movimento
     for (const m of movs) { if (D.diaISO(new Date(m.data)) > dia) break; saldo = m.saldo; }
     return saldo;
   }

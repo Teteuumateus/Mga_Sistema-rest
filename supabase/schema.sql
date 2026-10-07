@@ -8,6 +8,8 @@
 --   2. gravação de tudo e tempo real        5. master entrando numa empresa (suporte)
 --   3. usuários lidos pelo sistema          6. segurança (empresa, auditoria, funções)
 --   4. usuário master e criação de empresa  7. trava entre empresas nas ligações
+--   8. cardápio digital (pedidos pela mesa, chamar garçom e pedir a conta)
+--   9. cardápio mais seguro (chave da mesa no QR Code) e registro excluído não volta
 --
 -- Login: usa o Supabase Auth (auth.users). Empresas e administradores são criados pelo
 -- painel master (Edge Function "master"); funcionários, por Cadastros › Usuários
@@ -941,4 +943,414 @@ begin
     end;
   end loop;
   if ruins > 0 then raise notice '% ligação(ões) antigas entre empresas encontradas. A trava já vale para os novos registros.', ruins; end if;
+end $$;
+
+-- =====================================================================
+-- 8. Cardápio digital (pedidos pela mesa, chamar garçom e pedir a conta)
+-- =====================================================================
+-- Código do link de cada empresa (ex.: cardapio.html?e=k7m2p9qa)
+alter table public.empresas add column if not exists cardapio_codigo text unique;
+
+-- Pedidos feitos pelo cardápio
+create table if not exists public.cardapio_pedidos (
+  id uuid primary key default gen_random_uuid(),
+  empresa_id uuid not null default public.minha_empresa() references public.empresas(id) on delete cascade,
+  numero int not null,
+  mesa_id uuid references public.mesas(id) on delete set null,
+  mesa_numero text not null,
+  itens jsonb not null,                    -- [{produtoId, nome, quantidade, tamanhoId, tamanho, adicionais:[{id,nome,preco}], observacao, preco}]
+  obs text,
+  total numeric(12,2) not null default 0,
+  status text not null default 'NOVO' check (status in ('NOVO', 'PREPARANDO', 'PRONTO', 'ENTREGUE', 'FINALIZADO', 'CANCELADO')),
+  cliente_token text not null,             -- identifica o celular do cliente (para ele ver o andamento)
+  aceito_em timestamptz,                   -- um computador do restaurante pegou o pedido para lançar na mesa
+  aceito_por uuid,
+  venda_id uuid,                           -- conta da mesa em que foi lançado
+  erro text,                               -- motivo, se não foi possível lançar
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now(),
+  unique (empresa_id, numero)
+);
+create index if not exists cardapio_pedidos_empresa_status on public.cardapio_pedidos (empresa_id, status);
+create index if not exists cardapio_pedidos_token on public.cardapio_pedidos (cliente_token);
+
+-- Chamar o garçom e pedir a conta
+create table if not exists public.cardapio_chamados (
+  id uuid primary key default gen_random_uuid(),
+  empresa_id uuid not null default public.minha_empresa() references public.empresas(id) on delete cascade,
+  mesa_id uuid references public.mesas(id) on delete set null,
+  mesa_numero text not null,
+  tipo text not null check (tipo in ('GARCOM', 'CONTA')),
+  status text not null default 'PENDENTE' check (status in ('PENDENTE', 'ATENDIDO')),
+  total numeric(12,2),
+  cliente_token text,
+  criado_em timestamptz not null default now(),
+  atendido_em timestamptz,
+  atendido_por text
+);
+create index if not exists cardapio_chamados_empresa_status on public.cardapio_chamados (empresa_id, status);
+
+-- Mesa sempre da mesma empresa (trava entre empresas, como na etapa 7)
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'mesas_id_empresa_key') then
+    alter table public.mesas add constraint mesas_id_empresa_key unique (id, empresa_id);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'cardapio_pedidos_mesa_id_mesma_empresa') then
+    alter table public.cardapio_pedidos add constraint cardapio_pedidos_mesa_id_mesma_empresa foreign key (mesa_id, empresa_id) references public.mesas (id, empresa_id);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'cardapio_chamados_mesa_id_mesma_empresa') then
+    alter table public.cardapio_chamados add constraint cardapio_chamados_mesa_id_mesma_empresa foreign key (mesa_id, empresa_id) references public.mesas (id, empresa_id);
+  end if;
+end $$;
+
+-- Equipe: cada empresa só vê e mexe nos próprios pedidos e chamados
+alter table public.cardapio_pedidos enable row level security;
+alter table public.cardapio_chamados enable row level security;
+drop policy if exists cardapio_pedidos_da_empresa on public.cardapio_pedidos;
+create policy cardapio_pedidos_da_empresa on public.cardapio_pedidos for all to authenticated
+  using (empresa_id = public.minha_empresa()) with check (empresa_id = public.minha_empresa());
+drop policy if exists cardapio_chamados_da_empresa on public.cardapio_chamados;
+create policy cardapio_chamados_da_empresa on public.cardapio_chamados for all to authenticated
+  using (empresa_id = public.minha_empresa()) with check (empresa_id = public.minha_empresa());
+grant select, insert, update, delete on public.cardapio_pedidos, public.cardapio_chamados to authenticated;
+revoke all on public.cardapio_pedidos, public.cardapio_chamados from anon;
+
+-- Tempo real: pedido novo e chamado aparecem na hora para a equipe
+do $$ begin
+  begin alter publication supabase_realtime add table public.cardapio_pedidos; exception when duplicate_object then null; end;
+  begin alter publication supabase_realtime add table public.cardapio_chamados; exception when duplicate_object then null; end;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Funções do cliente (sem login)
+-- ---------------------------------------------------------------------
+-- Empresa do link (só se ativa)
+create or replace function public.cardapio_empresa(p_codigo text) returns public.empresas
+language sql stable security definer set search_path = public as $$
+  select * from public.empresas where cardapio_codigo = p_codigo and ativo and coalesce(p_codigo, '') <> ''
+$$;
+revoke execute on function public.cardapio_empresa(text) from public, anon, authenticated;
+
+create or replace function public.cardapio_publico(p_codigo text) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare e public.empresas;
+begin
+  e := public.cardapio_empresa(p_codigo);
+  if e.id is null then raise exception 'Cardápio não encontrado.'; end if;
+  return jsonb_build_object(
+    'empresa', jsonb_build_object('nome', e.nome, 'aberto', coalesce((e.config->'cardapio'->>'ativo')::boolean, false),
+      'mensagem', e.config->'cardapio'->>'mensagem', 'telefone', e.telefone, 'taxaServico', coalesce((e.config->>'taxaServico')::numeric, 0)),
+    'categorias', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'nome', c.nome, 'ordem', c.ordem) order by c.ordem, c.nome)
+      from public.categorias c where c.empresa_id = e.id and c.ativo), '[]'::jsonb),
+    'produtos', coalesce((select jsonb_agg(jsonb_build_object('id', p.id, 'nome', p.nome, 'descricao', p.descricao, 'preco', p.preco, 'foto', p.foto_url,
+        'categoriaId', p.categoria_id, 'unidade', p.unidade, 'ordem', coalesce((p.extra->>'ordemCardapio')::int, 9999),
+        'tamanhos', coalesce((select jsonb_agg(jsonb_build_object('id', t.id, 'nome', t.nome, 'preco', t.preco) order by t.ordem) from public.produto_tamanhos t where t.produto_id = p.id), '[]'::jsonb),
+        'adicionais', coalesce((select jsonb_agg(pg.grupo_id) from public.produto_grupos_adicionais pg where pg.produto_id = p.id), '[]'::jsonb))
+        order by coalesce((p.extra->>'ordemCardapio')::int, 9999), p.nome)
+      from public.produtos p join public.categorias c on c.id = p.categoria_id and c.ativo
+      where p.empresa_id = e.id and p.ativo and p.tipo = 'VENDA' and coalesce((p.extra->>'cardapio')::boolean, true)), '[]'::jsonb),
+    'adicionais', coalesce((select jsonb_agg(jsonb_build_object('id', g.id, 'nome', g.nome, 'min', g.minimo, 'max', g.maximo,
+        'opcoes', coalesce((select jsonb_agg(jsonb_build_object('id', o.id, 'nome', o.nome, 'preco', o.preco) order by o.ordem) from public.adicionais_opcoes o where o.grupo_id = g.id and o.ativo), '[]'::jsonb)))
+      from public.grupos_adicionais g where g.empresa_id = e.id and g.ativo), '[]'::jsonb),
+    'mesas', coalesce((select jsonb_agg(jsonb_build_object('id', m.id, 'numero', m.numero) order by m.numero) from public.mesas m where m.empresa_id = e.id and m.ativo), '[]'::jsonb)
+  );
+end $$;
+
+-- Pedido do cliente: o preço vem do cadastro (não do celular). Limites contra abuso.
+create or replace function public.cardapio_pedir(p_codigo text, p_mesa uuid, p_itens jsonb, p_obs text, p_token text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  e public.empresas;
+  m public.mesas;
+  it jsonb; ad jsonb;
+  p public.produtos;
+  v_tam_id uuid; v_tam_nome text; v_op record;
+  v_itens jsonb := '[]'::jsonb; v_ads jsonb;
+  v_qtd numeric; v_preco numeric; v_total numeric := 0; v_numero int; v_id uuid;
+begin
+  e := public.cardapio_empresa(p_codigo);
+  if e.id is null then raise exception 'Cardápio não encontrado.'; end if;
+  if not coalesce((e.config->'cardapio'->>'ativo')::boolean, false) then raise exception 'O restaurante não está recebendo pedidos pelo cardápio agora. Chame o garçom.'; end if;
+  select * into m from public.mesas where id = p_mesa and empresa_id = e.id and ativo;
+  if m.id is null then raise exception 'Mesa não encontrada. Escolha a mesa de novo.'; end if;
+  if coalesce(length(p_token), 0) < 16 then raise exception 'Abra o cardápio de novo pelo link.'; end if;
+  if jsonb_typeof(p_itens) <> 'array' or jsonb_array_length(p_itens) = 0 then raise exception 'O pedido está vazio.'; end if;
+  if jsonb_array_length(p_itens) > 40 then raise exception 'Pedido grande demais: no máximo 40 itens por vez.'; end if;
+  if exists (select 1 from public.cardapio_pedidos where cliente_token = p_token and criado_em > now() - interval '10 seconds') then
+    raise exception 'Aguarde alguns segundos antes de enviar outro pedido.'; end if;
+  if (select count(*) from public.cardapio_pedidos where empresa_id = e.id and mesa_id = m.id and criado_em > now() - interval '1 hour') >= 30 then
+    raise exception 'Muitos pedidos desta mesa na última hora. Chame o garçom.'; end if;
+  for it in select * from jsonb_array_elements(p_itens) loop
+    select * into p from public.produtos where id = (it->>'produtoId')::uuid and empresa_id = e.id and ativo and tipo = 'VENDA'
+      and coalesce((extra->>'cardapio')::boolean, true);
+    if p.id is null then raise exception 'Um dos produtos não está mais disponível. Atualize o cardápio.'; end if;
+    v_qtd := floor(coalesce((it->>'quantidade')::numeric, 0));
+    if v_qtd < 1 or v_qtd > 50 then raise exception 'Quantidade inválida em "%".', p.nome; end if;
+    v_preco := p.preco;
+    v_tam_id := null; v_tam_nome := null;
+    if coalesce(it->>'tamanhoId', '') <> '' then
+      select t.id, t.nome, t.preco into v_tam_id, v_tam_nome, v_preco from public.produto_tamanhos t where t.id = (it->>'tamanhoId')::uuid and t.produto_id = p.id;
+      if v_tam_id is null then raise exception 'Tamanho inválido em "%".', p.nome; end if;
+    elsif exists (select 1 from public.produto_tamanhos where produto_id = p.id) then
+      raise exception 'Escolha o tamanho de "%".', p.nome;
+    end if;
+    v_ads := '[]'::jsonb;
+    for ad in select * from jsonb_array_elements(coalesce(it->'adicionais', '[]'::jsonb)) loop
+      select o.id, o.nome, o.preco into v_op from public.adicionais_opcoes o
+        join public.produto_grupos_adicionais pg on pg.grupo_id = o.grupo_id and pg.produto_id = p.id
+        where o.id = (ad #>> '{}')::uuid and o.ativo;
+      if v_op.id is null then raise exception 'Adicional inválido em "%".', p.nome; end if;
+      v_ads := v_ads || jsonb_build_object('id', v_op.id, 'nome', v_op.nome, 'preco', v_op.preco);
+      v_preco := v_preco + v_op.preco;
+    end loop;
+    v_total := v_total + v_preco * v_qtd;
+    v_itens := v_itens || jsonb_build_object('produtoId', p.id, 'nome', p.nome, 'quantidade', v_qtd, 'tamanhoId', v_tam_id, 'tamanho', v_tam_nome,
+      'adicionais', v_ads, 'observacao', left(coalesce(it->>'observacao', ''), 100), 'preco', v_preco);
+  end loop;
+  insert into public.sequencias (empresa_id, nome, valor) values (e.id, 'pedido_cardapio', 1)
+    on conflict (empresa_id, nome) do update set valor = public.sequencias.valor + 1 returning valor into v_numero;
+  insert into public.cardapio_pedidos (empresa_id, numero, mesa_id, mesa_numero, itens, obs, total, cliente_token)
+    values (e.id, v_numero, m.id, m.numero, v_itens, nullif(left(trim(coalesce(p_obs, '')), 300), ''), v_total, p_token) returning id into v_id;
+  return jsonb_build_object('id', v_id, 'numero', v_numero, 'mesa', m.numero, 'total', v_total);
+end $$;
+
+-- Andamento dos pedidos deste celular (últimas 12 horas)
+create or replace function public.cardapio_meus_pedidos(p_codigo text, p_token text) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare e public.empresas;
+begin
+  e := public.cardapio_empresa(p_codigo);
+  if e.id is null or coalesce(length(p_token), 0) < 16 then return '[]'::jsonb; end if;
+  return coalesce((select jsonb_agg(jsonb_build_object('id', id, 'numero', numero, 'mesa', mesa_numero, 'status', status, 'total', total,
+      'itens', itens, 'obs', obs, 'criadoEm', criado_em) order by criado_em desc)
+    from public.cardapio_pedidos where empresa_id = e.id and cliente_token = p_token and criado_em > now() - interval '12 hours'), '[]'::jsonb);
+end $$;
+
+-- Chamar o garçom (GARCOM) ou pedir a conta (CONTA). Se já tem um pendente igual, devolve o mesmo.
+create or replace function public.cardapio_chamar(p_codigo text, p_mesa uuid, p_tipo text, p_token text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare e public.empresas; m public.mesas; c public.cardapio_chamados; v_total numeric;
+begin
+  e := public.cardapio_empresa(p_codigo);
+  if e.id is null then raise exception 'Cardápio não encontrado.'; end if;
+  if p_tipo not in ('GARCOM', 'CONTA') then raise exception 'Pedido inválido.'; end if;
+  select * into m from public.mesas where id = p_mesa and empresa_id = e.id and ativo;
+  if m.id is null then raise exception 'Mesa não encontrada. Escolha a mesa de novo.'; end if;
+  select * into c from public.cardapio_chamados where empresa_id = e.id and mesa_id = m.id and tipo = p_tipo and status = 'PENDENTE' order by criado_em desc limit 1;
+  if c.id is not null then return jsonb_build_object('id', c.id, 'mesa', m.numero, 'tipo', c.tipo, 'total', c.total, 'repetido', true); end if;
+  -- Conta: soma do que esta mesa pediu pelo cardápio e ainda não foi finalizado (o valor exato sai da conta da mesa)
+  if p_tipo = 'CONTA' then
+    select coalesce(sum(total), 0) into v_total from public.cardapio_pedidos
+      where empresa_id = e.id and mesa_id = m.id and status not in ('FINALIZADO', 'CANCELADO') and criado_em > now() - interval '12 hours';
+  end if;
+  insert into public.cardapio_chamados (empresa_id, mesa_id, mesa_numero, tipo, total, cliente_token)
+    values (e.id, m.id, m.numero, p_tipo, v_total, left(p_token, 80)) returning * into c;
+  return jsonb_build_object('id', c.id, 'mesa', m.numero, 'tipo', c.tipo, 'total', c.total, 'repetido', false);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Funções da equipe (logada)
+-- ---------------------------------------------------------------------
+-- Cria (uma vez) o código do link do cardápio desta empresa e devolve
+create or replace function public.cardapio_ativar() returns text
+language plpgsql security definer set search_path = public as $$
+declare v_empresa uuid := public.minha_empresa(); v_codigo text;
+begin
+  if v_empresa is null then raise exception 'Entre no sistema de novo.'; end if;
+  select cardapio_codigo into v_codigo from public.empresas where id = v_empresa;
+  if v_codigo is null then
+    loop
+      v_codigo := lower(substr(replace(gen_random_uuid()::text, '-', ''), 1, 10));
+      exit when not exists (select 1 from public.empresas where cardapio_codigo = v_codigo);
+    end loop;
+    update public.empresas set cardapio_codigo = v_codigo where id = v_empresa;
+  end if;
+  return v_codigo;
+end $$;
+
+-- Um computador do restaurante "pega" o pedido para lançar na mesa (só um consegue, mesmo com vários abertos)
+create or replace function public.cardapio_aceitar(p_pedido uuid) returns boolean
+language plpgsql security definer set search_path = public as $$
+declare v_ok boolean;
+begin
+  update public.cardapio_pedidos set aceito_em = now(), aceito_por = auth.uid(), atualizado_em = now()
+    where id = p_pedido and empresa_id = public.minha_empresa() and aceito_em is null and status = 'NOVO'
+    returning true into v_ok;
+  return coalesce(v_ok, false);
+end $$;
+
+revoke execute on function public.cardapio_publico(text) from public;
+revoke execute on function public.cardapio_pedir(text, uuid, jsonb, text, text) from public;
+revoke execute on function public.cardapio_meus_pedidos(text, text) from public;
+revoke execute on function public.cardapio_chamar(text, uuid, text, text) from public;
+grant execute on function public.cardapio_publico(text), public.cardapio_pedir(text, uuid, jsonb, text, text),
+  public.cardapio_meus_pedidos(text, text), public.cardapio_chamar(text, uuid, text, text) to anon, authenticated;
+revoke execute on function public.cardapio_ativar(), public.cardapio_aceitar(uuid) from public, anon;
+grant execute on function public.cardapio_ativar(), public.cardapio_aceitar(uuid) to authenticated;
+
+-- =====================================================================
+-- 9. Cardápio mais seguro (chave da mesa no QR Code) e registro excluído não volta
+-- =====================================================================
+-- 1. Chave secreta de cada mesa (o sistema não mexe nesta coluna ao gravar as mesas)
+alter table public.mesas add column if not exists cardapio_chave text;
+update public.mesas set cardapio_chave = substr(replace(gen_random_uuid()::text, '-', ''), 1, 12) where cardapio_chave is null;
+alter table public.mesas alter column cardapio_chave set default substr(replace(gen_random_uuid()::text, '-', ''), 1, 12);
+-- Pedido feito sem a chave da mesa: a equipe confirma antes de entrar na conta
+alter table public.cardapio_pedidos add column if not exists confirmar boolean not null default false;
+alter table public.cardapio_chamados add column if not exists confirmar boolean not null default false;
+
+-- Texto que parece uuid (evita erro técnico na tela do cliente)
+create or replace function public.cardapio_uuid(p text) returns uuid
+language sql immutable set search_path = public as $$
+  select case when p ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then p::uuid end
+$$;
+
+-- Pedido do cliente (troca a versão antiga: agora recebe a chave da mesa)
+drop function if exists public.cardapio_pedir(text, uuid, jsonb, text, text);
+create or replace function public.cardapio_pedir(p_codigo text, p_mesa uuid, p_itens jsonb, p_obs text, p_token text, p_chave text default null) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  e public.empresas;
+  m public.mesas;
+  it jsonb; ad jsonb;
+  p public.produtos;
+  g record;
+  v_tam_id uuid; v_tam_nome text; v_op record; v_op_id uuid; v_vistos uuid[];
+  v_itens jsonb := '[]'::jsonb; v_ads jsonb;
+  v_qtd numeric; v_preco numeric; v_total numeric := 0; v_numero int; v_id uuid; v_confirmar boolean;
+begin
+  e := public.cardapio_empresa(p_codigo);
+  if e.id is null then raise exception 'Cardápio não encontrado.'; end if;
+  if not coalesce((e.config->'cardapio'->>'ativo')::boolean, false) then raise exception 'O restaurante não está recebendo pedidos pelo cardápio agora. Chame o garçom.'; end if;
+  select * into m from public.mesas where id = p_mesa and empresa_id = e.id and ativo;
+  if m.id is null then raise exception 'Mesa não encontrada. Escolha a mesa de novo.'; end if;
+  v_confirmar := m.cardapio_chave is null or coalesce(p_chave, '') <> m.cardapio_chave;
+  if coalesce(length(p_token), 0) < 16 or length(p_token) > 80 then raise exception 'Abra o cardápio de novo pelo link.'; end if;
+  if jsonb_typeof(p_itens) <> 'array' or jsonb_array_length(p_itens) = 0 then raise exception 'O pedido está vazio.'; end if;
+  if jsonb_array_length(p_itens) > 40 then raise exception 'Pedido grande demais: no máximo 40 itens por vez.'; end if;
+  if exists (select 1 from public.cardapio_pedidos where cliente_token = p_token and criado_em > now() - interval '10 seconds') then
+    raise exception 'Aguarde alguns segundos antes de enviar outro pedido.'; end if;
+  if (select count(*) from public.cardapio_pedidos where empresa_id = e.id and mesa_id = m.id and criado_em > now() - interval '1 hour') >= 30 then
+    raise exception 'Muitos pedidos desta mesa na última hora. Chame o garçom.'; end if;
+  if (select count(*) from public.cardapio_pedidos where empresa_id = e.id and criado_em > now() - interval '10 minutes') >= 150 then
+    raise exception 'Muitos pedidos ao mesmo tempo. Aguarde um pouco ou chame o garçom.'; end if;
+  for it in select * from jsonb_array_elements(p_itens) loop
+    if jsonb_typeof(it) <> 'object' then raise exception 'Pedido inválido. Atualize o cardápio.'; end if;
+    select * into p from public.produtos where id = public.cardapio_uuid(it->>'produtoId') and empresa_id = e.id and ativo and tipo = 'VENDA'
+      and coalesce((extra->>'cardapio')::boolean, true);
+    if p.id is null then raise exception 'Um dos produtos não está mais disponível. Atualize o cardápio.'; end if;
+    v_qtd := floor(case when it->>'quantidade' ~ '^\d{1,3}(\.\d+)?$' then (it->>'quantidade')::numeric else 0 end);
+    if v_qtd < 1 or v_qtd > 50 then raise exception 'Quantidade inválida em "%".', p.nome; end if;
+    v_preco := p.preco;
+    v_tam_id := null; v_tam_nome := null;
+    if coalesce(it->>'tamanhoId', '') <> '' then
+      select t.id, t.nome, t.preco into v_tam_id, v_tam_nome, v_preco from public.produto_tamanhos t where t.id = public.cardapio_uuid(it->>'tamanhoId') and t.produto_id = p.id;
+      if v_tam_id is null then raise exception 'Tamanho inválido em "%". Atualize o cardápio.', p.nome; end if;
+    elsif exists (select 1 from public.produto_tamanhos where produto_id = p.id) then
+      raise exception 'Escolha o tamanho de "%".', p.nome;
+    end if;
+    -- Adicionais: até 20, sem repetir, de grupos ativos ligados ao produto
+    if jsonb_typeof(coalesce(it->'adicionais', '[]'::jsonb)) <> 'array' or jsonb_array_length(coalesce(it->'adicionais', '[]'::jsonb)) > 20 then
+      raise exception 'Adicionais demais em "%".', p.nome; end if;
+    v_ads := '[]'::jsonb; v_vistos := '{}';
+    for ad in select * from jsonb_array_elements(coalesce(it->'adicionais', '[]'::jsonb)) loop
+      v_op_id := public.cardapio_uuid(ad #>> '{}');
+      if v_op_id is null or v_op_id = any(v_vistos) then raise exception 'Adicional inválido em "%". Atualize o cardápio.', p.nome; end if;
+      v_vistos := v_vistos || v_op_id;
+      select o.id, o.nome, o.preco into v_op from public.adicionais_opcoes o
+        join public.grupos_adicionais ga on ga.id = o.grupo_id and ga.ativo
+        join public.produto_grupos_adicionais pg on pg.grupo_id = o.grupo_id and pg.produto_id = p.id
+        where o.id = v_op_id and o.ativo;
+      if v_op.id is null then raise exception 'Adicional indisponível em "%". Atualize o cardápio.', p.nome; end if;
+      v_ads := v_ads || jsonb_build_object('id', v_op.id, 'nome', v_op.nome, 'preco', v_op.preco);
+      v_preco := v_preco + v_op.preco;
+    end loop;
+    -- Mínimo e máximo de cada grupo (ex.: "Ponto da carne: escolha 1", "Extras: até 2")
+    for g in select ga.nome, ga.minimo, ga.maximo,
+        (select count(*) from public.adicionais_opcoes o where o.grupo_id = ga.id and o.id = any(v_vistos)) as escolhidas,
+        (select count(*) from public.adicionais_opcoes o where o.grupo_id = ga.id and o.ativo) as opcoes
+      from public.grupos_adicionais ga join public.produto_grupos_adicionais pg on pg.grupo_id = ga.id and pg.produto_id = p.id
+      where ga.ativo loop
+      if g.opcoes > 0 and g.escolhidas < g.minimo then raise exception '%: escolha % em "%".', g.nome, g.minimo, p.nome; end if;
+      if g.maximo > 0 and g.escolhidas > g.maximo then raise exception '%: no máximo % em "%".', g.nome, g.maximo, p.nome; end if;
+    end loop;
+    v_total := v_total + v_preco * v_qtd;
+    v_itens := v_itens || jsonb_build_object('produtoId', p.id, 'nome', p.nome, 'quantidade', v_qtd, 'tamanhoId', v_tam_id, 'tamanho', v_tam_nome,
+      'adicionais', v_ads, 'observacao', left(coalesce(it->>'observacao', ''), 100), 'preco', v_preco);
+  end loop;
+  insert into public.sequencias (empresa_id, nome, valor) values (e.id, 'pedido_cardapio', 1)
+    on conflict (empresa_id, nome) do update set valor = public.sequencias.valor + 1 returning valor into v_numero;
+  insert into public.cardapio_pedidos (empresa_id, numero, mesa_id, mesa_numero, itens, obs, total, cliente_token, confirmar)
+    values (e.id, v_numero, m.id, m.numero, v_itens, nullif(left(trim(coalesce(p_obs, '')), 300), ''), v_total, p_token, v_confirmar) returning id into v_id;
+  return jsonb_build_object('id', v_id, 'numero', v_numero, 'mesa', m.numero, 'total', v_total, 'confirmar', v_confirmar);
+end $$;
+
+-- Chamar o garçom / pedir a conta (troca a versão antiga: agora recebe a chave da mesa)
+drop function if exists public.cardapio_chamar(text, uuid, text, text);
+create or replace function public.cardapio_chamar(p_codigo text, p_mesa uuid, p_tipo text, p_token text, p_chave text default null) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare e public.empresas; m public.mesas; c public.cardapio_chamados; v_total numeric;
+begin
+  e := public.cardapio_empresa(p_codigo);
+  if e.id is null then raise exception 'Cardápio não encontrado.'; end if;
+  if p_tipo is null or p_tipo not in ('GARCOM', 'CONTA') then raise exception 'Pedido inválido.'; end if;
+  select * into m from public.mesas where id = p_mesa and empresa_id = e.id and ativo;
+  if m.id is null then raise exception 'Mesa não encontrada. Escolha a mesa de novo.'; end if;
+  select * into c from public.cardapio_chamados where empresa_id = e.id and mesa_id = m.id and tipo = p_tipo and status = 'PENDENTE' order by criado_em desc limit 1;
+  if c.id is not null then return jsonb_build_object('id', c.id, 'mesa', m.numero, 'tipo', c.tipo, 'total', c.total, 'repetido', true); end if;
+  if (select count(*) from public.cardapio_chamados where empresa_id = e.id and criado_em > now() - interval '10 minutes') >= 100 then
+    raise exception 'Muitos chamados ao mesmo tempo. Aguarde um pouco.'; end if;
+  if p_tipo = 'CONTA' then
+    select coalesce(sum(total), 0) into v_total from public.cardapio_pedidos
+      where empresa_id = e.id and mesa_id = m.id and status not in ('FINALIZADO', 'CANCELADO') and criado_em > now() - interval '12 hours';
+  end if;
+  insert into public.cardapio_chamados (empresa_id, mesa_id, mesa_numero, tipo, total, cliente_token, confirmar)
+    values (e.id, m.id, m.numero, p_tipo, v_total, left(p_token, 80), m.cardapio_chave is null or coalesce(p_chave, '') <> m.cardapio_chave) returning * into c;
+  return jsonb_build_object('id', c.id, 'mesa', m.numero, 'tipo', c.tipo, 'total', c.total, 'repetido', false);
+end $$;
+
+revoke execute on function public.cardapio_uuid(text) from public, anon, authenticated;
+revoke execute on function public.cardapio_pedir(text, uuid, jsonb, text, text, text) from public;
+revoke execute on function public.cardapio_chamar(text, uuid, text, text, text) from public;
+grant execute on function public.cardapio_pedir(text, uuid, jsonb, text, text, text), public.cardapio_chamar(text, uuid, text, text, text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------
+-- 4. Registro apagado não volta: um navegador com dados antigos não consegue recriar o que foi excluído
+-- ---------------------------------------------------------------------
+create table if not exists public.registros_excluidos (
+  tabela text not null,
+  id uuid not null,
+  empresa_id uuid,
+  excluido_em timestamptz not null default now(),
+  primary key (tabela, id)
+);
+alter table public.registros_excluidos enable row level security;
+revoke all on public.registros_excluidos from anon, authenticated;
+
+create or replace function public.anotar_exclusao() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.registros_excluidos (tabela, id, empresa_id) values (TG_TABLE_NAME, old.id, old.empresa_id) on conflict do nothing;
+  return old;
+end $$;
+-- Inclusão de um id já excluído é ignorada em silêncio (a gravação do resto segue normal)
+create or replace function public.barrar_excluido() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if exists (select 1 from public.registros_excluidos where tabela = TG_TABLE_NAME and id = new.id) then return null; end if;
+  return new;
+end $$;
+revoke execute on function public.anotar_exclusao(), public.barrar_excluido() from public, anon, authenticated;
+
+do $$
+declare t text;
+begin
+  foreach t in array array['categorias', 'grupos_adicionais', 'produtos', 'mesas', 'clientes', 'formas_pagamento', 'fornecedores', 'funcionarios',
+    'entregadores', 'regioes_entrega', 'aplicativos_delivery', 'embalagens', 'promocoes', 'contas_bancarias', 'caixas', 'vendas', 'contas',
+    'caixa_movimentos', 'estoque_movimentos', 'conta_bancaria_movimentos'] loop
+    execute format('drop trigger if exists anotar_exclusao on public.%I', t);
+    execute format('create trigger anotar_exclusao after delete on public.%I for each row execute function public.anotar_exclusao()', t);
+    execute format('drop trigger if exists barrar_excluido on public.%I', t);
+    execute format('create trigger barrar_excluido before insert on public.%I for each row execute function public.barrar_excluido()', t);
+  end loop;
 end $$;

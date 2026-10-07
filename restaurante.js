@@ -32,7 +32,8 @@
     {grupo: 'vendas', nome: 'Vendas', ic: '🧾', modulo: 'vendas', itens: [
       ['mesas', 'Mesas', 'mesas', 'Vendas das mesas do salão'],
       ['delivery', 'Delivery', 'delivery', 'Pedidos feitos pelo WhatsApp ou por telefone'],
-      ['vendas/pdv', 'Venda balcão'], ['vendas/cozinha', 'Fila de produção', 'cozinha', 'O que a cozinha tem para preparar'], ['vendas/caixa', 'Caixa'], ['vendas/lista', 'Vendas realizadas'], ['vendas/caixas', 'Caixas anteriores']]},
+      ['vendas/pdv', 'Venda balcão'], ['vendas/cardapio', 'Pedidos do cardápio', 'mesas', 'Pedidos, chamados de garçom e pedidos de conta do cardápio digital'], ['vendas/cozinha', 'Fila de produção', 'cozinha', 'O que a cozinha tem para preparar'], ['vendas/caixa', 'Caixa'], ['vendas/lista', 'Vendas realizadas'], ['vendas/caixas', 'Caixas anteriores']]},
+    {rota: 'cardapio', nome: 'Cardápio digital', ic: '📱', modulo: 'cadastros'},
     {grupo: 'est', nome: 'Estoque', ic: '📦', modulo: 'estoque', itens: [['estoque/dashboard', 'Dashboard do estoque', null, 'O que entrou, o que saiu e o saldo'],
       ['estoque/entradas', 'Entrada de estoque', null, 'Entrada de produtos do cadastro (compras)'], ['estoque/saidas', 'Saída de estoque', null, 'Vendas (baixa automática), perdas e consumo']]},
     {grupo: 'fin', nome: 'Financeiro', ic: '💰', modulo: 'financeiro', itens: [['fin/pagar', 'Contas a pagar'], ['fin/receber', 'Contas a receber'], ['fin/contas', 'Contas bancárias'],
@@ -88,10 +89,13 @@
   }
 
   // ---- Menu lateral escuro (sanfona: abre o grupo da tela atual); só o que o usuário pode acessar ----
+  const usarCardapioWeb = window.RestUI.useCardapioWeb || (() => null);
   function MenuLateral({rota, aberto, setAberto}){
     useDados();
+    const cardapioWeb = usarCardapioWeb();
     // Contadores de alerta nos grupos: contas vencidas e produtos no mínimo ou abaixo
     const alertas = {
+      vendas: cardapioWeb && D.podeAcessar('mesas') ? [cardapioWeb.pendentes(), 'pedido(s) novo(s) ou chamado(s) do cardápio digital'] : [0],
       fin: D.podeAcessar('financeiro') ? [D.contas().filter(D.contaVencida).length, 'conta(s) vencida(s)'] : [0],
       est: D.podeAcessar('estoque') ? [D.produtos().filter(p => p.ativo && D.estoqueBaixo(p)).length, 'produto(s) no estoque mínimo ou abaixo'] : [0]
     };
@@ -162,6 +166,8 @@
         ${podeMesas && atalho('Mesas', '🍽️', 'mesas')}
         ${podeDelivery && atalho('Delivery', '🛵', 'delivery')}
         ${podeVendas && atalho('Balcão', '🧾', 'vendas/pdv')}
+        ${(podeVendas || podeMesas) && window.RestCardapio && html`<button type="button" className="rest-atalho" title="Abrir o cardápio digital (como o cliente vê)" onClick=${() => window.RestCardapio.abrir()}>
+          <span aria-hidden="true">📱</span><span className="rest-atalho-txt">Cardápio</span></button>`}
       </div>`;
   }
   // Tempo desde a abertura do caixa: "há 25 min", "há 1 h 38 min"

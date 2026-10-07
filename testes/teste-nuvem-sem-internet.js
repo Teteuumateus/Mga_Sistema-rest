@@ -55,8 +55,12 @@ function bancoFalso(){
     if (t === 'contas' && !(l.valor > 0)) return 'new row violates check constraint "contas_valor_check"';
     return null;
   }
-  function gravar(t, linhas, modo, onConflict){
+  const PAIS = ['categorias', 'grupos_adicionais', 'produtos', 'mesas', 'clientes', 'formas_pagamento', 'fornecedores', 'funcionarios', 'entregadores',
+    'regioes_entrega', 'aplicativos_delivery', 'embalagens', 'promocoes', 'contas_bancarias', 'caixas', 'vendas', 'contas', 'caixa_movimentos', 'estoque_movimentos', 'conta_bancaria_movimentos'];
+  const excluidos = new Set();
+  function gravar(t, linhas, modo, onConflict, ignorar, salvas = []){
     for (const l0 of linhas) {
+      if (PAIS.includes(t) && l0.id && excluidos.has(t + ':' + l0.id)) continue;
       const l = {...l0, empresa_id: empresa, ...(l0.extra ? {extra: jsonb(JSON.parse(JSON.stringify(l0.extra)))} : {})};
       if (!l.id && !['produto_ficha_tecnica', 'produto_grupos_adicionais', 'embalagem_produtos', 'promocao_dias', 'sequencias', 'venda_entrega'].includes(t)) l.id = crypto.randomUUID();
       const conf = modo === 'insert' ? null : (onConflict || 'id').split(',').filter(c => c !== 'empresa_id');
@@ -64,7 +68,9 @@ function bancoFalso(){
       if (modo === 'insert' && l.id && T[t].some(x => x.id === l.id)) return {message: `duplicate key value violates unique constraint "${t}_pkey"`};
       const erro = validar(t, l, existente);
       if (erro) return {message: erro};
+      if (existente && ignorar) continue;
       if (existente) { Object.assign(existente, l); avisar(t, 'UPDATE', existente); } else { T[t].push(l); avisar(t, 'INSERT', l); }
+      salvas.push({id: l.id});
     }
     return null;
   }
@@ -77,21 +83,22 @@ function bancoFalso(){
       if (modo === 'cascade') { const sai = T[filho].filter(x => x[c] === l.id); sai.forEach(x => excluir(filho, y => y === x)); }
     }
     T[t] = T[t].filter(l => !alvo.includes(l));
+    if (PAIS.includes(t)) alvo.forEach(l => excluidos.add(t + ':' + l.id));
     alvo.forEach(l => avisar(t, 'DELETE', null, {id: l.id}));
     return null;
   }
   const consulta = t => {
-    const filtros = []; let modo = 'select', dados = null, range = null, ordem = null, limite = null, umSo = false, conflito = null;
+    const filtros = []; let modo = 'select', dados = null, range = null, ordem = null, limite = null, umSo = false, conflito = null, ignorar = false;
     const q = {
       select(){ return q; }, order(c, o){ ordem = [c, o?.ascending !== false]; return q; }, range(a, b){ range = [a, b]; return q; }, limit(n){ limite = n; return q; },
       maybeSingle(){ umSo = true; return q; },
-      upsert(l, o){ modo = 'upsert'; dados = l; conflito = o?.onConflict; return q; }, insert(l){ modo = 'insert'; dados = l; return q; },
+      upsert(l, o){ modo = 'upsert'; dados = l; conflito = o?.onConflict; ignorar = !!o?.ignoreDuplicates; return q; }, insert(l){ modo = 'insert'; dados = l; return q; },
       update(l){ modo = 'update'; dados = l; return q; }, delete(){ modo = 'delete'; return q; },
       in(c, v){ filtros.push(l => v.includes(l[c])); return q; }, eq(c, v){ filtros.push(l => l[c] === v); return q; },
       then(res, rej){
         chamadas++;
         let r;
-        if (modo === 'upsert' || modo === 'insert') r = {error: gravar(t, dados, modo, conflito)};
+        if (modo === 'upsert' || modo === 'insert') { const salvas = []; const error = gravar(t, dados, modo, conflito, ignorar, salvas); r = {error, data: error ? null : salvas}; }
         else if (modo === 'delete') r = {error: excluir(t, l => filtros.every(f => f(l)))};
         else if (modo === 'update') { const alvo = (t === 'empresas' ? T[t] : minha(t)).filter(l => filtros.every(f => f(l))); alvo.forEach(l => { Object.assign(l, {...dados, config: jsonb(dados.config)}); avisar(t, 'UPDATE', l); }); r = {error: null}; }
         else {
@@ -150,10 +157,13 @@ const contar = (banco, t) => banco.T[t].length;
   pg = await abrirPagina(mem, banco);
   ok(pg.N.ativa, 'segunda abertura: sincronizando com o banco');
   let D = pg.D;
+  ok(contar(banco, 'produtos') === 0, 'cardápio de exemplo do navegador não foi para a empresa vazia');
+  const grupo = D.salvarGrupo({nome: 'Lanches'});
+  D.salvarProduto({nome: 'X-Teste', grupoId: grupo.id, preco: '20', tipo: 'VENDA', unidade: 'UN', ativo: true});
   D.abrirCaixa({valorInicial: '50'});
   await espera(300);
   ok(contar(banco, 'caixas') === 1, 'caixa aberto foi para o banco');
-  ok(!mem.local.mga_nuvemPendente, 'sem pendência depois de gravar');
+  ok(!mem.local.mga_nuvemSujos, 'sem pendência depois de gravar');
   ok(banco.T.caixas.every(c => c.empresa_id === 'A'), 'linhas gravadas levam a empresa');
 
   // Sem internet (sem sessão): segue com o navegador e marca pendência
@@ -163,7 +173,7 @@ const contar = (banco, t) => banco.T[t].length;
   ok(!pg.N.ativa, 'sem sessão: modo deste navegador');
   const p = D.produtos().find(x => x.ativo && !x.tamanhos?.length && !(x.gruposAdicionais || []).length && x.tipo !== 'INSUMO');
   const v = D.registrarVenda({itens: [{produtoId: p.id, quantidade: 1}], pagamentos: [{formaId: D.formasAtivas()[0].id, valor: '500'}]});
-  ok(mem.local.mga_nuvemPendente === 'A', 'venda sem internet fica marcada como pendente');
+  ok(JSON.parse(mem.local.mga_nuvemSujos || '{}').tabelas?.vendas?.includes(v.id), 'venda sem internet fica anotada no diário de pendências');
   ok(!banco.T.vendas.some(x => x.id === v.id), 'venda ainda não está no banco');
 
   // Volta a internet: abre de novo e a venda vai para o banco, sem sumir da tela
@@ -173,7 +183,28 @@ const contar = (banco, t) => banco.T[t].length;
   ok(pg.N.ativa, 'com sessão de novo: sincronizando');
   ok(banco.T.vendas.some(x => x.id === v.id), 'a venda feita sem internet chegou ao banco');
   ok(pg.D.vendas().some(x => x.id === v.id), 'e continua no sistema depois de carregar do banco');
-  ok(!mem.local.mga_nuvemPendente, 'pendência limpa');
+  ok(!mem.local.mga_nuvemSujos, 'pendência limpa');
+
+  // Incidente de 06/10: produto excluído direto no banco não pode voltar
+  // 1. Saiu do sistema (a gravação da auditoria da saída ficou pendente), produto apagado no banco, entra de novo
+  const y = pg.D.salvarProduto({nome: 'Y-Teste', grupoId: pg.D.grupos()[0].id, preco: '9', tipo: 'VENDA', unidade: 'UN', ativo: true});
+  await espera(300);
+  ok(banco.T.produtos.some(x => x.id === y.id), 'produto Y foi para o banco');
+  mem.local.mga_nuvemSujos = JSON.stringify({empresa: 'A', tabelas: {auditoria: [pg.D.auditoria().slice(-1)[0].id]}, config: false});
+  await banco.cliente.from('produtos').delete().in('id', [y.id]);
+  pg = await abrirPagina(mem, banco);
+  await espera(300);
+  ok(!banco.T.produtos.some(x => x.id === y.id) && !pg.D.produtoPorId(y.id), 'saiu, apagaram no banco, entrou de novo: o produto não volta');
+  // 2. Aba que não ficou sabendo da exclusão (tempo real perdido) edita o produto apagado
+  const z = pg.D.salvarProduto({nome: 'Z-Teste', grupoId: pg.D.grupos()[0].id, preco: '7', tipo: 'VENDA', unidade: 'UN', ativo: true});
+  await espera(300);
+  banco.limparOuvintes();
+  await banco.cliente.from('produtos').delete().in('id', [z.id]);
+  pg.D.salvarProduto({...pg.D.produtoPorId(z.id), preco: '8'}, z.id);
+  await espera(400);
+  ok(!banco.T.produtos.some(x => x.id === z.id), 'aba desatualizada edita produto apagado: o banco não recria');
+  ok(!pg.D.produtoPorId(z.id), 'e o produto some também da tela dessa aba');
+  ok(!mem.local.mga_nuvemSujos, 'nada fica pendente depois');
 
   // Outra empresa guardada neste navegador e sem internet: não mostra os dados dela
   const mem2 = {local: {...mem.local}, sessao: {}};

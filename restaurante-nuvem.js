@@ -21,11 +21,12 @@
   const ehUuid = v => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v));
   const vazio = o => !o || !Object.keys(o).length;
   const CHAVE_MARCA = 'mga_nuvemEmpresa', CHAVE_VERSAO = 'mga_nuvemVersao', VERSAO = '2';
-  // Alteração feita neste navegador e ainda não confirmada pelo banco (sem internet, erro, aba fechada):
-  // guarda o id da empresa; na próxima abertura com internet ela é enviada antes de carregar do banco
-  const CHAVE_PENDENTE = 'mga_nuvemPendente';
-  const marcarPendente = id => { try { if (id) localStorage.setItem(CHAVE_PENDENTE, id); } catch (e) { /* storage indisponível */ } };
-  const limparPendente = () => { try { localStorage.removeItem(CHAVE_PENDENTE); } catch (e) { /* storage indisponível */ } };
+  // Diário do que foi alterado NESTE navegador e o banco ainda não confirmou (sem internet, erro, aba fechada):
+  // {empresa, tabelas: {produtos: [ids]...}, config}. Na próxima abertura com internet só esses registros são
+  // enviados (nunca o retrato inteiro: um registro excluído no banco por outro computador não volta).
+  const CHAVE_SUJOS = 'mga_nuvemSujos', CHAVE_PENDENTE_ANTIGA = 'mga_nuvemPendente';
+  const lerSujos = () => { try { return JSON.parse(localStorage.getItem(CHAVE_SUJOS)) || null; } catch (e) { return null; } };
+  const limparSujos = () => { try { localStorage.removeItem(CHAVE_SUJOS); localStorage.removeItem(CHAVE_PENDENTE_ANTIGA); } catch (e) { /* storage indisponível */ } };
 
   // ---- Aviso discreto no canto da tela (salvando / erro) ----
   let elAviso = null;
@@ -236,36 +237,71 @@
     SPECS.forEach(s => { espelho[s.nome] = new Map(itensDe(s, e, x).map(o => [o.id, assinatura(o)])); });
   }
   const lotes = (lista, n) => Array.from({length: Math.ceil(lista.length / n)}, (_, k) => lista.slice(k * n, k * n + n));
-  async function pedir(promessa, tabela){ const {error} = await promessa; if (error) { const e = new Error(`${tabela}: ${error.message}`); e.supa = error; e.tabela = tabela; throw e; } }
+  async function pedir(promessa, tabela){ const {data, error} = await promessa; if (error) { const e = new Error(`${tabela}: ${error.message}`); e.supa = error; e.tabela = tabela; throw e; } return data; }
+  // Registros que mudaram aqui em relação ao que o banco confirmou
+  function mudancas(s, e, x){
+    const antes = espelho[s.nome] || new Map();
+    return itensDe(s, e, x).filter(o => s.soInclui ? !antes.has(o.id) : antes.get(o.id) !== assinatura(o));
+  }
+  function anotarSujos(empresaId, e){
+    if (!empresaId) return;
+    const x = contexto(e), j = lerSujos();
+    const d = j && j.empresa === empresaId ? j : {empresa: empresaId, tabelas: {}, config: false};
+    SPECS.forEach(s => mudancas(s, e, x).forEach(o => { const l = (d.tabelas[s.nome] ||= []); if (!l.includes(o.id)) l.push(o.id); }));
+    if (espelhoConfig && assinatura(D.config()) !== espelhoConfig) d.config = true;
+    try { localStorage.setItem(CHAVE_SUJOS, JSON.stringify(d)); } catch (x2) { /* storage indisponível */ }
+  }
+  // Registro recusado pelo banco por já ter sido excluído (registros_excluidos): sai também daqui
+  function tirarLocal(s, ids){
+    if (!ids.size || !D[s.col]) return;
+    D.substituirCadastros({[s.col]: D[s.col]().filter(o => !ids.has(o.id))});
+    ids.forEach(id => espelho[s.nome]?.delete(id));
+  }
 
-  async function enviarEstado(e, {semExcluir = false} = {}){
+  // apenas: {tabela: Set(ids)} — envia só esses registros (diário do que foi feito sem conexão)
+  async function enviarEstado(e, {semExcluir = false, apenas = null, config = true} = {}){
     const x = contexto(e);
     const daEmpresa = l => ({...l, empresa_id: empresaAtual});
+    let primeiroErro = null;
+    const tentar = async fn => { try { await fn(); } catch (erro) { primeiroErro ||= erro; console.error('Supabase:', erro); } };
     const plano = SPECS.map(s => {
       const antes = espelho[s.nome] || new Map();
       const itens = itensDe(s, e, x);
-      const mudou = itens.filter(o => s.soInclui ? !antes.has(o.id) : antes.get(o.id) !== assinatura(o));
+      const mudou = mudancas(s, e, x).filter(o => !apenas || apenas[s.nome]?.has(o.id));
       const ids = new Set(itens.map(o => o.id));
-      const saiu = semExcluir || s.soInclui ? [] : [...antes.keys()].filter(id => !ids.has(id));
+      const saiu = semExcluir || apenas || s.soInclui ? [] : [...antes.keys()].filter(id => !ids.has(id));
       return {s, mudou, saiu};
     });
-    // 1. Inclui/altera dos pais para os filhos (os filhos de cada pai alterado são regravados)
+    // 1. Inclui/altera dos pais para os filhos (os filhos de cada pai alterado são regravados).
+    //    O banco devolve o que gravou: o que não voltou foi barrado (já excluído) e sai daqui também.
     for (const {s, mudou} of plano) {
       if (!mudou.length) continue;
-      for (const lote of lotes(mudou, 300)) await pedir(supa.from(s.nome).upsert(lote.map(o => daEmpresa(linhaDe(s, o, x))), {onConflict: 'id', ignoreDuplicates: !!s.soInclui}), s.nome);
-      for (const f of s.filhos || []) {
-        if (f.por && !s.soInclui) for (const lote of lotes(mudou.map(o => o.id), 150)) await pedir(supa.from(f.nome).delete().in(f.por, lote), f.nome);
-        const linhas = mudou.flatMap(o => f.linhas(o, x));
-        for (const lote of lotes(linhas, 500)) await pedir(supa.from(f.nome).insert(lote.map(daEmpresa)), f.nome);
-      }
-      mudou.forEach(o => (espelho[s.nome] ||= new Map()).set(o.id, assinatura(o)));
+      await tentar(async () => {
+        const salvos = new Set();
+        for (const lote of lotes(mudou, 300)) {
+          const data = await pedir(supa.from(s.nome).upsert(lote.map(o => daEmpresa(linhaDe(s, o, x))), {onConflict: 'id', ignoreDuplicates: !!s.soInclui}).select('id'), s.nome);
+          (data || []).forEach(l => salvos.add(l.id));
+        }
+        const gravados = mudou.filter(o => salvos.has(o.id));
+        const barrados = new Set(s.soInclui ? [] : mudou.filter(o => !salvos.has(o.id)).map(o => o.id));
+        for (const f of s.filhos || []) {
+          if (f.por && !s.soInclui) for (const lote of lotes(gravados.map(o => o.id), 150)) await pedir(supa.from(f.nome).delete().in(f.por, lote), f.nome);
+          const linhas = gravados.flatMap(o => f.linhas(o, x));
+          for (const lote of lotes(linhas, 500)) await pedir(supa.from(f.nome).insert(lote.map(daEmpresa)), f.nome);
+        }
+        (s.soInclui ? mudou : gravados).forEach(o => (espelho[s.nome] ||= new Map()).set(o.id, assinatura(o)));
+        if (barrados.size) { barrados.forEach(id => x[s.col]?.delete(id)); tirarLocal(s, barrados); console.warn(`Supabase: ${barrados.size} registro(s) de ${s.nome} já excluído(s) no banco`); }
+      });
     }
     // 2. Exclui dos filhos para os pais
     for (const {s, saiu} of plano.slice().reverse()) {
       if (!saiu.length) continue;
-      for (const lote of lotes(saiu, 150)) await pedir(supa.from(s.nome).delete().in('id', lote), s.nome);
-      saiu.forEach(id => espelho[s.nome].delete(id));
+      await tentar(async () => {
+        for (const lote of lotes(saiu, 150)) await pedir(supa.from(s.nome).delete().in('id', lote), s.nome);
+        saiu.forEach(id => espelho[s.nome].delete(id));
+      });
     }
+    if (!config) { if (primeiroErro) throw primeiroErro; return; }
     // 3. Configurações, categorias financeiras e numeração
     const cfg = assinatura(D.config());
     if (cfg !== espelhoConfig && empresaAtual) { await pedir(supa.from('empresas').update(linhaEmpresa(D.config())).eq('id', empresaAtual), 'empresas'); espelhoConfig = cfg; }
@@ -282,6 +318,7 @@
       await pedir(supa.from('sequencias').upsert(['produto', 'caixa', 'venda'].map(nome => daEmpresa({nome, valor: r(seq[nome])})), {onConflict: 'empresa_id,nome'}), 'sequencias');
       espelhoSeq = sseq;
     }
+    if (primeiroErro) throw primeiroErro;
   }
 
   // Dois computadores criaram a mesma "Venda #120" (ou caixa): o deste ganha o próximo número livre
@@ -308,15 +345,15 @@
   }
 
   // Fila: uma gravação por vez; se falhar, tenta de novo (o espelho só muda quando o banco confirma)
-  let fila = Promise.resolve(), pendente = false, ocupado = false, tentarDeNovo = null;
+  let fila = Promise.resolve(), pendente = false, ocupado = false, tentarDeNovo = null, renumeracoes = 0;
   function agendar(){
-    marcarPendente(empresaAtual);
+    try { anotarSujos(empresaAtual, coletar()); } catch (e) { console.error(e); }
     if (pendente) return;
     pendente = true;
     fila = fila.then(async () => {
       pendente = false; ocupado = true;
       aviso('Salvando…');
-      try { await conferirEmpresaDoMaster(); await enviarEstado(coletar()); aviso(''); clearTimeout(tentarDeNovo); if (!pendente) limparPendente(); }
+      try { await conferirEmpresaDoMaster(); await enviarEstado(coletar()); aviso(''); clearTimeout(tentarDeNovo); renumeracoes = 0; if (!pendente) limparSujos(); }
       catch (e) {
         if (e.trocouEmpresa) { saiuDaEmpresa(); return; }
         console.error('Supabase:', e);
@@ -324,7 +361,7 @@
         if (/caixas_um_aberto/.test(msg)) {
           aviso('Já existe um caixa aberto em outro computador. Recarregando com os dados do servidor…', 'erro');
           setTimeout(() => location.reload(), 3000);
-        } else if (/numero_key|_numero/.test(msg) && (e.tabela === 'vendas' || e.tabela === 'caixas')) {
+        } else if (/numero_key|_numero/.test(msg) && (e.tabela === 'vendas' || e.tabela === 'caixas') && ++renumeracoes <= 5) {
           await renumerar(e.tabela).catch(x => console.error(x));
           ocupado = false; agendar(); return;
         } else {
@@ -361,7 +398,7 @@
       }
       const s = specDe[tabela];
       const {data, error} = await supa.from(tabela).select('*').in('id', [...ids]);
-      if (error) { console.error(error); continue; }
+      if (error) { console.error(error); ids.forEach(id => (remotos[tabela] ||= new Set()).add(id)); clearTimeout(timerRemoto); timerRemoto = setTimeout(aplicarRemotos, 5000); continue; }
       const vieram = new Map(data.map(l => [l.id, objetoDe(tabela, l, () => [])]));
       const antes = espelho[tabela] || new Map();
       const atual = D[s.col] ? D[s.col]() : [];
@@ -383,7 +420,33 @@
     });
     // Usuário criado/alterado em outro computador: recarrega a lista
     canal = canal.on('postgres_changes', {event: '*', schema: 'public', table: 'usuarios'}, () => { carregarUsuarios().catch(e => console.error(e)); });
-    canal.subscribe();
+    let conectou = false;
+    canal.subscribe(status => { if (status === 'SUBSCRIBED') { if (conectou) conferirExclusoes(true); conectou = true; } });
+    window.addEventListener?.('online', () => conferirExclusoes(true));
+    document.addEventListener?.('visibilitychange', () => { if (document.visibilityState === 'visible') conferirExclusoes(); });
+  }
+  // O tempo real não reenvia o que perdeu (internet caiu, computador dormiu): confere quais registros
+  // ainda existem no banco e tira daqui os excluídos (os alterados aqui e ainda não gravados ficam)
+  let ultimaConferencia = Date.now();
+  async function conferirExclusoes(agora){
+    if (!empresaAtual || pendente || ocupado || (!agora && Date.now() - ultimaConferencia < 120000)) return;
+    ultimaConferencia = Date.now();
+    try {
+      for (const s of SPECS.filter(x => !x.soInclui)) {
+        const antes = espelho[s.nome];
+        const atual = D[s.col] ? D[s.col]() : [];
+        if (!antes || !atual.some(o => antes.has(o.id))) continue;
+        const noBanco = new Set();
+        for (let de = 0; ; de += 1000) {
+          const {data, error} = await supa.from(s.nome).select('id').range(de, de + 999);
+          if (error) throw error;
+          data.forEach(l => noBanco.add(l.id));
+          if (data.length < 1000) break;
+        }
+        const sumiram = new Set(atual.filter(o => antes.has(o.id) && !noBanco.has(o.id) && antes.get(o.id) === assinatura(o)).map(o => o.id));
+        if (sumiram.size) tirarLocal(s, sumiram);
+      }
+    } catch (e) { console.error('Supabase (conferência):', e); }
   }
 
   // ---- Primeira vez neste navegador (ou versão anterior): junta navegador e banco ----
@@ -449,8 +512,9 @@
     const e = estadoGuardado();
     const bancoVazio = !doBanco.grupos.length && !doBanco.produtos.length;
     SPECS.filter(s => s.natural).forEach(s => {
+      if (exemplo) { e[s.col] = []; return; }                       // cardápio de exemplo deste navegador não vai para o banco
       if (bancoVazio) return;                                      // restaurante novo no banco: vai tudo daqui
-      e[s.col] = exemplo ? [] : e[s.col].filter(o => novos.has(o.id)); // banco já tem: só o que falta lá
+      e[s.col] = e[s.col].filter(o => novos.has(o.id));            // banco já tem: só o que falta lá
     });
     montarEspelho(doBanco);
     espelhoCategorias = new Set(linhasCategorias(categoriasDoBanco(banco.categorias_financeiras)).map(c => c.tipo + '|' + c.nome));
@@ -462,7 +526,7 @@
 
   // ---- Usuários da equipe: lidos do banco; criados/alterados/excluídos pela Edge Function "usuarios" ----
   async function carregarUsuarios(){
-    const {data, error} = await supa.from('usuarios').select('id, nome, login, perfil, ativo, criado_em, usuario_modulos(modulo)').eq('empresa_id', empresaAtual);
+    const {data, error} = await supa.from('usuarios').select('id, nome, login, perfil, ativo, criado_em, usuario_modulos!usuario_modulos_usuario_id_mesma_empresa(modulo)').eq('empresa_id', empresaAtual);
     if (error) throw new Error('usuarios: ' + error.message);
     const master = D.sessaoAtual()?.master ? D.sessaoAtual() : null;
     if (!data.length && !master) return; // sem migração/permissão: mantém a lista local (o usuário logado não pode sumir)
@@ -527,13 +591,21 @@
     }
     // Alterações deste navegador que não chegaram ao banco (sem internet, erro, página fechada): envia antes
     let banco2 = banco;
-    if (marca === u.empresaId && localStorage.getItem(CHAVE_PENDENTE) === u.empresaId) {
+    const sujos = lerSujos();
+    if (marca === u.empresaId && sujos?.empresa === u.empresaId && (Object.values(sujos.tabelas || {}).some(l => l.length) || sujos.config)) {
       aviso('Enviando alterações feitas sem conexão…');
       montarEspelho(estadoDoBanco(banco));
-      await enviarEstado(coletar(), {semExcluir: true});
-      limparPendente();
+      espelhoConfig = assinatura(configDoBanco(banco.empresa) || {});
+      const apenas = Object.fromEntries(Object.entries(sujos.tabelas || {}).map(([k, v]) => [k, new Set(v)]));
+      try { await enviarEstado(coletar(), {semExcluir: true, apenas, config: !!sujos.config}); }
+      catch (e) {
+        if (!e.supa) throw e; // sem internet: segue com o navegador e tenta de novo depois
+        console.error('Supabase:', e);
+        setTimeout(() => aviso('Algumas alterações feitas sem conexão não puderam ser gravadas: ' + traduzir(e.supa.message), 'erro'), 1500);
+      }
+      limparSujos();
       banco2 = await baixarTudo(u.empresaId);
-    }
+    } else limparSujos(); // marca antiga (versão anterior) ou de outra empresa: nada a reenviar
     return carregarDoBanco(u, banco2, marca);
   }
   async function carregarDoBanco(u, banco, marca){
@@ -574,7 +646,9 @@
         + ' Confira a internet e recarregue a página (F5).</p></div></div>';
       return true;
     }
-    D.aoSalvar(() => marcarPendente(empresaId)); // o que for feito agora vai para o banco na próxima abertura com internet
+    // O que for feito agora vai para o banco na próxima abertura com internet (só o que mudar daqui em diante)
+    montarEspelho(coletar()); espelhoConfig = assinatura(D.config());
+    D.aoSalvar(() => anotarSujos(empresaId, coletar()));
     aviso(motivo + ' Usando os dados deste navegador; eles serão enviados quando a conexão voltar (recarregue a página).', 'erro');
     if (supa?.auth?.onAuthStateChange) supa.auth.onAuthStateChange((ev, s) => { if (s && ev !== 'INITIAL_SESSION') aviso('A conexão voltou. Recarregue a página (F5) para enviar as alterações.', 'erro'); });
     return false;
