@@ -215,8 +215,24 @@
   }
 
   // Seções das próximas fases
+  // Uma tela com erro não derruba o sistema inteiro: mostra o aviso e o resto continua funcionando
+  class Protecao extends React.Component {
+    constructor(p){ super(p); this.state = {erro: null}; }
+    static getDerivedStateFromError(erro){ return {erro}; }
+    componentDidCatch(erro){ console.error('Tela:', erro); }
+    componentDidUpdate(antes){ if (antes.rota !== this.props.rota && this.state.erro) this.setState({erro: null}); }
+    render(){
+      if (!this.state.erro) return this.props.children;
+      return html`<div className="card rest-breve-card"><span className="rest-breve-ic" aria-hidden="true">⚠️</span><h2>Não foi possível abrir esta tela</h2>
+        <p>O sistema pode ter sido atualizado agora. Recarregue a página com <b>Ctrl+F5</b>. Se continuar, avise o suporte: ${String(this.state.erro.message || this.state.erro)}</p>
+        <button type="button" className="btn" onClick=${() => location.reload()}>Recarregar</button></div>`;
+    }
+  }
   function TelaEmBreve({rota}){
     const m = EM_BREVE[rota];
+    if (!m) return html`<div className="card rest-breve-card"><span className="rest-breve-ic" aria-hidden="true">🔄</span><h2>Tela não carregada</h2>
+      <p>O sistema foi atualizado e esta tela ainda não chegou neste navegador. Recarregue a página com <b>Ctrl+F5</b>.</p>
+      <button type="button" className="btn" onClick=${() => location.reload()}>Recarregar</button></div>`;
     return html`
       <div className="card rest-breve-card">
         <span className="rest-breve-ic" aria-hidden="true">${m.ic}</span>
@@ -258,7 +274,7 @@
       <div className=${'main' + (['vendas/pdv', 'mesas/pedido', 'delivery/novo'].includes(rota) ? ' rest-main-pdv' : '') + (rota === 'vendas/cozinha' ? ' rest-main-cozinha' : '')}>
         <${BarraSuperior} rota=${rota} menuOculto=${menuOculto} alternarMenu=${alternarMenu} />
         <main className="content">
-          ${!pode(rota) ? html`<${SemAcesso} rota=${rota} />` : Tela ? html`<${Tela} key=${rota === 'mesas/pedido' ? rota + params.id : rota} params=${params} ir=${ir} />` : html`<${TelaEmBreve} rota=${rota} />`}
+          ${!pode(rota) ? html`<${SemAcesso} rota=${rota} />` : Tela ? html`<${Protecao} rota=${rota}><${Tela} key=${rota === 'mesas/pedido' ? rota + params.id : rota} params=${params} ir=${ir} /><//>` : html`<${TelaEmBreve} rota=${rota} />`}
         </main>
       </div>`;
   }
