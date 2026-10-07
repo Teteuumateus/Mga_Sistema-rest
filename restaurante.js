@@ -36,7 +36,7 @@
     {rota: 'cardapio', nome: 'Cardápio digital', ic: '📱', modulo: 'cadastros'},
     {grupo: 'est', nome: 'Estoque', ic: '📦', modulo: 'estoque', itens: [['estoque/dashboard', 'Dashboard do estoque', null, 'O que entrou, o que saiu e o saldo'],
       ['estoque/entradas', 'Entrada de estoque', null, 'Entrada de produtos do cadastro (compras)'], ['estoque/saidas', 'Saída de estoque', null, 'Vendas (baixa automática), perdas e consumo']]},
-    {grupo: 'fin', nome: 'Financeiro', ic: '💰', modulo: 'financeiro', itens: [['fin/pagar', 'Contas a pagar'], ['fin/receber', 'Contas a receber'], ['fin/contas', 'Contas bancárias'],
+    {grupo: 'fin', nome: 'Financeiro', ic: '💰', modulo: 'financeiro', itens: [['fin/pagar', 'Contas a pagar'], ['fin/receber', 'Contas a receber'], ['fin/fluxo', 'Fluxo de caixa', null, 'Quanto vai ter nas contas nos próximos dias'], ['fin/contas', 'Contas bancárias'],
       ['fin/extrato', 'Movimento de conta', null, 'Extrato, lançamentos e transferências'], ['fin/categorias', 'Categorias financeiras']]},
     {grupo: 'rel', nome: 'Relatórios', ic: '📈', modulo: 'relatorios', itens: [['rel/vendas', 'Vendas'], ['rel/produtos', 'Produtos'], ['rel/cardapio', 'Engenharia de cardápio', null, 'CMV: o que vende e o que dá lucro'],
       ['rel/caixa', 'Caixa'], ['rel/delivery', 'Delivery'], ['rel/financeiro', 'Financeiro (DRE)', 'financeiro', 'Resultado, contas, sangrias e mês a mês']]},

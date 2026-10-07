@@ -2128,11 +2128,26 @@
       salvar('restContas');
       return existente;
     }
-    const nova = {id: novoId('ct'), tipo, ...c, status: 'ABERTA', pagoEm: null, forma: '', vendaId: null, criadoEm: agora()};
-    contas.push(nova);
-    auditar(`Conta ${TIPOS_CONTA[tipo].toLowerCase()} "${c.descricao}" lançada — ${moedaBR(c.valor)} vence ${dataBR(c.vencimento)}`);
+    // Repetir: "mensal" lança a mesma conta N meses seguidos (aluguel, internet...);
+    // "parcelas" divide o valor em N vezes mensais (compra parcelada). Os centavos que sobram vão na última.
+    const vezes = Math.round(Number(dados.repetir) || 1);
+    if (!(vezes >= 1 && vezes <= 60)) erro('Repetir: de 1 a 60 vezes.');
+    const parcelado = vezes > 1 && dados.modoRepetir === 'parcelas';
+    const parcela = parcelado ? Math.floor(c.valor / vezes * 100) / 100 : c.valor;
+    if (parcelado && !(parcela > 0)) erro('Valor pequeno demais para tantas parcelas.');
+    const grupo = vezes > 1 ? novoId('gr') : null;
+    const criadas = Array.from({length: vezes}, (_, k) => {
+      const nova = {id: novoId('ct'), tipo, ...c, descricao: vezes > 1 ? `${c.descricao} (${k + 1}/${vezes})` : c.descricao,
+        valor: parcelado ? (k === vezes - 1 ? r2(c.valor - parcela * (vezes - 1)) : parcela) : c.valor, vencimento: somarMeses(c.vencimento, k),
+        status: 'ABERTA', pagoEm: null, forma: '', vendaId: null, criadoEm: agora(), ...(grupo ? {grupo, parcela: k + 1, parcelas: vezes} : {})};
+      contas.push(nova);
+      return nova;
+    });
+    auditar(vezes > 1
+      ? `Conta ${TIPOS_CONTA[tipo].toLowerCase()} "${c.descricao}" lançada em ${vezes} ${parcelado ? 'parcelas' : 'meses'} — ${parcelado ? `total ${moedaBR(c.valor)}` : `${moedaBR(c.valor)} por mês`}, de ${dataBR(criadas[0].vencimento)} a ${dataBR(criadas[vezes - 1].vencimento)}`
+      : `Conta ${TIPOS_CONTA[tipo].toLowerCase()} "${c.descricao}" lançada — ${moedaBR(c.valor)} vence ${dataBR(c.vencimento)}`);
     salvar('restContas');
-    return nova;
+    return Object.assign(criadas[0], {criadas: criadas.length});
   }
   function excluirConta(id){
     const c = contaPorId(id);
@@ -2187,6 +2202,38 @@
     return c;
   }
   const contaVencida = c => c.status === 'ABERTA' && c.vencimento < hojeISO();
+  // Mesmo dia nos meses seguintes (dia 31 vira o último dia do mês quando ele não existe)
+  function somarMeses(iso, n){
+    const [a, m, d] = iso.split('-').map(Number);
+    const ultimo = new Date(a, m - 1 + n + 1, 0).getDate();
+    return diaISO(new Date(a, m - 1 + n, Math.min(d, ultimo)));
+  }
+  // Fluxo de caixa previsto: saldo de hoje (contas bancárias + dinheiro no caixa aberto) mais o que vai
+  // entrar (contas a receber) e sair (contas a pagar) dia a dia. Vencidas contam no primeiro dia.
+  function fluxoCaixa({dias = 30} = {}){
+    const hoje = hojeISO(), fim = diaISO(new Date(new Date(hoje + 'T12:00:00').getTime() + (dias - 1) * 86400000));
+    const bancos = contasBancarias.filter(c => c.ativo).map(c => ({nome: c.nome, saldo: saldoConta(c.id)}));
+    const cx = caixaAberto();
+    const dinheiroCaixa = cx ? resumoCaixa(cx.id).saldoDinheiro : 0;
+    const saldoHoje = r2(bancos.reduce((s, b) => s + b.saldo, 0) + dinheiroCaixa);
+    const abertas = contas.filter(c => c.status === 'ABERTA');
+    const atrasadas = abertas.filter(c => c.vencimento < hoje);
+    const soma = (l, t) => r2(l.filter(c => c.tipo === t).reduce((s, c) => s + c.valor, 0));
+    let saldo = saldoHoje;
+    const lista = [];
+    for (let k = 0; k < dias; k++) {
+      const dia = diaISO(new Date(new Date(hoje + 'T12:00:00').getTime() + k * 86400000));
+      const doDia = abertas.filter(c => c.vencimento === dia || (k === 0 && c.vencimento < hoje));
+      const entradas = soma(doDia, 'RECEBER'), saidas = soma(doDia, 'PAGAR');
+      saldo = r2(saldo + entradas - saidas);
+      lista.push({dia, entradas, saidas, saldo, contas: doDia.slice().sort((a, b) => a.tipo.localeCompare(b.tipo) || b.valor - a.valor)});
+    }
+    const menor = lista.reduce((m, d) => d.saldo < m.saldo ? d : m, lista[0]);
+    return {de: hoje, ate: fim, bancos, dinheiroCaixa, temCaixa: !!cx, saldoHoje, dias: lista,
+      atrasadas: {receber: soma(atrasadas, 'RECEBER'), pagar: soma(atrasadas, 'PAGAR'), n: atrasadas.length},
+      entradas: r2(lista.reduce((s, d) => s + d.entradas, 0)), saidas: r2(lista.reduce((s, d) => s + d.saidas, 0)),
+      saldoFinal: lista.length ? lista[lista.length - 1].saldo : saldoHoje, menor, primeiroNegativo: lista.find(d => d.saldo < 0) || null};
+  }
   function salvarCategoria(tipo, nome, antigo){
     nome = txt(nome);
     if (!TIPOS_CONTA[tipo]) erro('Tipo inválido.');
@@ -2742,7 +2789,7 @@
     caixaAberto, abrirCaixa: comModulo('Caixa', abrirCaixa), movimentarCaixa: comModulo('Caixa', movimentarCaixa), resumoCaixa, fecharCaixa: comModulo('Caixa', fecharCaixa),
     valorAjuste, registrarVenda: vnd(registrarVenda), novaVenda: (d = {}) => (d.tipo === 'MESA' ? mes : vnd)(novaVenda)(d), adicionarItem: porVenda(adicionarItem), ajustarVenda: porVenda(ajustarVenda),
     adicionarPagamento: vnd(adicionarPagamento), finalizarVenda: vnd(finalizarVenda), cancelarVenda: porVenda(cancelarVenda), totaisVenda,
-    salvarConta: fin(salvarConta), excluirConta: fin(excluirConta), baixarConta: fin(baixarConta), estornarBaixa: fin(estornarBaixa),
+    fluxoCaixa, somarMeses, salvarConta: fin(salvarConta), excluirConta: fin(excluirConta), baixarConta: fin(baixarConta), estornarBaixa: fin(estornarBaixa),
     salvarCategoria: fin(salvarCategoria), excluirCategoria: fin(excluirCategoria),
     // Mesas: cadastro, pedido aberto, divisão da conta e taxa de serviço
     mesas: mesasOrdenadas, mesaPorId, vendaDaMesa, config: () => config, valorDosItens,

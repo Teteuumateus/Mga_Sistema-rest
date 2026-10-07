@@ -1136,3 +1136,10 @@
   #appShell .rest-topo-esq { min-width: 0; flex: 1; }
   #appShell .rest-topo-esq h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
+
+/* Fluxo de caixa */
+#appShell .rest-fluxo-alerta { margin-bottom: 12px; }
+#appShell .rest-fluxo-titulo { margin: 18px 0 8px; font-size: 1rem; }
+#appShell .rest-fluxo-contas { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+#appShell .rest-fluxo-contas small { display: block; color: #69778d; }
+[data-theme="dark"] #appShell .rest-fluxo-contas small { color: #8596ae; }

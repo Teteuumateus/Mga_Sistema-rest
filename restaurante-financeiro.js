@@ -49,10 +49,17 @@
     const cats = D.categorias()[tipo];
     const nomeBaixa = pagar ? 'Pagar' : 'Receber';
 
-    const novo = () => setForm({id: null, tipo, descricao: '', categoria: cats[0] || '', valor: '', vencimento: hoje, clienteId: '', fornecedorId: '', obs: ''});
+    const novo = () => setForm({id: null, tipo, descricao: '', categoria: cats[0] || '', valor: '', vencimento: hoje, clienteId: '', fornecedorId: '', obs: '', repetir: '1', modoRepetir: 'mensal'});
     const editar = c => setForm({id: c.id, tipo, descricao: c.descricao, categoria: c.categoria, valor: D.valorBR(c.valor), vencimento: c.vencimento, clienteId: c.clienteId || '',
       fornecedorId: c.fornecedorId || '', obs: c.obs || ''});
-    const salvar = () => { if (tentar(() => D.salvarConta(form, form.id), c => form.id ? `Conta "${c.descricao}" atualizada.` : `Conta "${c.descricao}" lançada: ${D.moedaBR(c.valor)} vence ${D.dataBR(c.vencimento)}.`)) setForm(null); };
+    const salvar = () => { if (tentar(() => D.salvarConta(form, form.id), c => form.id ? `Conta "${c.descricao}" atualizada.`
+      : c.criadas > 1 ? `${c.criadas} contas lançadas (${form.modoRepetir === 'parcelas' ? 'parcelas' : 'uma por mês'}), a primeira vence ${D.dataBR(c.vencimento)}.`
+      : `Conta "${c.descricao}" lançada: ${D.moedaBR(c.valor)} vence ${D.dataBR(c.vencimento)}.`)) setForm(null); };
+    // Prévia das repetições/parcelas no formulário
+    const vezes = Math.round(Number(form?.repetir) || 1), valorForm = D.lerValor(form?.valor) || 0;
+    const resumoRepetir = !form || form.id || vezes <= 1 ? '' : form.modoRepetir === 'parcelas'
+      ? `${vezes} parcelas de ${D.moedaBR(Math.floor(valorForm / vezes * 100) / 100)} (total ${D.moedaBR(valorForm)}), de ${D.dataBR(form.vencimento)} a ${D.dataBR(D.somarMeses(form.vencimento, vezes - 1))}.`
+      : `${vezes} contas de ${D.moedaBR(valorForm)}, uma por mês, de ${D.dataBR(form.vencimento)} a ${D.dataBR(D.somarMeses(form.vencimento, vezes - 1))}.`;
     const excluir = c => { if (confirmar(`Excluir a conta "${c.descricao}" (${D.moedaBR(c.valor)})?`)) tentar(() => D.excluirConta(c.id), `Conta "${c.descricao}" excluída.`); };
     const estornar = c => { if (confirmar(`Estornar a baixa de "${c.descricao}"? Ela volta a ficar em aberto.`)) tentar(() => D.estornarBaixa(c.id), `Baixa de "${c.descricao}" estornada.`); };
     const pelaCaixa = b => b.noCaixa && b.data === hoje && !!D.caixaAberto() && D.podeAcessar('vendas');
@@ -95,6 +102,16 @@
             </select>
           <//>`}
           <${Campo} rotulo="Observação" largo><input type="text" value=${form.obs} maxLength="200" onInput=${e => setForm({...form, obs: e.target.value})} /><//>
+          ${!form.id && html`
+            <${Campo} rotulo="Repetir">
+              <select value=${form.modoRepetir} onChange=${e => setForm({...form, modoRepetir: e.target.value})}>
+                <option value="mensal">Todo mês (mesmo valor)</option><option value="parcelas">Parcelar o valor</option>
+              </select>
+            <//>
+            <${Campo} rotulo=${form.modoRepetir === 'parcelas' ? 'Número de parcelas' : 'Quantos meses'}>
+              <input type="number" min="1" max="60" step="1" value=${form.repetir} onInput=${e => setForm({...form, repetir: e.target.value})} />
+            <//>
+            ${resumoRepetir && html`<p className="dv-ajuda rest-largo">${resumoRepetir}</p>`}`}
         <//>`}
       <div className="cad-toolbar rest-filtros">
         <${Segmentos} rotulo="Situação" opcoes=${FILTROS} valor=${filtro} onChange=${setFiltro} />
@@ -195,9 +212,80 @@
       </div>`;
   }
 
+
+  // =====================================================================
+  // ---- Fluxo de caixa previsto ----
+  // Saldo de hoje (contas bancárias + dinheiro no caixa aberto) + contas a receber − contas a pagar, dia a dia.
+  const PRAZOS = [['7', '7 dias'], ['15', '15 dias'], ['30', '30 dias'], ['60', '60 dias'], ['90', '90 dias']];
+  const dataCurta = iso => iso.slice(8, 10) + '/' + iso.slice(5, 7);
+  const moedaSinal = v => (v < 0 ? '− ' : '') + D.moedaBR(Math.abs(v));
+  function TelaFluxo({ir}){
+    useDados();
+    const [prazo, setPrazo] = useState('30');
+    const [aberto, setAberto] = useState(null); // dia com as contas à mostra
+    const f = D.fluxoCaixa({dias: Number(prazo)});
+    const G = window.RestUI.graficos;
+    const cores = G ? G.useTema() : null;
+    const comMovimento = f.dias.filter(d => d.contas.length);
+    const semBanco = !f.bancos.length;
+    const eixo = cores && {stroke: cores.grade, tick: {fill: cores.eixo, fontSize: 12}, tickLine: false};
+    const R = window.Recharts;
+    return html`
+      <${Cabecalho} titulo="Fluxo de caixa" sub=${`Previsão de ${D.dataBR(f.de)} a ${D.dataBR(f.ate)} · saldo de hoje + contas a receber − contas a pagar`}>
+        <button type="button" className="btn btn-ghost" onClick=${() => ir('fin/pagar')}>Contas a pagar</button>
+        <button type="button" className="btn btn-ghost" onClick=${() => ir('fin/receber')}>Contas a receber</button>
+      <//>
+      <div className="cad-toolbar rest-filtros"><${Segmentos} rotulo="Período" opcoes=${PRAZOS} valor=${prazo} onChange=${p => { setPrazo(p); setAberto(null); }} /></div>
+      ${f.primeiroNegativo
+        ? html`<p className="rest-imp-alerta rest-fluxo-alerta" role="alert">⚠ Em <b>${D.dataBR(f.primeiroNegativo.dia)}</b> o saldo previsto fica <b>negativo (${moedaSinal(f.primeiroNegativo.saldo)})</b>. Antecipe recebimentos ou renegocie pagamentos.</p>`
+        : html`<p className="dv-ajuda">✓ O saldo previsto fica positivo em todo o período. Menor saldo: <b>${moedaSinal(f.menor.saldo)}</b> em ${D.dataBR(f.menor.dia)}.</p>`}
+      <div className="rest-kpis-mini">
+        <button type="button" className="rest-kpi-mini" onClick=${() => ir('fin/contas')}><span>Saldo hoje</span><b>${moedaSinal(f.saldoHoje)}</b>
+          <small>${semBanco ? 'cadastre suas contas bancárias' : plural(f.bancos.length, 'conta', 'contas')}${f.temCaixa ? ` + ${D.moedaBR(f.dinheiroCaixa)} no caixa` : ''}</small></button>
+        <button type="button" className="rest-kpi-mini" onClick=${() => ir('fin/receber')}><span>Vai entrar</span><b className="mov-pos">${D.moedaBR(f.entradas)}</b><small>contas a receber no período</small></button>
+        <button type="button" className="rest-kpi-mini" onClick=${() => ir('fin/pagar')}><span>Vai sair</span><b className="mov-neg">${D.moedaBR(f.saidas)}</b><small>contas a pagar no período</small></button>
+        <div className=${'rest-kpi-mini' + (f.saldoFinal < 0 ? ' hv-alerta' : '')}><span>Saldo previsto</span><b>${moedaSinal(f.saldoFinal)}</b><small>em ${D.dataBR(f.ate)}</small></div>
+      </div>
+      ${f.atrasadas.n > 0 && html`<p className="dv-ajuda">Inclui ${plural(f.atrasadas.n, 'conta vencida', 'contas vencidas')} no primeiro dia (${[f.atrasadas.receber && `a receber ${D.moedaBR(f.atrasadas.receber)}`, f.atrasadas.pagar && `a pagar ${D.moedaBR(f.atrasadas.pagar)}`].filter(Boolean).join(' · ')}).</p>`}
+      ${G && R && html`
+        <${G.Grafico} titulo="Saldo previsto" sub=${`Dia a dia, de ${D.dataBR(f.de)} a ${D.dataBR(f.ate)}`}
+          tabela=${{colunas: ['Dia', 'Entradas', 'Saídas', 'Saldo'], linhas: f.dias.map(d => [D.dataBR(d.dia), D.moedaBR(d.entradas), D.moedaBR(d.saidas), moedaSinal(d.saldo)])}}>
+          <${R.ResponsiveContainer} width="100%" height=${260}>
+            <${R.LineChart} data=${f.dias.map(d => ({...d, rotulo: dataCurta(d.dia)}))} margin=${{top: 8, right: 12, left: 4, bottom: 0}}>
+              <${R.CartesianGrid} stroke=${cores.grade} vertical=${false} />
+              <${R.XAxis} dataKey="rotulo" ...${eixo} minTickGap=${16} />
+              <${R.YAxis} ...${eixo} axisLine=${false} width=${74} tickFormatter=${G.moedaCurta} />
+              <${R.ReferenceLine} y=${0} stroke=${cores.eixo} strokeDasharray="4 4" />
+              <${R.Tooltip} cursor=${{stroke: cores.eixo, strokeWidth: 1}}
+                content=${p => { const d = p.payload?.[0]?.payload; return p.active && d ? html`<div className="rest-dica"><b>${D.dataBR(d.dia)}</b>
+                  <div><i style=${{background: cores.serie[0]}}></i>Saldo previsto<span>${moedaSinal(d.saldo)}</span></div>
+                  ${d.entradas > 0 && html`<div>Entradas<span>${D.moedaBR(d.entradas)}</span></div>`}${d.saidas > 0 && html`<div>Saídas<span>− ${D.moedaBR(d.saidas)}</span></div>`}</div>` : null; }} />
+              <${R.Line} type="stepAfter" dataKey="saldo" name="Saldo previsto" stroke=${cores.serie[0]} strokeWidth=${2} dot=${false}
+                activeDot=${{r: 5, strokeWidth: 2, stroke: cores.superficie}} isAnimationActive=${false} />
+            <//>
+          <//>
+        <//>`}
+      <h3 className="rest-fluxo-titulo">Dias com movimento</h3>
+      <${Tabela} colunas=${['Dia', 'Entradas', 'Saídas', 'Saldo do dia', '']} vazio="Nenhuma conta a pagar ou a receber no período.">
+        ${comMovimento.map(d => html`
+          <tr key=${d.dia} className=${d.saldo < 0 ? 'rest-linha-vencida' : ''}>
+            <td className="nowrap"><b>${D.dataBR(d.dia)}</b>${d.dia === f.de && f.atrasadas.n ? html`<small className="history-date">inclui vencidas</small>` : null}</td>
+            <td className="nowrap mov-pos">${d.entradas ? D.moedaBR(d.entradas) : '—'}</td>
+            <td className="nowrap mov-neg">${d.saidas ? '− ' + D.moedaBR(d.saidas) : '—'}</td>
+            <td className="nowrap"><b className=${d.saldo < 0 ? 'mov-neg' : ''}>${moedaSinal(d.saldo)}</b></td>
+            <td><button type="button" className="rest-link" aria-expanded=${aberto === d.dia} onClick=${() => setAberto(aberto === d.dia ? null : d.dia)}>${aberto === d.dia ? 'Esconder' : `Ver ${plural(d.contas.length, 'conta', 'contas')}`}</button>
+              ${aberto === d.dia && html`<ul className="rest-fluxo-contas">${d.contas.map(c => html`<li key=${c.id}>
+                <span className=${c.tipo === 'RECEBER' ? 'mov-pos' : 'mov-neg'}>${c.tipo === 'RECEBER' ? '+' : '−'} ${D.moedaBR(c.valor)}</span> ${c.descricao}
+                <small>${c.categoria}${c.vencimento < f.de ? ` · venceu ${D.dataBR(c.vencimento)}` : ''}</small></li>`)}</ul>`}</td>
+          </tr>`)}
+      <//>
+      <p className="dv-ajuda">Vendas no cartão que ainda vão cair na conta não entram na previsão: lance-as como conta a receber se quiser vê-las aqui.</p>`;
+  }
+
   Object.assign(window.RestUI.telas, {
     'fin/pagar': props => html`<${TelaContas} key="pagar" tipo="PAGAR" ...${props} />`,
     'fin/receber': props => html`<${TelaContas} key="receber" tipo="RECEBER" ...${props} />`,
-    'fin/categorias': TelaCategorias
+    'fin/categorias': TelaCategorias,
+    'fin/fluxo': TelaFluxo
   });
 })();

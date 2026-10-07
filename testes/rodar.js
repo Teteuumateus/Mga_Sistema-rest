@@ -4,7 +4,7 @@ const {spawnSync} = require('child_process');
 const fs = require('fs'), path = require('path');
 const rapido = process.argv.includes('rapido');
 const testes = fs.readdirSync(__dirname).filter(f => /^teste-.*\.js$/.test(f)).sort();
-if (!rapido) testes.push('banco.mjs', 'banco-cardapio.mjs', 'navegador.js', 'navegador-importar.js', 'navegador-cardapio.js', 'navegador-cardapio-equipe.js');
+if (!rapido) testes.push('banco.mjs', 'banco-cardapio.mjs', 'navegador.js', 'navegador-importar.js', 'navegador-cardapio.js', 'navegador-cardapio-equipe.js', 'navegador-financeiro.js');
 let total = 0, falhas = 0;
 for (const t of testes) {
   if (t.endsWith('.mjs') && !fs.existsSync(path.join(__dirname, 'node_modules', '@electric-sql', 'pglite'))) {
