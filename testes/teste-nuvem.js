@@ -96,6 +96,8 @@ function bancoFalso(){
       upsert(l, o){ modo = 'upsert'; dados = l; conflito = o?.onConflict; ignorar = !!o?.ignoreDuplicates; return q; }, insert(l){ modo = 'insert'; dados = l; return q; },
       update(l){ modo = 'update'; dados = l; return q; }, delete(){ modo = 'delete'; return q; },
       in(c, v){ filtros.push(l => v.includes(l[c])); return q; }, eq(c, v){ filtros.push(l => l[c] === v); return q; },
+      or(expr){ const partes = expr.split(',').map(p => p.split('.')); filtros.push(l => partes.some(([c, op, ...v]) => { const x = v.join('.');
+        return op === 'eq' ? String(l[c]) === x : op === 'gte' ? l[c] != null && String(l[c]) >= x : false; })); return q; },
       then(res, rej){
         chamadas++;
         let r;
@@ -268,6 +270,36 @@ const contar = (banco, t) => banco.T[t].length;
   D.salvarProduto({...D.produtos().find(x => x.nome === 'X-Salada'), preco: '22'}, D.produtos().find(x => x.nome === 'X-Salada').id);
   await espera(1500);
   ok(DB_.produtos().find(x => x.nome === 'X-Salada').preco === 22, 'preço alterado no A aparece no B');
+
+  // ---- 3b. O tempo real perdeu o aviso: ao abrir uma tela o A relê o banco ----
+  banco.limparOuvintes();
+  const mesa9 = DB_.novaVenda({tipo: 'MESA', mesaId: DB_.mesas().find(m => m.numero === '09').id});
+  DB_.adicionarItem(mesa9.id, DB_.produtos().find(x => x.nome === 'X-Bacon').id, {quantidade: 1});
+  const t9 = DB_.totaisVenda(DB_.vendaPorId(mesa9.id));
+  DB_.receberParcial(mesa9.id, {valor: t9.restante, itemIds: [], parte: 'Conta inteira', pagamentos: [{formaId: DB_.formasAtivas().find(f => f.tipo === 'DINHEIRO').id, valor: DB_.valorBR(t9.restante)}]});
+  DB_.salvarProduto({...DB_.produtos().find(x => x.nome === 'X-Salada'), preco: '23'}, DB_.produtos().find(x => x.nome === 'X-Salada').id);
+  await espera(1500);
+  ok(banco.T.vendas.find(v => v.id === mesa9.id)?.status === 'FINALIZADA', 'B fechou a mesa 09 (gravado no banco)');
+  ok(!D.vendaPorId(mesa9.id) && D.produtos().find(x => x.nome === 'X-Salada').preco === 22, 'sem o aviso do tempo real, o A ainda não sabe');
+  const vendasHoje = D.resumoDashboard().cards.vendas.nHoje;
+  const chamadas1 = banco.chamadas();
+  await pag.N.sincronizar(true);
+  ok(D.vendaPorId(mesa9.id)?.status === 'FINALIZADA' && D.resumoDashboard().cards.vendas.nHoje === vendasHoje + 1, 'conferência: a venda da mesa 09 entra no Dashboard do A sem F5');
+  ok(D.produtos().find(x => x.nome === 'X-Salada').preco === 23, 'conferência: preço alterado no B chega ao A');
+  await espera(200);
+  ok(!banco.T.vendas.some(v => v.numero === null) && banco.T.vendas.filter(v => v.id === mesa9.id).length === 1, 'conferência não grava nada de volta no banco');
+  const chamadas2 = banco.chamadas(), versao2 = D.versao();
+  await pag.N.sincronizar(true);
+  ok(D.versao() === versao2, 'conferência sem novidade não redesenha a tela');
+  ok(banco.chamadas() - chamadas2 <= chamadas2 - chamadas1, `segunda conferência sem novidade: ${banco.chamadas() - chamadas2} leituras`);
+  // Alteração feita no A e ainda não gravada não é desfeita pela conferência
+  const xs = D.produtos().find(x => x.nome === 'X-Salada');
+  global.RestDados = D;
+  D.salvarProduto({...xs, preco: '24'}, xs.id);
+  await pag.N.sincronizar(true);
+  ok(D.produtos().find(x => x.nome === 'X-Salada').preco === 24, 'alteração local pendente não é desfeita');
+  await espera(1500);
+  ok(banco.T.produtos.find(x => x.nome === 'X-Salada').preco === 24, 'e depois vai para o banco');
 
   // ---- 4. Excluir produto que tem movimentos de estoque não quebra ----
   const ins = D.salvarProduto({nome: 'Guardanapo', tipo: 'INSUMO', grupoId: D.grupos()[0].id, unidade: 'PCT', estoque: '10'});

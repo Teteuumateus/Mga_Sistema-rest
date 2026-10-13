@@ -399,20 +399,96 @@
       const s = specDe[tabela];
       const {data, error} = await supa.from(tabela).select('*').in('id', [...ids]);
       if (error) { console.error(error); ids.forEach(id => (remotos[tabela] ||= new Set()).add(id)); clearTimeout(timerRemoto); timerRemoto = setTimeout(aplicarRemotos, 5000); continue; }
-      const vieram = new Map(data.map(l => [l.id, objetoDe(tabela, l, () => [])]));
-      const antes = espelho[tabela] || new Map();
-      const atual = D[s.col] ? D[s.col]() : [];
-      // Não pisa em alteração feita aqui e ainda não gravada
-      const livre = id => { const o = atual.find(x => x.id === id); return !o || antes.get(id) === assinatura(o); };
-      let lista = atual.filter(o => !ids.has(o.id) || !livre(o.id) || vieram.has(o.id));
-      lista = lista.map(o => ids.has(o.id) && livre(o.id) && vieram.has(o.id) ? vieram.get(o.id) : o);
-      vieram.forEach((o, id) => { if (!atual.some(x => x.id === id)) lista.push(o); });
-      if (s.numerado) lista.sort((a, b) => (a.numero || 0) - (b.numero || 0));
-      D.substituirCadastros({[s.col]: lista});
-      ids.forEach(id => { if (vieram.has(id)) { if (livre(id)) antes.set(id, assinatura(vieram.get(id))); } else antes.delete(id); });
+      const vieram = new Map(data.map(l => [l.id, objetoDe(tabela, l, () => [])]).filter(([, o]) => o));
+      mesclar(s, vieram, new Set([...ids].filter(id => !vieram.has(id))));
     }
   }
+  // JSON com as chaves em ordem (o banco devolve o "extra" com as chaves em outra ordem)
+  const estavel = v => Array.isArray(v) ? '[' + v.map(estavel).join(',') + ']'
+    : v && typeof v === 'object' ? '{' + Object.keys(v).filter(k => v[k] !== undefined).sort().map(k => JSON.stringify(k) + ':' + estavel(v[k])).join(',') + '}'
+    : JSON.stringify(v ?? null);
+  // Junta o que veio do banco com o que está aqui. Não pisa em alteração feita aqui e ainda não gravada,
+  // nem traz de volta o que foi excluído aqui e ainda não foi gravado. removidos: ids que sumiram do banco.
+  function mesclar(s, vieram, removidos = new Set()){
+    const antes = espelho[s.nome] ||= new Map();
+    const atual = D[s.col] ? D[s.col]() : [];
+    const porId = new Map(atual.map(o => [o.id, o]));
+    const livre = o => antes.get(o.id) === assinatura(o);
+    const trocar = new Map([...vieram].filter(([id, o]) => { const a = porId.get(id); return a ? livre(a) && estavel(a) !== estavel(o) : !antes.has(id); }));
+    const tirar = new Set([...removidos].filter(id => porId.has(id) && livre(porId.get(id))));
+    removidos.forEach(id => { if (!porId.has(id)) antes.delete(id); });
+    if (!trocar.size && !tirar.size) return false;
+    const lista = atual.filter(o => !tirar.has(o.id)).map(o => trocar.get(o.id) || o);
+    trocar.forEach((o, id) => { if (!porId.has(id)) lista.push(o); });
+    if (s.numerado) lista.sort((a, b) => (a.numero || 0) - (b.numero || 0));
+    D.substituirCadastros({[s.col]: lista});
+    trocar.forEach((o, id) => antes.set(id, assinatura(o)));
+    tirar.forEach(id => antes.delete(id));
+    return true;
+  }
+
+  // ---- Conferência com o banco: ao abrir uma tela, ao voltar para a janela e a cada minuto ----
+  // O tempo real pode perder avisos (internet oscilou, computador dormiu, aba em segundo plano): aqui o
+  // sistema relê o banco e aplica o que mudou. Movimento do dia (vendas, mesas, caixa, contas, estoque)
+  // é relido a cada tela; tabelas que só crescem, só dos últimos dias; os demais cadastros, a cada 3 min.
+  const MOVIMENTO = ['vendas', 'caixas', 'caixa_movimentos', 'contas', 'mesas', 'produtos', 'estoque_movimentos', 'conta_bancaria_movimentos'];
+  const RECENTES = {
+    vendas: d => `status.eq.ABERTA,data.gte.${d},finalizada_em.gte.${d},cancelada_em.gte.${d}`,
+    caixa_movimentos: d => `data.gte.${d}`, estoque_movimentos: d => `data.gte.${d}`, conta_bancaria_movimentos: d => `data.gte.${d}`
+  };
+  // Produtos levam a foto: primeiro compara só as colunas simples e baixa inteiro só o que mudou
+  const LEVES = {produtos: ['foto_url']};
+  async function lerLeve(s){
+    const local = D[s.col] ? D[s.col]() : [];
+    if (!local.length) return lerTudo(s.nome, q => q.order('id'));
+    const cols = Object.keys(s.colunas(local[0], {})).filter(c => !LEVES[s.nome].includes(c));
+    const leves = [];
+    for (let de = 0; ; de += 1000) {
+      const {data, error} = await supa.from(s.nome).select(cols.join(',')).order('id').range(de, de + 999);
+      if (error) throw new Error(`${s.nome}: ${error.message}`);
+      leves.push(...data);
+      if (data.length < 1000) break;
+    }
+    const porId = new Map(local.map(o => [o.id, o]));
+    const norm = l => estavel(Object.fromEntries(cols.map(c => [c, typeof l[c] === 'number' ? Number(l[c]) : l[c] ?? null])));
+    const mudaram = leves.filter(l => { const o = porId.get(l.id); return !o || norm(s.colunas(o, {})) !== norm(l); }).map(l => l.id);
+    return {ids: new Set(leves.map(l => l.id)), mudaram};
+  }
+  let ultimaSinc = 0, ultimaSincCadastros = Date.now(), sincronizando = false, ligado = false;
+  async function sincronizar(forcar){
+    if (!empresaAtual || !ligado || sincronizando || document?.visibilityState === 'hidden') return;
+    if (!forcar && Date.now() - ultimaSinc < 5000) return;
+    if (pendente || ocupado) { setTimeout(() => sincronizar(true), 1500); return; } // termina de gravar antes
+    sincronizando = true; ultimaSinc = Date.now();
+    const cadastros = Date.now() - ultimaSincCadastros > 180000;
+    if (cadastros) ultimaSincCadastros = Date.now();
+    const d = new Date(Date.now() - 2 * 86400000), desde = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    try {
+      for (const s of SPECS) {
+        if (s.soInclui || (!cadastros && !MOVIMENTO.includes(s.nome))) continue;
+        let linhas;
+        if (LEVES[s.nome]) {
+          const r = await lerLeve(s);
+          if (Array.isArray(r)) linhas = r;
+          else {
+            linhas = [];
+            for (const lote of lotes(r.mudaram, 100)) linhas.push(...await pedir(supa.from(s.nome).select('*').in('id', lote), s.nome));
+            if (pendente || ocupado) break;
+            const sumiram = new Set((D[s.col] ? D[s.col]() : []).filter(o => (espelho[s.nome] || new Map()).has(o.id) && !r.ids.has(o.id)).map(o => o.id));
+            mesclar(s, new Map(linhas.map(l => [l.id, objetoDe(s.nome, l, () => [])]).filter(([, o]) => o)), sumiram);
+            continue;
+          }
+        } else linhas = await lerTudo(s.nome, q => (RECENTES[s.nome] ? q.or(RECENTES[s.nome](desde)) : q).order('id'));
+        if (pendente || ocupado) break; // começou a gravar aqui: confere na próxima
+        mesclar(s, new Map(linhas.map(l => [l.id, objetoDe(s.nome, l, () => [])]).filter(([, o]) => o)));
+      }
+      if (cadastros) { remotos.empresas = true; await aplicarRemotos(); }
+    } catch (e) { console.error('Supabase (conferência):', e); }
+    finally { sincronizando = false; }
+    conferirExclusoes();
+  }
   function ligarTempoReal(){
+    ligado = true;
     if (!supa.channel) return;
     let canal = supa.channel('mga-' + empresaAtual);
     [...SPECS.filter(s => s.nome !== 'auditoria').map(s => s.nome), 'empresas'].forEach(t => {
@@ -422,8 +498,12 @@
     canal = canal.on('postgres_changes', {event: '*', schema: 'public', table: 'usuarios'}, () => { carregarUsuarios().catch(e => console.error(e)); });
     let conectou = false;
     canal.subscribe(status => { if (status === 'SUBSCRIBED') { if (conectou) conferirExclusoes(true); conectou = true; } });
-    window.addEventListener?.('online', () => conferirExclusoes(true));
-    document.addEventListener?.('visibilitychange', () => { if (document.visibilityState === 'visible') conferirExclusoes(); });
+    window.addEventListener?.('online', () => { conferirExclusoes(true); sincronizar(true); });
+    document.addEventListener?.('visibilitychange', () => { if (document.visibilityState === 'visible') sincronizar(); });
+    // Abriu uma tela ou voltou para a janela: relê o banco (e a cada minuto, se o tempo real perder algo)
+    window.addEventListener?.('hashchange', () => sincronizar());
+    window.addEventListener?.('focus', () => sincronizar());
+    setInterval(() => sincronizar(), 60000)?.unref?.();
   }
   // O tempo real não reenvia o que perdeu (internet caiu, computador dormiu): confere quais registros
   // ainda existem no banco e tira daqui os excluídos (os alterados aqui e ainda não gravados ficam)
@@ -654,7 +734,7 @@
     return false;
   }
 
-  window.MGA_NUVEM = {ativa: false, baixarTudo, estadoDoBanco, aoMudarNoBanco, aplicarRemotos, agendar};
+  window.MGA_NUVEM = {ativa: false, baixarTudo, estadoDoBanco, aoMudarNoBanco, aplicarRemotos, agendar, sincronizar};
   // A tela só é montada depois que os dados chegam (restaurante.js espera esta promessa)
   window.MGA_PRONTO = iniciar().catch(e => {
     console.error('Supabase:', e);
