@@ -74,6 +74,7 @@
     tipo: 'VENDA', tamanhos: [], gruposAdicionais: [], ficha: []};
   // Linhas editáveis (tamanhos e ficha técnica) com chave estável para o React
   const linhaKey = () => 'k' + Math.random().toString(36).slice(2, 9);
+  const NOVA_CAT = '__nova';
   function TelaProdutos({params}){
     const grupoInicial = params.grupo;
     useDados();
@@ -92,7 +93,7 @@
       .sort((a, b) => (D.grupoPorId(a.grupoId)?.ordem || 0) - (D.grupoPorId(b.grupoId)?.ordem || 0) || a.nome.localeCompare(b.nome, 'pt-BR'));
     const nInativos = todos.filter(p => !p.ativo).length;
     const num = v => v === '' || v == null ? '' : D.valorBR(v);
-    const novo = () => setForm({...PRODUTO_VAZIO, codigo: D.proximoCodigo(), grupoId: grupo || grupos.find(g => g.ativo)?.id || ''});
+    const novo = () => setForm({...PRODUTO_VAZIO, codigo: D.proximoCodigo(), grupoId: grupo || grupos.find(g => g.ativo)?.id || NOVA_CAT, novaCategoria: ''});
     const editar = p => setForm({...PRODUTO_VAZIO, ...p, preco: num(p.preco), custo: p.custo ? num(p.custo) : '', estoque: D.qtdBR(p.estoque), estoqueAberto: D.qtdBR(p.estoque), estoqueMinimo: p.estoqueMinimo ? D.qtdBR(p.estoqueMinimo) : '',
       tamanhos: (p.tamanhos || []).map(t => ({...t, key: t.id, preco: num(t.preco)})), gruposAdicionais: [...(p.gruposAdicionais || [])],
       ficha: (p.ficha || []).map(c => ({...c, key: linhaKey(), quantidade: D.qtdBR(c.quantidade)}))});
@@ -102,7 +103,13 @@
     const insumo = form?.tipo === 'INSUMO';
     const custoFicha = form ? form.ficha.reduce((s, c) => s + (D.lerValor(c.quantidade) || 0) * D.custoProduto(D.produtoPorId(c.produtoId)), 0) : 0;
     const usaveis = form ? D.produtos().filter(x => x.id !== form.id && (x.tipo === 'INSUMO' || x.controlaEstoque)).sort((a, b) => (a.tipo === 'INSUMO' ? 0 : 1) - (b.tipo === 'INSUMO' ? 0 : 1) || a.nome.localeCompare(b.nome, 'pt-BR')) : [];
-    const salvar = () => { if (tentar(() => D.salvarProduto(form, form.id), p => form.id ? `Produto "${p.nome}" atualizado.` : `Produto "${p.nome}" cadastrado (cód. ${p.codigo}).`)) setForm(null); };
+    // Categoria nova digitada no próprio formulário: é criada junto com o produto (e desfeita se o produto não salvar)
+    const gravar = () => {
+      if (form.grupoId !== NOVA_CAT) return D.salvarProduto(form, form.id);
+      const g = D.salvarGrupo({nome: form.novaCategoria || '', ativo: true, cozinha: true});
+      try { return D.salvarProduto({...form, grupoId: g.id}, form.id); } catch (e) { D.excluirGrupo(g.id); throw e; }
+    };
+    const salvar = () => { if (tentar(gravar, p => form.id ? `Produto "${p.nome}" atualizado.` : `Produto "${p.nome}" cadastrado (cód. ${p.codigo}).`)) setForm(null); };
     const excluir = p => { if (confirmar(`Excluir o produto "${p.nome}"?`)) tentar(() => D.excluirProduto(p.id), `Produto "${p.nome}" excluído.`); };
     const alternar = p => tentar(() => D.salvarProduto({...p, ativo: !p.ativo}, p.id), `"${p.nome}" ${p.ativo ? 'desativado' : 'ativado'}.`);
     const escolherFoto = e => {
@@ -115,7 +122,7 @@
     return html`
       <${Cabecalho} titulo="Produtos" sub=${`${plural(todos.length - nInativos, 'produto ativo', 'produtos ativos')}${nInativos ? ` · ${nInativos} inativo${nInativos === 1 ? '' : 's'}` : ''} em ${plural(grupos.length, 'categoria', 'categorias')}`}>
         ${window.RestUI.ImportarProdutos && html`<${window.RestUI.ImportarProdutos} mostrar=${mostrar} />`}
-        <button type="button" className="btn" onClick=${novo} disabled=${!grupos.length} title=${grupos.length ? '' : 'Cadastre uma categoria primeiro'}>+ Novo produto</button>
+        <button type="button" className="btn" onClick=${novo}>+ Novo produto</button>
       <//>
       ${aviso}
       ${form && html`
@@ -136,8 +143,10 @@
             <select value=${form.grupoId} onChange=${e => setForm({...form, grupoId: e.target.value})}>
               <option value="" disabled>Escolha...</option>
               ${grupos.map(g => html`<option key=${g.id} value=${g.id}>${g.nome}${g.ativo ? '' : ' (inativa)'}</option>`)}
+              <option value=${NOVA_CAT}>+ Nova categoria...</option>
             </select>
           <//>
+          ${form.grupoId === NOVA_CAT && html`<${Campo} rotulo="Nome da nova categoria"><input type="text" value=${form.novaCategoria || ''} maxLength="60" placeholder="Ex.: Pizzas" onInput=${e => setForm({...form, novaCategoria: e.target.value})} /><//>`}
           <${Campo} rotulo="Tipo">
             <select value=${form.tipo} onChange=${e => setForm({...form, tipo: e.target.value, controlaEstoque: e.target.value === 'INSUMO' || form.controlaEstoque})}>
               <option value="VENDA">Produto de venda (aparece no cardápio)</option>

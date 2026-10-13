@@ -61,7 +61,7 @@ function responder(nome, corpo){
     }
   };
   const ev = async expr => { const r = await cmd('Runtime.evaluate', {expression: expr, awaitPromise: true, returnByValue: true}); if (r.result.exceptionDetails) throw new Error(JSON.stringify(r.result.exceptionDetails).slice(0, 600)); return r.result.result.value; };
-  const clicar = async (sel, texto) => { const r = await ev(`(() => { const b = [...document.querySelectorAll(${JSON.stringify(sel)})].find(b => ${texto ? `b.innerText.includes(${JSON.stringify(texto)})` : 'true'}); if (!b) return false; b.click(); return true; })()`); await sleep(250); return r; };
+  const clicar = async (sel, texto) => { const r = await ev(`(() => { const b = [...document.querySelectorAll(${JSON.stringify(sel)})].find(b => ${texto ? `b.textContent.includes(${JSON.stringify(texto)})` : 'true'}); if (!b) return false; b.click(); return true; })()`); await sleep(250); return r; };
   const texto = sel => ev(`document.querySelector(${JSON.stringify(sel)})?.innerText || ''`);
   const foto = async nome => { if (!FOTOS) return; const r = await cmd('Page.captureScreenshot', {format: 'png'}); fs.writeFileSync(path.join(FOTOS, nome + '.png'), Buffer.from(r.result.data, 'base64')); };
   await cmd('Runtime.enable'); await cmd('Page.enable');
@@ -72,9 +72,12 @@ function responder(nome, corpo){
   await cmd('Page.navigate', {url: PAGINA + '?e=abc123'}); await sleep(2500);
   ok((await texto('.app')).includes('Em qual mesa você está?'), 'sem mesa no link: pede para escolher a mesa');
   ok(await clicar('.mesas-grade button', '05'), 'escolhe a mesa 05');
-  ok((await texto('.mesa-chip')) === 'Mesa 05', 'topo mostra "Mesa 05"');
+  ok((await texto('.ola')).includes('Mesa/Comanda 05'), 'menu mostra "Mesa/Comanda 05"');
   ok((await texto('.app')).includes('Cozinha aberta até 23h'), 'recado do restaurante aparece');
-  ok((await ev(`[...document.querySelectorAll('.chips button')].map(b => b.innerText).join('|')`)) === 'Lanches|Bebidas', 'categorias na ordem');
+  ok((await ev(`[...document.querySelectorAll('.lat-item[data-acao=ir-cat]')].map(b => b.innerText).join('|')`)) === 'Todas as Categorias|Lanches|Bebidas', 'categorias na ordem');
+  await clicar('[data-acao=ir-cat]', 'Bebidas');
+  ok((await texto('.topo h1')) === 'Bebidas' && !(await texto('.conteudo')).includes('X-Burger'), 'categoria escolhida: só os produtos dela');
+  await clicar('[data-acao=ir-cat]', 'Todas');
   await foto('cliente-1-cardapio');
 
   // 2. Produto com etapa obrigatória e extras
@@ -116,7 +119,7 @@ function responder(nome, corpo){
   await clicar('[data-acao=ver-pedidos]'); await sleep(800);
   ok((await texto('.app')).includes('Em preparação') && (await texto('.app')).includes('Pedido #1025'), '"Meus pedidos" mostra o andamento');
   await foto('cliente-5-meus-pedidos');
-  ok(!(await ev(`!!document.querySelector('.barra')`)), 'carrinho esvaziou depois de enviar');
+  ok(!(await ev(`!!document.querySelector('[data-acao=abrir-carrinho]')`)), 'carrinho esvaziou depois de enviar');
 
   // 5. Chamar garçom e pedir a conta
   await clicar('[data-acao=chamar][data-tipo=GARCOM]');
@@ -133,7 +136,7 @@ function responder(nome, corpo){
   // 6. Mesa pelo link (QR Code) e cardápio fechado para pedidos
   aberto = false;
   await cmd('Page.navigate', {url: PAGINA + '?e=abc123&m=5'}); await sleep(2000);
-  ok((await texto('.mesa-chip')) === 'Mesa 05', 'link da mesa (QR Code): já entra na mesa 05');
+  ok((await texto('.ola')).includes('Mesa/Comanda 05'), 'link da mesa (QR Code): já entra na mesa 05');
   aberto = true;
   await cmd('Page.navigate', {url: PAGINA + '?e=abc123&m=m5&k=chave-secreta'}); await sleep(2000);
   await clicar('[data-acao=chamar][data-tipo=GARCOM]'); await clicar('[data-acao=confirmar-chamado]'); await sleep(500);
