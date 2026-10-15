@@ -4,12 +4,13 @@
 -- Como usar: Supabase › SQL Editor › New query › cole este arquivo inteiro › Run.
 -- Só para um projeto NOVO (vazio): cria tudo de uma vez. O banco atual já tem tudo isto.
 -- Cria as tabelas, as ligações entre elas e a separação por empresa: cada restaurante só
--- enxerga e grava os próprios dados (RLS). Inclui as etapas aplicadas depois (2 a 7):
+-- enxerga e grava os próprios dados (RLS). Inclui as etapas aplicadas depois (2 a 10):
 --   2. gravação de tudo e tempo real        5. master entrando numa empresa (suporte)
 --   3. usuários lidos pelo sistema          6. segurança (empresa, auditoria, funções)
 --   4. usuário master e criação de empresa  7. trava entre empresas nas ligações
 --   8. cardápio digital (pedidos pela mesa, chamar garçom e pedir a conta)
 --   9. cardápio mais seguro (chave da mesa no QR Code) e registro excluído não volta
+--  10. permissões do servidor (Edge Functions) em todas as tabelas
 --
 -- Login: usa o Supabase Auth (auth.users). Empresas e administradores são criados pelo
 -- painel master (Edge Function "master"); funcionários, por Cadastros › Usuários
@@ -1354,3 +1355,14 @@ begin
     execute format('create trigger barrar_excluido before insert on public.%I for each row execute function public.barrar_excluido()', t);
   end loop;
 end $$;
+
+-- =====================================================================
+-- Etapa 10: o servidor (Edge Functions, papel service_role) lê e grava em todas as tabelas
+-- =====================================================================
+grant usage on schema public to service_role;
+grant select, insert, update, delete on all tables in schema public to service_role;
+grant usage, select, update on all sequences in schema public to service_role;
+grant execute on all functions in schema public to service_role;
+alter default privileges in schema public grant select, insert, update, delete on tables to service_role;
+alter default privileges in schema public grant usage, select, update on sequences to service_role;
+alter default privileges in schema public grant execute on functions to service_role;

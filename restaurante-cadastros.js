@@ -5,22 +5,27 @@
   'use strict';
   if (!window.RestUI) return;
   const {useState, useEffect} = React;
-  const {html, D, useDados, useAviso, Cabecalho, Busca, Campo, StatusAtivo, Acoes, FormCard, Tabela, confirmar, plural} = window.RestUI;
+  const {html, D, useDados, useAviso, Cabecalho, Busca, Campo, StatusAtivo, Acoes, FormCard, useExcluir, useCep, Tabela, plural} = window.RestUI;
 
   // ---- Categorias (grupos de produto) ----
   function TelaGrupos({ir}){
     useDados();
     const {el: aviso, tentar} = useAviso();
+    const {pedir, el: janela} = useExcluir();
     const [busca, setBusca] = useState('');
     const [form, setForm] = useState(null); // {id, nome, ativo}
     const lista = D.grupos().filter(g => !busca || D.norm(g.nome).includes(D.norm(busca)));
     const salvar = () => { if (tentar(() => D.salvarGrupo(form, form.id), form.id ? 'Categoria atualizada.' : `Categoria "${form.nome.trim()}" criada.`)) setForm(null); };
-    const excluir = g => { if (confirmar(`Excluir a categoria "${g.nome}"?`)) tentar(() => D.excluirGrupo(g.id), `Categoria "${g.nome}" excluída.`); };
+    const excluir = g => pedir({titulo: 'Excluir categoria', nome: g.nome, icone: '🗂️', detalhe: g.cozinha !== false ? 'Vai para a cozinha' : 'Não vai para a cozinha',
+      aviso: 'A categoria sai do PDV e do cadastro.', rotulo: 'Excluir categoria',
+      desativar: g.ativo ? () => tentar(() => D.salvarGrupo({...g, ativo: false}, g.id), `Categoria "${g.nome}" desativada.`) : null,
+      excluir: () => tentar(() => D.excluirGrupo(g.id), `Categoria "${g.nome}" excluída.`)});
     return html`
       <${Cabecalho} titulo="Categorias" sub=${`${plural(D.grupos().length, 'categoria', 'categorias')} · aparecem como botões no PDV`}>
         <button type="button" className="btn" onClick=${() => setForm({id: null, nome: '', ativo: true, cozinha: true})}>+ Nova categoria</button>
       <//>
       ${aviso}
+      ${janela}
       ${form && html`
         <${FormCard} titulo=${form.id ? 'Editar categoria' : 'Nova categoria'} onSalvar=${salvar} onCancelar=${() => setForm(null)}>
           <${Campo} rotulo="Nome da categoria"><input type="text" value=${form.nome} maxLength="60" placeholder="Ex.: Pizzas" onInput=${e => setForm({...form, nome: e.target.value})} /><//>
@@ -37,7 +42,7 @@
               ${plural(prods.length, 'produto', 'produtos')}${prods.length !== ativos ? ` (${ativos} ativos)` : ''} →</button></td>
             <td>${g.cozinha !== false ? '👨‍🍳 Sim' : html`<span className="rest-cod">Não</span>`}</td>
             <td>${g.ativo ? html`<span className="badge b-ok">Ativa</span>` : html`<span className="badge b-wait">Inativa</span>`}</td>
-            <td><${Acoes} nome=${g.nome} onEditar=${() => setForm({id: g.id, nome: g.nome, ativo: g.ativo, cozinha: g.cozinha !== false})} onExcluir=${() => excluir(g)} /></td>
+            <td><${Acoes} nome=${g.nome} onEditar=${() => setForm({id: g.id, nome: g.nome, ativo: g.ativo, cozinha: g.cozinha !== false})} onExcluir=${() => excluir(g)} semExcluir=${D.motivoSemExcluir('grupo', g.id)} /></td>
           </tr>`;
         })}
       <//>`;
@@ -79,6 +84,7 @@
     const grupoInicial = params.grupo;
     useDados();
     const {el: aviso, tentar, mostrar} = useAviso();
+    const {pedir, el: janela} = useExcluir();
     const [busca, setBusca] = useState('');
     const [grupo, setGrupo] = useState(grupoInicial || '');
     const [inativos, setInativos] = useState(false);
@@ -92,7 +98,7 @@
       .filter(p => !busca || D.norm(p.nome + ' ' + p.codigo + ' ' + (p.descricao || '')).includes(D.norm(busca)))
       .sort((a, b) => (D.grupoPorId(a.grupoId)?.ordem || 0) - (D.grupoPorId(b.grupoId)?.ordem || 0) || a.nome.localeCompare(b.nome, 'pt-BR'));
     const nInativos = todos.filter(p => !p.ativo).length;
-    const num = v => v === '' || v == null ? '' : D.valorBR(v);
+    const num =v => v === '' || v == null ? '' : D.valorBR(v);
     const novo = () => setForm({...PRODUTO_VAZIO, codigo: D.proximoCodigo(), grupoId: grupo || grupos.find(g => g.ativo)?.id || NOVA_CAT, novaCategoria: ''});
     const editar = p => setForm({...PRODUTO_VAZIO, ...p, preco: num(p.preco), custo: p.custo ? num(p.custo) : '', estoque: D.qtdBR(p.estoque), estoqueAberto: D.qtdBR(p.estoque), estoqueMinimo: p.estoqueMinimo ? D.qtdBR(p.estoqueMinimo) : '',
       tamanhos: (p.tamanhos || []).map(t => ({...t, key: t.id, preco: num(t.preco)})), gruposAdicionais: [...(p.gruposAdicionais || [])],
@@ -110,7 +116,11 @@
       try { return D.salvarProduto({...form, grupoId: g.id}, form.id); } catch (e) { D.excluirGrupo(g.id); throw e; }
     };
     const salvar = () => { if (tentar(gravar, p => form.id ? `Produto "${p.nome}" atualizado.` : `Produto "${p.nome}" cadastrado (cód. ${p.codigo}).`)) setForm(null); };
-    const excluir = p => { if (confirmar(`Excluir o produto "${p.nome}"?`)) tentar(() => D.excluirProduto(p.id), `Produto "${p.nome}" excluído.`); };
+    const excluir = p => pedir({titulo: 'Excluir produto', nome: p.nome, foto: p.foto, icone: '🍽️', rotulo: 'Excluir produto',
+      detalhe: `Cód. ${p.codigo} · ${D.grupoPorId(p.grupoId)?.nome || 'Sem categoria'}${p.tipo === 'INSUMO' ? ' · insumo' : ' · ' + D.moedaBR(p.preco)}`,
+      aviso: 'O produto sai do cadastro, do PDV e do cardápio digital.',
+      desativar: p.ativo ? () => alternar(p) : null,
+      excluir: () => tentar(() => D.excluirProduto(p.id), `Produto "${p.nome}" excluído.`)});
     const alternar = p => tentar(() => D.salvarProduto({...p, ativo: !p.ativo}, p.id), `"${p.nome}" ${p.ativo ? 'desativado' : 'ativado'}.`);
     const escolherFoto = e => {
       const f = e.target.files[0]; e.target.value = '';
@@ -125,6 +135,7 @@
         <button type="button" className="btn" onClick=${novo}>+ Novo produto</button>
       <//>
       ${aviso}
+      ${janela}
       ${form && html`
         <${FormCard} titulo=${form.id ? `Editar produto — ${form.nome}` : 'Novo produto'} onSalvar=${salvar} onCancelar=${() => setForm(null)}>
           <div className="rest-foto-campo rest-largo">
@@ -232,7 +243,8 @@
               ? html`<span className=${D.estoqueBaixo(p) ? 'rest-est-alerta' : ''}>${D.qtdBR(p.estoque)}</span> <small className="rest-cod">${p.unidade}</small>`
               : html`<span className="rest-cod" title="Não controla estoque">—</span>`}</td>
             <td><button type="button" className="rest-status-btn" onClick=${() => alternar(p)} title=${p.ativo ? 'Clique para desativar' : 'Clique para ativar'}><${StatusAtivo} ativo=${p.ativo} /></button></td>
-            <td><${Acoes} nome=${p.nome} onEditar=${() => editar(p)} onExcluir=${() => excluir(p)} /></td>
+            <td><${Acoes} nome=${p.nome} onEditar=${() => editar(p)} onExcluir=${() => excluir(p)}
+              semExcluir=${D.motivoSemExcluir('produto', p.id)} /></td>
           </tr>`;
         })}
       <//>`;
@@ -243,6 +255,7 @@
   function TelaClientes(){
     useDados();
     const {el: aviso, tentar} = useAviso();
+    const {pedir, el: janela} = useExcluir();
     const [busca, setBusca] = useState('');
     const [form, setForm] = useState(null);
     const todos = D.clientes();
@@ -250,26 +263,34 @@
     const lista = todos
       .filter(c => !busca || D.norm([c.nome, c.bairro, c.endereco, c.cidade].join(' ')).includes(b) || (bDig && String(c.telefone || '').replace(/\D/g, '').includes(bDig)))
       .slice().sort((x, y) => x.nome.localeCompare(y.nome, 'pt-BR'));
-    const campo = (k, rotulo, extra = {}) => html`<${Campo} rotulo=${rotulo} largo=${extra.largo}>
+    // CEP com 8 números preenche rua, bairro e cidade
+    const cep = useCep(setForm);
+    useEffect(() => cep.limpar(), [form?.id, !form]); // formulário novo começa sem o aviso do anterior
+    const campo = (k, rotulo, extra = {}) => html`<${Campo} rotulo=${rotulo} largo=${extra.largo} depois=${extra.depois}>
       <input type="text" value=${form[k]} maxLength=${extra.max || 120} placeholder=${extra.ph || ''} inputMode=${extra.modo || 'text'}
-        onInput=${e => setForm({...form, [k]: extra.mascara ? extra.mascara(e.target.value) : e.target.value})} />
+        onInput=${e => { const v = extra.mascara ? extra.mascara(e.target.value) : e.target.value; setForm({...form, [k]: v}); if (k === 'cep') cep.mudar(v); }} />
     <//>`;
     const salvar = () => { if (tentar(() => D.salvarCliente(form, form.id), c => form.id ? `Cliente "${c.nome}" atualizado.` : `Cliente "${c.nome}" cadastrado.`)) setForm(null); };
-    const excluir = c => { if (confirmar(`Excluir o cliente "${c.nome}"?`)) tentar(() => D.excluirCliente(c.id), `Cliente "${c.nome}" excluído.`); };
+    const excluir = c => pedir({titulo: 'Excluir cliente', nome: c.nome, icone: '👤', rotulo: 'Excluir cliente',
+      detalhe: [c.telefone, c.bairro].filter(Boolean).join(' · '),
+      aviso: 'O cliente sai do cadastro; as vendas antigas continuam com o nome dele.',
+      excluir: () => tentar(() => D.excluirCliente(c.id), `Cliente "${c.nome}" excluído.`)});
     const comEndereco = todos.filter(c => c.endereco && c.bairro).length;
     return html`
       <${Cabecalho} titulo="Clientes" sub=${`${plural(todos.length, 'cliente', 'clientes')} · ${comEndereco} com endereço de entrega completo`}>
         <button type="button" className="btn" onClick=${() => setForm({...CLIENTE_VAZIO})}>+ Novo cliente</button>
       <//>
       ${aviso}
+      ${janela}
       ${form && html`
         <${FormCard} titulo=${form.id ? `Editar cliente — ${form.nome}` : 'Novo cliente'} onSalvar=${salvar} onCancelar=${() => setForm(null)}>
           ${campo('nome', 'Nome', {max: 80, ph: 'Nome completo'})}
           ${campo('telefone', 'Telefone', {ph: '(11) 98765-4321', modo: 'tel', mascara: D.mascaraTelefone})}
-          ${campo('endereco', 'Endereço', {largo: true, ph: 'Rua, número'})}
-          ${campo('complemento', 'Complemento', {ph: 'Apto, bloco, referência'})}
+          ${campo('cep', 'CEP', {ph: '00000-000', modo: 'numeric', mascara: D.mascaraCep, depois: cep.el})}
+          ${campo('endereco', 'Endereço', {largo: true, ph: 'Rua, avenida...'})}
+          ${campo('numero', 'Número', {max: 10})}
+          ${campo('complemento', 'Complemento', {ph: 'Apto, bloco'})}
           ${campo('bairro', 'Bairro', {max: 60})}
-          ${campo('cep', 'CEP', {ph: '00000-000', modo: 'numeric', mascara: D.mascaraCep})}
           ${campo('cidade', 'Cidade', {max: 60})}
           ${campo('referencia', 'Referência', {largo: true, ph: 'Ponto de referência para o entregador'})}
         <//>`}
@@ -281,7 +302,7 @@
           <td>${c.endereco ? c.endereco + (c.numero ? ', ' + c.numero : '') : '—'}${c.complemento ? html`<small className="history-date">${c.complemento}</small>` : null}</td>
           <td>${c.bairro || '—'}</td>
           <td>${c.cidade || '—'}${c.cep ? html`<small className="history-date">${c.cep}</small>` : null}</td>
-          <td><${Acoes} nome=${c.nome} onEditar=${() => setForm({...CLIENTE_VAZIO, ...Object.fromEntries(Object.keys(CLIENTE_VAZIO).map(k => [k, c[k] || ''])), id: c.id})} onExcluir=${() => excluir(c)} /></td>
+          <td><${Acoes} nome=${c.nome} onEditar=${() => setForm({...CLIENTE_VAZIO, ...Object.fromEntries(Object.keys(CLIENTE_VAZIO).map(k => [k, c[k] || ''])), id: c.id})} onExcluir=${() => excluir(c)} semExcluir=${D.motivoSemExcluir('cliente', c.id)} /></td>
         </tr>`)}
       <//>`;
   }
@@ -290,18 +311,23 @@
   function TelaEntregadores(){
     useDados();
     const {el: aviso, tentar} = useAviso();
+    const {pedir, el: janela} = useExcluir();
     const [busca, setBusca] = useState('');
     const [form, setForm] = useState(null);
     const todos = D.entregadores();
     const lista = todos.filter(e => !busca || D.norm(e.nome + ' ' + e.placa).includes(D.norm(busca))).slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
     const salvar = () => { if (tentar(() => D.salvarEntregador(form, form.id), e => form.id ? `Entregador "${e.nome}" atualizado.` : `Entregador "${e.nome}" cadastrado.`)) setForm(null); };
-    const excluir = e => { if (confirmar(`Excluir o entregador "${e.nome}"?`)) tentar(() => D.excluirEntregador(e.id), `Entregador "${e.nome}" excluído.`); };
+    const excluir = e => pedir({titulo: 'Excluir entregador', nome: e.nome, icone: '🛵', rotulo: 'Excluir entregador',
+      detalhe: [e.telefone, e.veiculo, e.placa].filter(Boolean).join(' · '), aviso: 'O entregador sai do cadastro e da escolha no delivery.',
+      desativar: e.ativo ? () => tentar(() => D.salvarEntregador({...e, ativo: false}, e.id), `Entregador "${e.nome}" desativado.`) : null,
+      excluir: () => tentar(() => D.excluirEntregador(e.id), `Entregador "${e.nome}" excluído.`)});
     const ativos = todos.filter(e => e.ativo).length;
     return html`
       <${Cabecalho} titulo="Entregadores" sub=${todos.length ? `${plural(ativos, 'entregador ativo', 'entregadores ativos')} de ${todos.length}` : 'Cadastre quem faz as entregas do delivery'}>
         <button type="button" className="btn" onClick=${() => setForm({id: null, nome: '', telefone: '', veiculo: D.VEICULOS[0], placa: '', ativo: true})}>+ Novo entregador</button>
       <//>
       ${aviso}
+      ${janela}
       ${form && html`
         <${FormCard} titulo=${form.id ? `Editar entregador — ${form.nome}` : 'Novo entregador'} onSalvar=${salvar} onCancelar=${() => setForm(null)}>
           <${Campo} rotulo="Nome"><input type="text" value=${form.nome} maxLength="80" onInput=${e => setForm({...form, nome: e.target.value})} /><//>
@@ -322,7 +348,7 @@
           <td className="nowrap">${e.cpf || '—'}</td>
           <td>${e.veiculo}${e.placa ? html`<small className="history-date">${e.placa}</small>` : null}</td>
           <td><${StatusAtivo} ativo=${e.ativo} /></td>
-          <td><${Acoes} nome=${e.nome} onEditar=${() => setForm({...e})} onExcluir=${() => excluir(e)} /></td>
+          <td><${Acoes} nome=${e.nome} onEditar=${() => setForm({...e})} onExcluir=${() => excluir(e)} semExcluir=${D.motivoSemExcluir('entregador', e.id)} /></td>
         </tr>`)}
       <//>`;
   }
@@ -332,6 +358,7 @@
   function TelaUsuarios(){
     useDados();
     const {el: aviso, tentar, mostrar} = useAviso();
+    const {pedir, el: janela} = useExcluir();
     const [form, setForm] = useState(null);
     const [salvando, setSalvando] = useState(false);
     const eu = D.sessaoAtual();
@@ -348,17 +375,19 @@
       catch (e) { mostrar(e.regra ? e.message : 'Erro inesperado: ' + e.message, true); }
       finally { setSalvando(false); }
     };
-    const excluir = async u => {
-      if (!confirmar(`Excluir o usuário "${u.nome}"?${nuvem ? ' O login dele deixa de funcionar.' : ''}`)) return;
-      try { await D.excluirUsuario(u.id); mostrar(`Usuário "${u.nome}" excluído.`); }
-      catch (e) { mostrar(e.regra ? e.message : 'Erro inesperado: ' + e.message, true); }
-    };
+    const excluir = u => pedir({titulo: 'Excluir usuário', nome: u.nome, icone: '🔑', rotulo: 'Excluir usuário',
+      detalhe: `${u.login} · ${D.PERFIS[u.perfil].nome}`, aviso: `O usuário sai do sistema${nuvem ? ' e o login dele deixa de funcionar' : ''}.`,
+      excluir: async () => {
+        try { await D.excluirUsuario(u.id); mostrar(`Usuário "${u.nome}" excluído.`); }
+        catch (e) { mostrar(e.regra ? e.message : 'Erro inesperado: ' + e.message, true); }
+      }});
     const admin = form?.perfil === 'ADMIN';
     return html`
       <${Cabecalho} titulo="Usuários" sub="Quem entra no sistema e quais módulos cada um acessa">
         <button type="button" className="btn" onClick=${() => setForm({...USUARIO_VAZIO})}>+ Novo usuário</button>
       <//>
       ${aviso}
+      ${janela}
       ${form && html`
         <${FormCard} titulo=${form.id ? `Editar usuário — ${form.nome}` : 'Novo usuário'} onSalvar=${salvar} onCancelar=${() => setForm(null)} rotuloSalvar=${salvando ? 'Salvando...' : 'Salvar'}>
           <${Campo} rotulo="Nome"><input type="text" value=${form.nome} maxLength="60" placeholder="Ex.: João da Silva" onInput=${e => setForm({...form, nome: e.target.value})} /><//>
@@ -382,7 +411,7 @@
           <td>${D.PERFIS[u.perfil].nome}</td>
           <td className="rest-modulos-cel">${D.ehAdmin(u) ? 'Todos' : D.modulosDo(u).map(m => D.MODULOS[m]).join(', ') || '—'}</td>
           <td>${u.ativo ? html`<span className="badge b-ok">Ativo</span>` : html`<span className="badge b-wait">Inativo</span>`}</td>
-          <td><${Acoes} nome=${u.nome} onEditar=${() => editar(u)} onExcluir=${u.id === eu?.id ? null : () => excluir(u)} /></td>
+          <td><${Acoes} nome=${u.nome} onEditar=${() => editar(u)} onExcluir=${() => excluir(u)} semExcluir=${D.motivoSemExcluir('usuario', u.id)} /></td>
         </tr>`)}
       <//>`;
   }
@@ -391,10 +420,14 @@
   function TelaFormas(){
     useDados();
     const {el: aviso, tentar} = useAviso();
+    const {pedir, el: janela} = useExcluir();
     const [form, setForm] = useState(null);
     const lista = D.formas().slice().sort((a, b) => a.ordem - b.ordem);
     const salvar = () => { if (tentar(() => D.salvarForma(form, form.id), f => `Forma "${f.nome}" ${form.id ? 'atualizada' : 'cadastrada'}.`)) setForm(null); };
-    const excluir = f => { if (confirmar(`Excluir a forma de pagamento "${f.nome}"?`)) tentar(() => D.excluirForma(f.id), `Forma "${f.nome}" excluída.`); };
+    const excluir = f => pedir({titulo: 'Excluir forma de pagamento', nome: f.nome, icone: '💳', rotulo: 'Excluir forma',
+      detalhe: D.TIPOS_FORMA[f.tipo], aviso: 'A forma sai da finalização das vendas.',
+      desativar: f.ativo ? () => alternar(f) : null,
+      excluir: () => tentar(() => D.excluirForma(f.id), `Forma "${f.nome}" excluída.`)});
     const alternar = f => tentar(() => D.salvarForma({...f, ativo: !f.ativo}, f.id), `"${f.nome}" ${f.ativo ? 'desativada' : 'ativada'}.`);
     const AJUDA = {DINHEIRO: 'Entra na gaveta e permite troco', PIX: 'Não entra na gaveta', DEBITO: 'Não entra na gaveta', CREDITO: 'Não entra na gaveta',
       PRAZO: 'Vira conta a receber do cliente (exige cliente na venda)', OUTROS: 'Vale-refeição, cheque, cortesia...'};
@@ -403,6 +436,7 @@
         <button type="button" className="btn" onClick=${() => setForm({id: null, nome: '', tipo: 'OUTROS', ativo: true})}>+ Nova forma</button>
       <//>
       ${aviso}
+      ${janela}
       ${form && html`
         <${FormCard} titulo=${form.id ? 'Editar forma de pagamento' : 'Nova forma de pagamento'} onSalvar=${salvar} onCancelar=${() => setForm(null)}>
           <${Campo} rotulo="Nome"><input type="text" value=${form.nome} maxLength="40" placeholder="Ex.: Vale-refeição" onInput=${e => setForm({...form, nome: e.target.value})} /><//>
@@ -418,7 +452,7 @@
           <td>${D.TIPOS_FORMA[f.tipo]}</td>
           <td className="rest-cod">${AJUDA[f.tipo]}</td>
           <td><button type="button" className="rest-status-btn" onClick=${() => alternar(f)} title=${f.ativo ? 'Clique para desativar' : 'Clique para ativar'}>${f.ativo ? html`<span className="badge b-ok">Ativa</span>` : html`<span className="badge b-wait">Inativa</span>`}</button></td>
-          <td><${Acoes} nome=${f.nome} onEditar=${() => setForm({...f})} onExcluir=${() => excluir(f)} /></td>
+          <td><${Acoes} nome=${f.nome} onEditar=${() => setForm({...f})} onExcluir=${() => excluir(f)} semExcluir=${D.motivoSemExcluir('forma', f.id)} /></td>
         </tr>`)}
       <//>`;
   }
@@ -427,10 +461,14 @@
   function TelaCadMesas({ir}){
     useDados();
     const {el: aviso, tentar} = useAviso();
+    const {pedir, el: janela} = useExcluir();
     const [form, setForm] = useState(null);
     const lista = D.mesas();
     const salvar = () => { if (tentar(() => D.salvarMesa(form, form.id), m => `Mesa ${m.numero} ${form.id ? 'atualizada' : 'cadastrada'}.`)) setForm(null); };
-    const excluir = m => { if (confirmar(`Excluir a mesa ${m.numero}?`)) tentar(() => D.excluirMesa(m.id), `Mesa ${m.numero} excluída.`); };
+    const excluir = m => pedir({titulo: 'Excluir mesa', nome: `Mesa ${m.numero}`, icone: '🪑', rotulo: 'Excluir mesa',
+      detalhe: [m.descricao, m.lugares ? `${m.lugares} lugares` : ''].filter(Boolean).join(' · '), aviso: 'A mesa sai do mapa e do cardápio digital (o QR Code dela para de funcionar).',
+      desativar: m.ativo ? () => tentar(() => D.salvarMesa({...m, ativo: false}, m.id), `Mesa ${m.numero} desativada.`) : null,
+      excluir: () => tentar(() => D.excluirMesa(m.id), `Mesa ${m.numero} excluída.`)});
     // Próximo número livre, para cadastrar em sequência
     const proxima = () => { let n = 1; while (lista.some(m => m.numero === String(n).padStart(2, '0'))) n++; return String(n).padStart(2, '0'); };
     return html`
@@ -439,6 +477,7 @@
         <button type="button" className="btn" onClick=${() => setForm({id: null, numero: proxima(), descricao: '', lugares: 4, ativo: true})}>+ Nova mesa</button>
       <//>
       ${aviso}
+      ${janela}
       ${form && html`
         <${FormCard} titulo=${form.id ? `Editar mesa ${form.numero}` : 'Nova mesa'} onSalvar=${salvar} onCancelar=${() => setForm(null)}>
           <${Campo} rotulo="Número ou nome"><input type="text" value=${form.numero} maxLength="12" placeholder="Ex.: 25 ou VIP" onInput=${e => setForm({...form, numero: e.target.value})} /><//>
@@ -455,7 +494,7 @@
             <td>${m.lugares || '—'}</td>
             <td>${v ? html`<button type="button" className="rest-link" onClick=${() => ir('mesas/pedido', {id: v.id})}>Ocupada · ${D.moedaBR(D.totaisVenda(v).total)} →</button>` : 'Livre'}</td>
             <td>${m.ativo ? html`<span className="badge b-ok">Ativa</span>` : html`<span className="badge b-wait">Inativa</span>`}</td>
-            <td><${Acoes} nome=${'mesa ' + m.numero} onEditar=${() => setForm({...m})} onExcluir=${() => excluir(m)} /></td>
+            <td><${Acoes} nome=${'mesa ' + m.numero} onEditar=${() => setForm({...m})} onExcluir=${() => excluir(m)} semExcluir=${D.motivoSemExcluir('mesa', m.id)} /></td>
           </tr>`;
         })}
       <//>`;

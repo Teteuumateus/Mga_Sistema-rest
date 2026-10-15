@@ -4,20 +4,21 @@
 (function(){
   'use strict';
   if (!window.RestUI) return;
-  const {useState} = React;
-  const {html, D, useDados, useAviso, Cabecalho, Busca, Campo, CampoValor, StatusAtivo, Acoes, FormCard, Tabela, confirmar, plural} = window.RestUI;
+  const {useState, useEffect} = React;
+  const {html, D, useDados, useAviso, Cabecalho, Busca, Campo, CampoValor, StatusAtivo, Acoes, FormCard, useExcluir, useCep, Tabela, plural} = window.RestUI;
   const porNome = (a, b) => a.nome.localeCompare(b.nome, 'pt-BR');
-  // Campo de texto ligado ao formulário (com máscara opcional)
-  const texto = (form, setForm) => (k, rotulo, extra = {}) => html`<${Campo} rotulo=${rotulo} largo=${extra.largo}>
+  // Campo de texto ligado ao formulário (com máscara opcional; aoMudar recebe o valor já mascarado, depois fica abaixo do campo)
+  const texto = (form, setForm) => (k, rotulo, extra = {}) => html`<${Campo} rotulo=${rotulo} largo=${extra.largo} depois=${extra.depois}>
     <input type=${extra.tipo || 'text'} value=${form[k] ?? ''} maxLength=${extra.max || 120} placeholder=${extra.ph || ''} inputMode=${extra.modo || null}
-      onInput=${e => setForm({...form, [k]: extra.mascara ? extra.mascara(e.target.value) : e.target.value})} />
+      onInput=${e => { const v = extra.mascara ? extra.mascara(e.target.value) : e.target.value; setForm({...form, [k]: v}); extra.aoMudar?.(v); }} />
   <//>`;
 
   // ---- Fornecedores ----
-  const FORNECEDOR_VAZIO = {id: null, nome: '', documento: '', telefone: '', email: '', contato: '', endereco: '', cidade: '', obs: '', ativo: true};
+  const FORNECEDOR_VAZIO = {id: null, nome: '', documento: '', telefone: '', email: '', contato: '', cep: '', endereco: '', numero: '', bairro: '', cidade: '', obs: '', ativo: true};
   function TelaFornecedores({ir}){
     useDados();
     const {el: aviso, tentar} = useAviso();
+    const {pedir, el: janela} = useExcluir();
     const [busca, setBusca] = useState('');
     const [form, setForm] = useState(null);
     const todos = D.fornecedores();
@@ -27,13 +28,19 @@
     const compras = id => D.movEstoque().filter(m => m.fornecedorId === id).length;
     const emAberto = id => D.contas().filter(c => c.fornecedorId === id && c.status === 'ABERTA').reduce((s, c) => s + c.valor, 0);
     const salvar = () => { if (tentar(() => D.salvarFornecedor(form, form.id), f => form.id ? `Fornecedor "${f.nome}" atualizado.` : `Fornecedor "${f.nome}" cadastrado.`)) setForm(null); };
-    const excluir = f => { if (confirmar(`Excluir o fornecedor "${f.nome}"?`)) tentar(() => D.excluirFornecedor(f.id), `Fornecedor "${f.nome}" excluído.`); };
+    const excluir = f => pedir({titulo: 'Excluir fornecedor', nome: f.nome, icone: '🚚', rotulo: 'Excluir fornecedor',
+      detalhe: [f.documento, f.telefone, f.cidade].filter(Boolean).join(' · '), aviso: 'O fornecedor sai do cadastro e da escolha nas compras e contas.',
+      desativar: f.ativo ? () => tentar(() => D.salvarFornecedor({...f, ativo: false}, f.id), `Fornecedor "${f.nome}" desativado.`) : null,
+      excluir: () => tentar(() => D.excluirFornecedor(f.id), `Fornecedor "${f.nome}" excluído.`)});
     const campo = form && texto(form, setForm);
+    const cep = useCep(setForm); // CEP com 8 números preenche rua, bairro e cidade
+    useEffect(() => cep.limpar(), [form?.id, !form]);
     return html`
       <${Cabecalho} titulo="Fornecedores" sub=${todos.length ? `${plural(todos.filter(f => f.ativo).length, 'fornecedor ativo', 'fornecedores ativos')} · aparecem na entrada de estoque e nas contas a pagar` : 'Quem vende para o restaurante: distribuidoras, açougue, hortifrúti...'}>
         <button type="button" className="btn" onClick=${() => setForm({...FORNECEDOR_VAZIO})}>+ Novo fornecedor</button>
       <//>
       ${aviso}
+      ${janela}
       ${form && html`
         <${FormCard} titulo=${form.id ? `Editar fornecedor — ${form.nome}` : 'Novo fornecedor'} onSalvar=${salvar} onCancelar=${() => setForm(null)}>
           ${campo('nome', 'Nome', {max: 80, ph: 'Ex.: Distribuidora de Bebidas Sol'})}
@@ -41,8 +48,11 @@
           ${campo('telefone', 'Telefone', {modo: 'tel', ph: '(11) 3333-4444', mascara: D.mascaraTelefone})}
           ${campo('contato', 'Contato (vendedor)', {max: 60, ph: 'Ex.: Marcos'})}
           ${campo('email', 'E-mail', {tipo: 'email', max: 80})}
+          ${campo('cep', 'CEP', {modo: 'numeric', ph: '00000-000', mascara: D.mascaraCep, aoMudar: cep.mudar, depois: cep.el})}
+          ${campo('endereco', 'Endereço', {largo: true, max: 120, ph: 'Rua, avenida...'})}
+          ${campo('numero', 'Número', {max: 10})}
+          ${campo('bairro', 'Bairro', {max: 60})}
           ${campo('cidade', 'Cidade', {max: 60})}
-          ${campo('endereco', 'Endereço', {largo: true, max: 120})}
           ${campo('obs', 'Observação', {largo: true, max: 200, ph: 'Ex.: entrega às terças; pedido mínimo R$ 300'})}
           <label className="rest-check"><input type="checkbox" checked=${form.ativo} onChange=${e => setForm({...form, ativo: e.target.checked})} /> Ativo (aparece nas compras)</label>
         <//>`}
@@ -55,7 +65,7 @@
           <td>${compras(f.id) ? (D.podeAcessar('estoque') ? html`<button type="button" className="rest-link" onClick=${() => ir('estoque/entradas')}>${plural(compras(f.id), 'entrada', 'entradas')}</button>` : plural(compras(f.id), 'entrada', 'entradas')) : '—'}</td>
           <td className="nowrap">${emAberto(f.id) ? D.moedaBR(emAberto(f.id)) : '—'}</td>
           <td><${StatusAtivo} ativo=${f.ativo} /></td>
-          <td><${Acoes} nome=${f.nome} onEditar=${() => setForm({...FORNECEDOR_VAZIO, ...f})} onExcluir=${() => excluir(f)} /></td>
+          <td><${Acoes} nome=${f.nome} onEditar=${() => setForm({...FORNECEDOR_VAZIO, ...f})} onExcluir=${() => excluir(f)} semExcluir=${D.motivoSemExcluir('fornecedor', f.id)} /></td>
         </tr>`)}
       <//>`;
   }
@@ -65,6 +75,7 @@
   function TelaFuncionarios(){
     useDados();
     const {el: aviso, tentar} = useAviso();
+    const {pedir, el: janela} = useExcluir();
     const [busca, setBusca] = useState('');
     const [cargo, setCargo] = useState('');
     const [form, setForm] = useState(null);
@@ -74,7 +85,10 @@
     const ativos = todos.filter(f => f.ativo);
     const folha = ativos.reduce((s, f) => s + (f.salario || 0), 0);
     const salvar = () => { if (tentar(() => D.salvarFuncionario(form, form.id), f => form.id ? `Funcionário "${f.nome}" atualizado.` : `Funcionário "${f.nome}" cadastrado.`)) setForm(null); };
-    const excluir = f => { if (confirmar(`Excluir o funcionário "${f.nome}"? Para quem saiu da empresa, prefira desativar e manter o histórico.`)) tentar(() => D.excluirFuncionario(f.id), `Funcionário "${f.nome}" excluído.`); };
+    const excluir = f => pedir({titulo: 'Excluir funcionário', nome: f.nome, icone: '🧑‍🍳', rotulo: 'Excluir funcionário',
+      detalhe: [f.cargo, f.telefone].filter(Boolean).join(' · '), aviso: 'O funcionário sai do cadastro e da folha. Para quem saiu da empresa, prefira desativar e manter o histórico.',
+      desativar: f.ativo ? () => tentar(() => D.salvarFuncionario({...f, ativo: false}, f.id), `Funcionário "${f.nome}" desativado.`) : null,
+      excluir: () => tentar(() => D.excluirFuncionario(f.id), `Funcionário "${f.nome}" excluído.`)});
     const editar = f => setForm({...FUNCIONARIO_VAZIO, ...f, salario: f.salario ? D.valorBR(f.salario) : '', usuarioId: f.usuarioId || ''});
     const campo = form && texto(form, setForm);
     const usuarios = D.usuarios().filter(u => u.hash || u.nuvem);
@@ -84,6 +98,7 @@
         <button type="button" className="btn" onClick=${() => setForm({...FUNCIONARIO_VAZIO})}>+ Novo funcionário</button>
       <//>
       ${aviso}
+      ${janela}
       ${form && html`
         <${FormCard} titulo=${form.id ? `Editar funcionário — ${form.nome}` : 'Novo funcionário'} onSalvar=${salvar} onCancelar=${() => setForm(null)}>
           ${campo('nome', 'Nome', {max: 80})}
@@ -130,6 +145,7 @@
   function TelaRegioes(){
     useDados();
     const {el: aviso, tentar} = useAviso();
+    const {pedir, el: janela} = useExcluir();
     const [busca, setBusca] = useState('');
     const [form, setForm] = useState(null);
     const todas = D.regioes();
@@ -138,7 +154,10 @@
       .sort((x, y) => (x.cidade || '').localeCompare(y.cidade || '', 'pt-BR') || x.taxa - y.taxa || porNome(x, y));
     const cidadePadrao = D.config().empresa.cidade || todas[0]?.cidade || '';
     const salvar = () => { if (tentar(() => D.salvarRegiao(form, form.id), r => `Região "${r.nome}" ${form.id ? 'atualizada' : 'cadastrada'}: ${plural(r.bairros.length, 'bairro', 'bairros')}, taxa ${D.moedaBR(r.taxa)}.`)) setForm(null); };
-    const excluir = r => { if (confirmar(`Excluir a região "${r.nome}"?`)) tentar(() => D.excluirRegiao(r.id), `Região "${r.nome}" excluída.`); };
+    const excluir = r => pedir({titulo: 'Excluir região de entrega', nome: r.nome, icone: '📍', rotulo: 'Excluir região',
+      detalhe: `${r.cidade ? r.cidade + ' · ' : ''}${plural(r.bairros.length, 'bairro', 'bairros')} · taxa ${D.moedaBR(r.taxa)}`, aviso: 'Os bairros dela ficam sem taxa automática; os pedidos já feitos não mudam.',
+      desativar: r.ativo ? () => tentar(() => D.salvarRegiao({...r, ativo: false}, r.id), `Região "${r.nome}" desativada.`) : null,
+      excluir: () => tentar(() => D.excluirRegiao(r.id), `Região "${r.nome}" excluída.`)});
     const editar = r => setForm({...r, bairros: r.bairros.join(', '), taxa: D.valorBR(r.taxa), tempo: r.tempo ?? ''});
     const nBairros = todas.filter(r => r.ativo).reduce((s, r) => s + r.bairros.length, 0);
     return html`
@@ -146,6 +165,7 @@
         <button type="button" className="btn" onClick=${() => setForm({...REGIAO_VAZIA, cidade: cidadePadrao})}>+ Nova região</button>
       <//>
       ${aviso}
+      ${janela}
       ${form && html`
         <${FormCard} titulo=${form.id ? `Editar região — ${form.nome}` : 'Nova região de entrega'} onSalvar=${salvar} onCancelar=${() => setForm(null)}>
           <${Campo} rotulo="Nome da região"><input type="text" value=${form.nome} maxLength="40" placeholder="Ex.: Centro, Zona Norte, Até 3 km" onInput=${e => setForm({...form, nome: e.target.value})} /><//>

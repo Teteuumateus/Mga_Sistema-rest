@@ -167,6 +167,57 @@ const LOGIN = `localStorage.clear(); sessionStorage.clear(); localStorage.setIte
   ok(/0 UN[\s\S]*24 UN[\s\S]*7 UN[\s\S]*17 UN/.test(linha), 'dashboard do estoque: 0 + 24 − 7 = 17');
   ok((await ev(`[...document.querySelectorAll('.nav-grupo:not(.recolhido) .nav-itens button')].map(b => b.innerText).join('|')`)) === 'Dashboard do estoque|Entrada de estoque|Saída de estoque', 'menu Estoque com as 3 telas');
 
+  // Produtos: vendido fica com cadeado; o não vendido pede confirmação numa janela do sistema
+  await ir('cad/produtos', 1200);
+  ok(await ev(`(() => { const tr = [...document.querySelectorAll('tbody tr')].find(tr => tr.innerText.includes('Coca-Cola Lata')); return !!tr.querySelector('.rest-sem-excluir') && !tr.querySelector('.del'); })()`), 'produto vendido: cadeado no lugar do excluir');
+  const livre = await ev(`(() => { const v = RestDados.produtosVendidos(); const p = RestDados.produtos().find(p => p.ativo && !v.has(p.id) && !RestDados.produtos().some(x => (x.ficha || []).some(c => c.produtoId === p.id))); return {id: p.id, nome: p.nome}; })()`);
+  const abrirExcluir = `[...document.querySelectorAll('tbody tr')].find(tr => tr.querySelector('b')?.innerText === ${JSON.stringify(livre.nome)}).querySelector('.del').click(); 1`;
+  await ev(abrirExcluir); await sleep(300);
+  ok((await ev(`document.querySelector('.conferencia-box')?.innerText || ''`)).includes(livre.nome), 'excluir: abre a janela com o produto');
+  await ev(`[...document.querySelectorAll('.conferencia-box button')].find(b => b.innerText === 'Cancelar').click(); 1`); await sleep(300);
+  ok(!(await ev(`!!document.querySelector('.conferencia-box')`)) && (await ev(`!!RestDados.produtoPorId(${JSON.stringify(livre.id)})`)), 'cancelar: fecha a janela e mantém o produto');
+  await ev(abrirExcluir); await sleep(300);
+  await ev(`[...document.querySelectorAll('.conferencia-box button')].find(b => b.innerText === 'Excluir produto').click(); 1`); await sleep(300);
+  ok(!(await ev(`!!RestDados.produtoPorId(${JSON.stringify(livre.id)})`)) && (await ev(`document.querySelector('main').innerText`)).includes('excluído'), 'confirmar: produto excluído com aviso');
+  // Mesma janela nas outras telas: categoria com produtos tem cadeado; entregador livre pede confirmação e pode ser só desativado
+  await ir('cad/grupos', 900);
+  ok(await ev(`[...document.querySelectorAll('tbody tr')].every(tr => !/\\b0 produtos/.test(tr.innerText) ? !!tr.querySelector('.rest-sem-excluir') : true)`), 'categorias com produtos: cadeado');
+  const zé = await ev(`RestDados.salvarEntregador({nome: 'Zé Teste', telefone: '(11) 98888-7777', veiculo: 'Bicicleta', placa: ''}).id`);
+  await ir('cad/entregadores', 900);
+  await ev(`[...document.querySelectorAll('tbody tr')].find(tr => tr.innerText.includes('Zé Teste')).querySelector('.del').click(); 1`); await sleep(300);
+  ok((await ev(`document.querySelector('.conferencia-box')?.innerText || ''`)).includes('Excluir entregador'), 'entregador: abre a janela de exclusão');
+  await ev(`[...document.querySelectorAll('.conferencia-box button')].find(b => b.innerText === 'Desativar').click(); 1`); await sleep(300);
+  ok((await ev(`RestDados.entregadorPorId(${JSON.stringify(zé)})?.ativo`)) === false, 'entregador: "Desativar" guarda o cadastro inativo');
+
+  // CEP puxa o endereço (ViaCEP simulado: o teste não depende da internet)
+  await ev(`window._fetchReal = window.fetch; window._ceps = []; window.fetch = (url, ...r) => { const m = String(url).match(/viacep\\.com\\.br\\/ws\\/(\\d{8})\\/json/);
+    if (!m) return window._fetchReal(url, ...r); window._ceps.push(m[1]);
+    const corpo = m[1] === '06416000' ? {cep: '06416-000', logradouro: 'Rua Pedro Ferreira', bairro: 'Jardim Barueri', localidade: 'Barueri', uf: 'SP'} : {erro: 'true'};
+    return Promise.resolve(new Response(JSON.stringify(corpo), {status: 200, headers: {'Content-Type': 'application/json'}})); }; 1`);
+  await ir('cad/clientes', 900);
+  await ev(`[...document.querySelectorAll('button')].find(b => b.innerText === '+ Novo cliente').click(); 1`); await sleep(300);
+  const campoCli = rot => `document.getElementById([...document.querySelectorAll('.rest-form label')].find(l => l.innerText === ${JSON.stringify(rot)}).htmlFor)`;
+  const digitar = (rot, v) => ev(`(() => { const el = ${campoCli(rot)}; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, ${JSON.stringify(v)}); el.dispatchEvent(new Event('input', {bubbles: true})); return 1; })()`);
+  await digitar('CEP', '06416000'); await sleep(400);
+  const end = await ev(`({cep: ${campoCli('CEP')}.value, rua: ${campoCli('Endereço')}.value, bairro: ${campoCli('Bairro')}.value, cidade: ${campoCli('Cidade')}.value, msg: document.querySelector('.rest-form [role=status]')?.innerText || ''})`);
+  ok(end.cep === '06416-000' && end.rua === 'Rua Pedro Ferreira' && end.bairro === 'Jardim Barueri' && end.cidade === 'Barueri' && end.msg.includes('confira o número'), 'CEP preenche rua, bairro e cidade: ' + JSON.stringify(end));
+  await digitar('Número', '120'); await digitar('Nome', 'Cliente CEP'); await sleep(100);
+  await ev(`document.querySelector('.rest-form').requestSubmit(); 1`); await sleep(400);
+  const salvo = await ev(`(() => { const c = RestDados.clientes().find(c => c.nome === 'Cliente CEP'); return c && [c.endereco, c.numero, c.bairro, c.cidade, c.cep].join('|'); })()`);
+  ok(salvo === 'Rua Pedro Ferreira|120|Jardim Barueri|Barueri|06416-000', 'cliente salvo com endereço do CEP e número: ' + salvo);
+  await ev(`[...document.querySelectorAll('button')].find(b => b.innerText === '+ Novo cliente').click(); 1`); await sleep(300);
+  await digitar('CEP', '99999999'); await sleep(400);
+  ok((await ev(`document.querySelector('.rest-form [role=status]')?.innerText || ''`)).includes('não encontrado') && (await ev(`${campoCli('Endereço')}.value`)) === '', 'CEP inexistente: avisa e não mexe no endereço');
+  // Fornecedor: mesmo CEP, gravado com rua, número, bairro e cidade
+  await ir('cad/fornecedores', 900);
+  await ev(`[...document.querySelectorAll('button')].find(b => b.innerText === '+ Novo fornecedor').click(); 1`); await sleep(300);
+  await digitar('Nome', 'Fornecedor CEP'); await digitar('CEP', '06416-000'); await sleep(400);
+  await digitar('Número', '45'); await sleep(100);
+  await ev(`document.querySelector('.rest-form').requestSubmit(); 1`); await sleep(400);
+  const forn = await ev(`(() => { const f = RestDados.fornecedores().find(f => f.nome === 'Fornecedor CEP'); return f && [f.cep, f.endereco, f.numero, f.bairro, f.cidade].join('|'); })()`);
+  ok(forn === '06416-000|Rua Pedro Ferreira|45|Jardim Barueri|Barueri', 'fornecedor: CEP preenche e grava o endereço: ' + forn);
+  await ev(`window.fetch = window._fetchReal; 1`);
+
   const e2 = takeErrors().filter(x => !/Supabase|favicon/.test(x));
   ok(!e2.length, 'sem erros no console ' + (e2.length ? JSON.stringify(e2).slice(0, 400) : ''));
   console.log(falhas ? `${falhas} FALHA(S)` : 'TUDO OK');

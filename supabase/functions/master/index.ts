@@ -20,12 +20,19 @@ const emailValido = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', {headers: CORS});
   try {
-    const adm = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {auth: {persistSession: false}});
+    const url = Deno.env.get('SUPABASE_URL')!;
+    const adm = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {auth: {persistSession: false}});
     const token = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
     const {data: {user}, error: erroLogin} = await adm.auth.getUser(token);
     if (erroLogin || !user) return resposta(401, {erro: 'Sua sessão expirou. Saia e entre de novo.'});
-    const {data: master} = await adm.from('masters').select('id').eq('id', user.id).maybeSingle();
-    if (!master) return resposta(403, {erro: 'Acesso só para o usuário master.'});
+    // Quem é master é conferido com o login de quem chamou (eh_master() no banco), sem depender da chave secreta
+    const comoUsuario = createClient(url, Deno.env.get('SUPABASE_ANON_KEY')!, {auth: {persistSession: false}, global: {headers: {Authorization: `Bearer ${token}`}}});
+    const {data: ehMaster, error: erroMaster} = await comoUsuario.rpc('eh_master');
+    if (erroMaster) return resposta(500, {erro: 'Não foi possível conferir o acesso master: ' + erroMaster.message});
+    if (!ehMaster) return resposta(403, {erro: 'Acesso só para o usuário master.'});
+    // A chave secreta precisa enxergar o banco inteiro (cria logins e empresas); se não enxerga, avisa com o motivo
+    const {data: teste, error: erroChave} = await adm.from('masters').select('id').eq('id', user.id).maybeSingle();
+    if (erroChave || !teste) return resposta(500, {erro: 'A chave secreta da função "master" não está funcionando no Supabase' + (erroChave ? ': ' + erroChave.message : ' (ela não enxerga a tabela masters).')});
     const b = await req.json();
 
     // Cria o login (já confirmado, sem e-mail de confirmação)

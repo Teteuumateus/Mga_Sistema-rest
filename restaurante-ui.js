@@ -49,10 +49,11 @@
       onInput=${e => onChange(e.target.value)} aria-label=${placeholder} />`;
 
   // Rótulo ligado ao campo pelo id (o .field do sistema usa label e input lado a lado)
-  function Campo({rotulo, children, largo}){
+  // depois: algo abaixo do campo (ex.: a situação da busca do CEP)
+  function Campo({rotulo, children, largo, depois}){
     const id = React.useId();
     return html`<div className=${'field' + (largo ? ' rest-largo' : '')}>
-      <label htmlFor=${id}>${rotulo}</label>${React.cloneElement(React.Children.only(children), {id})}
+      <label htmlFor=${id}>${rotulo}</label>${React.cloneElement(React.Children.only(children), {id})}${depois || null}
     </div>`;
   }
 
@@ -65,11 +66,13 @@
     ? html`<span className="badge b-ok">Ativo</span>`
     : html`<span className="badge b-wait">Inativo</span>`;
 
-  const Acoes = ({onEditar, onExcluir, nome, children}) => html`
+  // semExcluir: motivo para não deixar excluir (troca o ✕ por um cadeado com a explicação)
+  const Acoes = ({onEditar, onExcluir, semExcluir, nome, children}) => html`
     <div className="row-actions">
       ${children}
       ${onEditar && html`<button type="button" className="edit" title=${'Editar ' + nome} aria-label=${'Editar ' + nome} onClick=${onEditar}>✎</button>`}
-      ${onExcluir && html`<button type="button" className="del" title=${'Excluir ' + nome} aria-label=${'Excluir ' + nome} onClick=${onExcluir}>✕</button>`}
+      ${semExcluir ? html`<button type="button" className="rest-sem-excluir" aria-disabled="true" title=${semExcluir} aria-label=${semExcluir}>🔒</button>`
+        : onExcluir && html`<button type="button" className="del" title=${'Excluir ' + nome} aria-label=${'Excluir ' + nome} onClick=${onExcluir}>✕</button>`}
     </div>`;
 
   // Formulário em card: Enter salva, Esc cancela
@@ -107,6 +110,72 @@
       </div>`;
   }
 
+  // ---- Endereço pelo CEP (ViaCEP, gratuito e sem cadastro) ----
+  // Resolve {endereco, bairro, cidade, uf} ou null (CEP inexistente ou sem internet). Cada CEP é buscado uma vez só.
+  const cepsBuscados = new Map();
+  function buscarCep(cep){
+    const d = String(cep || '').replace(/\D/g, '');
+    if (d.length !== 8) return Promise.resolve(null);
+    if (!cepsBuscados.has(d)) cepsBuscados.set(d, fetch(`https://viacep.com.br/ws/${d}/json/`)
+      .then(r => r.ok ? r.json() : null)
+      .then(j => j && !j.erro ? {endereco: j.logradouro || '', bairro: j.bairro || '', cidade: j.localidade || '', uf: j.uf || ''} : null)
+      .catch(() => { cepsBuscados.delete(d); return null; }));
+    return cepsBuscados.get(d);
+  }
+  // No formulário: chame mudar(cep) ao digitar; com 8 dígitos preenche rua, bairro, cidade e UF (só os campos que o formulário tem).
+  // atualizar recebe uma função (form => novo form), como o setState. el = linha de situação para pôr abaixo do CEP.
+  function useCep(atualizar){
+    const [situacao, setSituacao] = useState(null);
+    const ultimo = useRef('');
+    const mudar = cep => {
+      const d = String(cep || '').replace(/\D/g, '');
+      if (d.length !== 8) { ultimo.current = ''; setSituacao(null); return; }
+      if (d === ultimo.current) return;
+      ultimo.current = d;
+      setSituacao({tipo: 'busca', msg: 'Buscando o endereço...'});
+      buscarCep(d).then(r => {
+        if (ultimo.current !== d) return; // a pessoa já digitou outro CEP
+        if (!r) return setSituacao({tipo: 'erro', msg: navigator.onLine === false ? 'Sem internet: preencha o endereço à mão.' : 'CEP não encontrado: preencha o endereço à mão.'});
+        atualizar(f => {
+          const novo = {...f};
+          Object.entries(r).forEach(([k, v]) => { if (v && k in f) novo[k] = v; });
+          // Endereço já com essa rua (ex.: "Rua X, 120") fica como está, para não perder o número
+          if (r.endereco && D.norm(f.endereco || '').startsWith(D.norm(r.endereco))) novo.endereco = f.endereco;
+          return novo;
+        });
+        setSituacao({tipo: 'ok', msg: `✓ ${[r.endereco, r.bairro, r.cidade && `${r.cidade}/${r.uf}`].filter(Boolean).join(' · ')}${r.endereco ? ' · confira o número' : ''}`});
+      });
+    };
+    const el = situacao && html`<small className=${situacao.tipo === 'ok' ? 'rest-achado' : situacao.tipo === 'erro' ? 'rest-fora-regiao' : 'history-date'} role="status">${situacao.msg}</small>`;
+    const limpar = () => { ultimo.current = ''; setSituacao(null); };
+    return {mudar, limpar, el};
+  }
+
+  // ---- Confirmação de exclusão (janela do sistema, no lugar do confirm do navegador) ----
+  // pedir({titulo, nome, detalhe, foto, icone, aviso, excluir, desativar}): excluir e desativar já vêm com o
+  // tentar() da tela; desativar é opcional (aparece só para quem quer apenas esconder o cadastro).
+  function useExcluir(){
+    const [pedido, setPedido] = useState(null);
+    const fechar = () => setPedido(null);
+    const fazer = fn => { setPedido(null); fn(); };
+    const p = pedido;
+    const el = p && html`
+      <${Modal} titulo=${p.titulo} onFechar=${fechar}>
+        <div className="rest-prod-cel rest-excluir-prod">
+          ${p.foto ? html`<img className="rest-prod-mini" src=${p.foto} alt="" />` : html`<span className="rest-prod-mini rest-prod-sem" aria-hidden="true">${p.icone || '🗑️'}</span>`}
+          <div><b>${p.nome}</b>${p.detalhe ? html`<small className="history-date">${p.detalhe}</small>` : null}</div>
+        </div>
+        <p className="dv-ajuda">${p.aviso ? p.aviso + ' ' : ''}<b>Essa ação não pode ser desfeita.</b></p>
+        ${p.desativar && html`<p className="dv-ajuda">Se quiser só tirar de uso por um tempo, use <b>Desativar</b>: o cadastro fica guardado e dá para ativar de novo.</p>`}
+        <div className="cf-acoes">
+          <button type="button" className="btn btn-ghost" onClick=${fechar}>Cancelar</button>
+          ${p.desativar && html`<button type="button" className="btn btn-ghost" onClick=${() => fazer(p.desativar)}>Desativar</button>`}
+          <button type="button" className="btn btn-perigo" onClick=${() => fazer(p.excluir)}>${p.rotulo || 'Excluir'}</button>
+        </div>
+      <//>`;
+    return {pedir: setPedido, el};
+  }
+
   function Tabela({colunas, vazio, children, rodape}){
     const temLinhas = React.Children.count(children) > 0;
     return html`
@@ -137,5 +206,5 @@
   const confirmar = msg => window.confirm(msg);
   const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
 
-  window.RestUI = {html, D, useDados, useAviso, Cabecalho, Busca, Campo, CampoValor, StatusAtivo, Acoes, FormCard, Modal, Tabela, Segmentos, confirmar, plural, adicionaisTxt, rotuloCarrinho, montado, telas: {}};
+  window.RestUI = {html, D, useDados, useAviso, Cabecalho, Busca, Campo, CampoValor, StatusAtivo, Acoes, FormCard, Modal, useExcluir, useCep, buscarCep, Tabela, Segmentos, confirmar, plural, adicionaisTxt, rotuloCarrinho, montado, telas: {}};
 })();

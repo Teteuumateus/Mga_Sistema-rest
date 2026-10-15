@@ -6,7 +6,7 @@
   'use strict';
   if (!window.RestUI) return;
   const {useState, useEffect, useRef} = React;
-  const {html, D, useDados, useAviso, Cabecalho, Modal, Segmentos, confirmar, plural} = window.RestUI;
+  const {html, D, useDados, useAviso, Cabecalho, Modal, Segmentos, useCep, confirmar, plural} = window.RestUI;
   const r2 = v => Math.round((Number(v) || 0) * 100) / 100;
   const qtdBR = q => String(q).replace('.', ',');
   const hora = iso => new Date(iso).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'});
@@ -210,6 +210,8 @@
     const temRegioes = D.regioes().some(r => r.ativo);
     const comTaxa = x => x.taxaManual || !temRegioes ? x : {...x, taxaEntrega: D.valorBR(D.regiaoDoBairro(x.bairro, x.cidade)?.taxa ?? D.config().taxaEntrega)};
     const set = (k, val) => setF(x => k === 'taxaEntrega' ? {...x, taxaEntrega: val, taxaManual: true} : comTaxa({...x, [k]: val}));
+    // CEP com 8 números preenche rua, bairro e cidade (e a taxa da região do bairro) e leva ao número
+    const cep = useCep(fn => { setF(x => comTaxa(fn(x))); setTimeout(() => document.getElementById('de-numero')?.focus(), 0); });
     const regiao = f.modo === 'ENTREGAR' && D.regiaoDoBairro(f.bairro, f.cidade);
     const bairrosRegioes = [...new Set(D.regioes().filter(r => r.ativo).flatMap(r => r.bairros))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
     // Telefone com DDD completo: puxa o cadastro do cliente
@@ -252,7 +254,7 @@
             ${tipo === 'ENCOMENDA' && html`<div className="field"><label htmlFor="de-agenda">Data e hora da entrega</label>
               <input id="de-agenda" type="datetime-local" value=${f.agendadoPara} onChange=${e => set('agendadoPara', e.target.value)} /></div>`}
             ${f.modo === 'ENTREGAR' && html`
-              ${campo('cep', 'CEP', {ph: '00000-000', modo: 'numeric', mascara: D.mascaraCep})}
+              ${campo('cep', 'CEP', {ph: '00000-000', modo: 'numeric', mascara: v => { const m = D.mascaraCep(v); cep.mudar(m); return m; }, depois: cep.el})}
               ${campo('endereco', 'Endereço', {largo: true, ph: 'Rua, avenida...'})}
               ${campo('numero', 'Número', {max: 10})}
               ${campo('complemento', 'Complemento', {ph: 'Apto, bloco'})}

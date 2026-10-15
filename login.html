@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>MGA | Entrar</title>
+  <title>MGA Food | Entrar</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20261013b">
-  <script src="theme.js?v=20261013b"></script>
+  <link rel="stylesheet" href="style.css?v=20261014f">
+  <script src="theme.js?v=20261014f"></script>
   <style>
     .login-erro { margin: 0; padding: 10px 12px; border-radius: 10px; background: #fbe4e8; color: #b4233f; font-size: 0.9rem; font-weight: 600; }
     .login-erro[hidden], .login-form[hidden], .login-dica[hidden] { display: none; }
@@ -17,27 +17,24 @@
     .login-troca { margin: 4px 0 0; text-align: center; font-size: 0.9rem; }
     [data-theme="dark"] .login-erro { background: #3a1520; color: #fca5b5; }
     [data-theme="dark"] .login-dica { background: #13233d; color: #9ccaff; }
+    /* Logo MGA Food: no lado azul fica solto; no painel vai num selo escuro (as letras brancas somem no tema claro) */
+    .login-logo { display: block; width: min(300px, 70%); height: auto; }
+    .mini-logo { display: block; width: 150px; height: auto; padding: 14px 20px; border-radius: 18px; background: #06122a; box-shadow: 0 10px 24px rgba(6, 18, 42, 0.25); }
+    [data-theme="dark"] .mini-logo { box-shadow: none; border: 1px solid #1c2a44; }
+    /* No computador o logo fica só no lado azul; o selo aparece apenas no celular, onde o lado azul some */
+    @media (min-width: 981px) { .login-panel .mini-brand { display: none; } }
   </style>
 </head>
 <body>
   <div class="login-shell">
     <aside class="login-hero" aria-label="Informações do sistema">
       <div class="brand-block">
-        <div class="brand-mark" aria-hidden="true">
-          <span class="bar bar-1"></span>
-          <span class="bar bar-2"></span>
-          <span class="bar bar-3"></span>
-          <span class="bar bar-4"></span>
-        </div>
-        <div class="brand-copy">
-          <h1>MGA</h1>
-          <span>Restaurante</span>
-        </div>
+        <img class="login-logo" src="img/logo-mga-food.png?v=20261014g" alt="MGA Food · Sistema de gestão para alimentação">
       </div>
 
       <div class="hero-copy">
-        <h2>Atendimento rápido, do balcão ao fechamento do caixa.</h2>
-        <p>PDV, caixa, cadastros e financeiro integrados, feitos para usar durante o atendimento.</p>
+        <h2>Seja bem-vindo à MGA FoodTech</h2>
+        <p>Tecnologia que impulsiona seu negócio.</p>
       </div>
 
       <ul class="feature-list">
@@ -72,17 +69,8 @@
         <span class="tt-knob"></span>
       </button>
       <div class="login-wrap">
-        <div class="mini-brand" aria-label="MGA">
-          <div class="mini-mark" aria-hidden="true">
-            <span class="mini-bar mini-bar-1"></span>
-            <span class="mini-bar mini-bar-2"></span>
-            <span class="mini-bar mini-bar-3"></span>
-            <span class="mini-bar mini-bar-4"></span>
-          </div>
-          <div class="mini-text">
-            <h1>MGA</h1>
-            <span>Restaurante</span>
-          </div>
+        <div class="mini-brand">
+          <img class="mini-logo" src="img/logo-mga-food.png?v=20261014g" alt="MGA Food">
         </div>
 
         <h3 id="loginTitulo">Entrar</h3>
@@ -139,21 +127,15 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" crossorigin></script>
   <script>window.MGA_LINK_SENHA = location.hash + location.search;</script>
-  <script src="supabase-config.js?v=20261013b"></script>
-  <script src="restaurante-dados.js?v=20261013b"></script>
+  <script src="supabase-config.js?v=20261014f"></script>
+  <script src="restaurante-dados.js?v=20261014f"></script>
   <script>
     (async function(){
       const D = window.RestDados;
       const $ = id => document.getElementById(id);
       const regra = msg => Object.assign(new Error(msg), {regra: true});
-      // Nome da empresa (Configurações › Empresa) no lugar de MGA; "Restaurante" vira a assinatura do sistema
-      const marca = D.nomeMarca();
-      if (marca !== 'MGA') {
-        document.querySelectorAll('.brand-copy h1, .mini-text h1').forEach(h => { h.textContent = marca; h.classList.toggle('marca-longa', marca.length > 9); });
-        document.querySelectorAll('.brand-copy span, .mini-text span').forEach(s => { s.textContent = 'com MGA Restaurante'; });
-        document.querySelector('.mini-brand')?.setAttribute('aria-label', marca);
-        document.title = marca + ' | Entrar';
-      }
+      // A tela de login é sempre da MGA FoodTech: várias empresas entram pela mesma página,
+      // então o nome do restaurante só aparece depois do login, dentro do sistema
 
       // Conta master (MGA Tecnologia): vai sempre para o painel de empresas, mesmo se também estiver num restaurante
       const souMaster = async id => !!(await supa.from('masters').select('id').eq('id', id).maybeSingle()).data;

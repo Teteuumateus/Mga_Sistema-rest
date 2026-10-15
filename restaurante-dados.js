@@ -385,10 +385,8 @@
     exigir('configuracoes');
     const u = usuarioPorId(id);
     if (!u) return;
-    if (u.id === sessaoAtual()?.id) erro('Você não pode excluir o seu próprio usuário.');
-    if (ehAdmin(u) && u.ativo && adminsAtivos().length === 1) erro('Não é possível excluir o único administrador ativo.');
-    if (caixas.some(c => c.operadorId === id) || vendas.some(v => v.operadorId === id))
-      erro(`"${u.nome}" já operou caixa ou vendas e fica no histórico. Desative o usuário em vez de excluir.`);
+    const trava = motivoSemExcluir('usuario', id, true);
+    if (trava) erro(trava);
     usuarios.splice(usuarios.indexOf(u), 1);
     registrarAuditoria('Configurações', `Usuário "${u.nome}" excluído`);
     salvar('restUsuarios');
@@ -425,8 +423,8 @@
   function excluirForma(id){
     const f = formaPorId(id);
     if (!f) return;
-    if (formaUsada(id)) erro(`"${f.nome}" já foi usada em vendas. Desative em vez de excluir.`);
-    if (f.ativo && !formas.some(x => x.id !== id && x.ativo && x.tipo !== 'PRAZO')) erro('Deixe pelo menos uma forma de pagamento à vista ativa.');
+    const trava = motivoSemExcluir('forma', id, true);
+    if (trava) erro(trava);
     formas.splice(formas.indexOf(f), 1);
     auditar(`Forma de pagamento "${f.nome}" excluída`);
     salvar('restFormas');
@@ -469,8 +467,8 @@
   function excluirGrupo(id){
     const g = grupoPorId(id);
     if (!g) return;
-    const n = produtosDoGrupo(id).length;
-    if (n) erro(`A categoria "${g.nome}" tem ${n} produto${n === 1 ? "" : "s"}. Mova ou exclua os produtos antes, ou apenas desative a categoria.`);
+    const trava = motivoSemExcluir('grupo', id, true);
+    if (trava) erro(trava);
     grupos.splice(grupos.indexOf(g), 1);
     auditar(`Categoria "${g.nome}" excluída`);
     salvar('restGrupos');
@@ -659,9 +657,8 @@
   function excluirProduto(id){
     const p = produtoPorId(id);
     if (!p) return;
-    const usa = produtos.find(x => (x.ficha || []).some(c => c.produtoId === id));
-    if (usa) erro(`"${p.nome}" está na ficha técnica de "${usa.nome}". Tire da ficha antes de excluir.`);
-    if (produtoVendido(id)) erro(`"${p.nome}" já aparece em vendas e não pode ser excluído. Desative-o para tirar do cardápio.`);
+    const trava = motivoSemExcluir('produto', id, true);
+    if (trava) erro(trava);
     produtos.splice(produtos.indexOf(p), 1);
     auditar(`Produto "${p.nome}" excluído`);
     salvar('restProdutos');
@@ -937,8 +934,8 @@
   function excluirGrupoAdicional(id){
     const g = grupoAdicionalPorId(id);
     if (!g) return;
-    const n = produtos.filter(p => (p.gruposAdicionais || []).includes(id)).length;
-    if (n) erro(`"${g.nome}" está em ${n} produto${n === 1 ? '' : 's'}. Tire dos produtos ou desative o grupo.`);
+    const trava = motivoSemExcluir('adicional', id, true);
+    if (trava) erro(trava);
     adicionais.splice(adicionais.indexOf(g), 1);
     auditar(`Adicionais "${g.nome}" excluído`);
     salvar('restAdicionais');
@@ -1075,7 +1072,8 @@
   function excluirAplicativo(id){
     const a = aplicativoPorId(id);
     if (!a) return;
-    if (vendas.some(v => v.aplicativo?.id === id)) erro(`"${a.nome}" já tem pedidos. Desative em vez de excluir.`);
+    const trava = motivoSemExcluir('aplicativo', id, true);
+    if (trava) erro(trava);
     aplicativos.splice(aplicativos.indexOf(a), 1);
     auditar(`Aplicativo "${a.nome}" excluído`);
     salvar('restAplicativos');
@@ -1144,8 +1142,8 @@
   function excluirClienteRest(id){
     const c = clientePorId(id);
     if (!c) return;
-    if (vendas.some(v => v.clienteId === id && v.status === 'ABERTA')) erro(`${c.nome} tem uma venda em aberto no Restaurante. Finalize ou cancele antes.`);
-    if (contas.some(x => x.clienteId === id && x.status === 'ABERTA')) erro(`${c.nome} tem conta a receber em aberto. Receba ou exclua a conta antes.`);
+    const trava = motivoSemExcluir('cliente', id, true);
+    if (trava) erro(trava);
     const lista = listaClientes();
     lista.splice(lista.indexOf(c), 1);
     auditar(`Cliente ${c.nome} excluído`);
@@ -1174,7 +1172,7 @@
 
   // ---- Fornecedores ----
   const fornecedorPorId = id => fornecedores.find(f => f.id === id);
-  const CAMPOS_FORNECEDOR = {nome: 'Nome', documento: 'CPF/CNPJ', telefone: 'Telefone', email: 'E-mail', contato: 'Contato', endereco: 'Endereço', cidade: 'Cidade', obs: 'Observação'};
+  const CAMPOS_FORNECEDOR = {nome: 'Nome', documento: 'CPF/CNPJ', telefone: 'Telefone', email: 'E-mail', contato: 'Contato', cep: 'CEP', endereco: 'Endereço', numero: 'Número', bairro: 'Bairro', cidade: 'Cidade', obs: 'Observação'};
   function salvarFornecedor(d, id){
     const f = {};
     Object.keys(CAMPOS_FORNECEDOR).forEach(k => { f[k] = txt(d[k]); });
@@ -1204,8 +1202,8 @@
   function excluirFornecedor(id){
     const f = fornecedorPorId(id);
     if (!f) return;
-    if (contas.some(c => c.fornecedorId === id) || movEstoque.some(m => m.fornecedorId === id))
-      erro(`"${f.nome}" já tem compras ou contas lançadas e fica no histórico. Desative em vez de excluir.`);
+    const trava = motivoSemExcluir('fornecedor', id, true);
+    if (trava) erro(trava);
     fornecedores.splice(fornecedores.indexOf(f), 1);
     auditar(`Fornecedor "${f.nome}" excluído`);
     salvar('restFornecedores');
@@ -1324,7 +1322,8 @@
   function excluirEntregador(id){
     const e = entregadorPorId(id);
     if (!e) return;
-    if (vendas.some(v => v.entregadorId === id)) erro(`${e.nome} já fez entregas e não pode ser excluído. Desative o cadastro.`);
+    const trava = motivoSemExcluir('entregador', id, true);
+    if (trava) erro(trava);
     entregadores.splice(entregadores.indexOf(e), 1);
     auditar(`Entregador ${e.nome} excluído`);
     salvar('restEntregadores');
@@ -1958,7 +1957,8 @@
   function excluirMesa(id){
     const m = mesaPorId(id);
     if (!m) return;
-    if (vendaDaMesa(id)) erro(`A mesa ${m.numero} está com pedido aberto.`);
+    const trava = motivoSemExcluir('mesa', id, true);
+    if (trava) erro(trava);
     mesas.splice(mesas.indexOf(m), 1);
     auditar(`Mesa ${m.numero} excluída`);
     salvar('restMesas');
@@ -2750,6 +2750,96 @@
 
   // Cada grupo de funções aparece na auditoria com o próprio módulo
   const exigindo = (modulo, fn) => (...a) => { exigir(modulo); return fn(...a); };
+  // =====================================================================
+  // ---- O que não pode ser excluído ----
+  // Cadastro que já aparece no histórico (vendas, caixas, contas, compras) ou que outro cadastro usa
+  // não pode ser excluído: só desativado. A mesma regra serve à exclusão (erro) e às telas (cadeado no lugar do ✕).
+  // As telas consultam linha a linha, então o uso fica num índice refeito só quando os dados mudam.
+  let usoCache = null;
+  function indiceUso(){
+    if (usoCache && usoCache.versao === versao) return usoCache;
+    const u = {versao, vendidos: new Set(), formas: new Set(), operadores: new Set(), aplicativos: new Set(), entregadores: new Set(),
+      clienteVendaAberta: new Set(), clienteContaAberta: new Set(), fornecedores: new Set(), fichas: new Map(), adicionais: new Map(), grupos: new Map()};
+    vendas.forEach(v => {
+      v.itens.forEach(i => u.vendidos.add(i.produtoId));
+      (v.pagamentos || []).forEach(p => u.formas.add(p.formaId));
+      if (v.operadorId) u.operadores.add(v.operadorId);
+      if (v.aplicativo?.id) u.aplicativos.add(v.aplicativo.id);
+      if (v.entregadorId) u.entregadores.add(v.entregadorId);
+      if (v.clienteId && v.status === 'ABERTA') u.clienteVendaAberta.add(v.clienteId);
+    });
+    caixas.forEach(c => u.operadores.add(c.operadorId));
+    contas.forEach(c => {
+      if (c.fornecedorId) u.fornecedores.add(c.fornecedorId);
+      if (c.clienteId && c.status === 'ABERTA') u.clienteContaAberta.add(c.clienteId);
+    });
+    movEstoque.forEach(m => { if (m.fornecedorId) u.fornecedores.add(m.fornecedorId); });
+    produtos.forEach(p => {
+      (p.ficha || []).forEach(c => { if (!u.fichas.has(c.produtoId)) u.fichas.set(c.produtoId, p.nome); });
+      (p.gruposAdicionais || []).forEach(g => u.adicionais.set(g, (u.adicionais.get(g) || 0) + 1));
+      u.grupos.set(p.grupoId, (u.grupos.get(p.grupoId) || 0) + 1);
+    });
+    return usoCache = u;
+  }
+  // Motivo para não excluir (texto) ou '' quando pode. fresco = refaz o índice (na exclusão de verdade)
+  function motivoSemExcluir(tipo, id, fresco = false){
+    if (fresco) usoCache = null;
+    const u = indiceUso(), s = n => n === 1 ? '' : 's';
+    switch (tipo){
+      case 'produto': {
+        const p = produtoPorId(id); if (!p) return '';
+        if (u.fichas.has(id)) return `"${p.nome}" está na ficha técnica de "${u.fichas.get(id)}". Tire da ficha antes de excluir.`;
+        if (u.vendidos.has(id)) return `"${p.nome}" já foi vendido e não pode ser excluído: continua nos relatórios e no dashboard. Para tirar do cardápio, desative.`;
+        return '';
+      }
+      case 'grupo': {
+        const g = grupoPorId(id), n = u.grupos.get(id) || 0; if (!g || !n) return '';
+        return `A categoria "${g.nome}" tem ${n} produto${s(n)}. Mova ou exclua os produtos antes, ou apenas desative a categoria.`;
+      }
+      case 'adicional': {
+        const g = grupoAdicionalPorId(id), n = u.adicionais.get(id) || 0; if (!g || !n) return '';
+        return `"${g.nome}" está em ${n} produto${s(n)}. Tire dos produtos ou desative o grupo.`;
+      }
+      case 'aplicativo': {
+        const a = aplicativoPorId(id);
+        return a && u.aplicativos.has(id) ? `"${a.nome}" já tem pedidos e fica no histórico. Desative em vez de excluir.` : '';
+      }
+      case 'cliente': {
+        const c = clientePorId(id); if (!c) return '';
+        if (u.clienteVendaAberta.has(id)) return `${c.nome} tem uma venda em aberto. Finalize ou cancele antes de excluir.`;
+        if (u.clienteContaAberta.has(id)) return `${c.nome} tem conta a receber em aberto. Receba ou exclua a conta antes.`;
+        return '';
+      }
+      case 'fornecedor': {
+        const f = fornecedorPorId(id);
+        return f && u.fornecedores.has(id) ? `"${f.nome}" já tem compras ou contas lançadas e fica no histórico. Desative em vez de excluir.` : '';
+      }
+      case 'entregador': {
+        const e = entregadorPorId(id);
+        return e && u.entregadores.has(id) ? `${e.nome} já fez entregas e fica no histórico. Desative o cadastro em vez de excluir.` : '';
+      }
+      case 'mesa': {
+        const m = mesaPorId(id);
+        return m && vendaDaMesa(id) ? `A mesa ${m.numero} está com pedido aberto. Feche a conta antes de excluir.` : '';
+      }
+      case 'forma': {
+        const f = formaPorId(id); if (!f) return '';
+        if (u.formas.has(id)) return `"${f.nome}" já foi usada em vendas e fica no histórico. Desative em vez de excluir.`;
+        if (f.ativo && !formas.some(x => x.id !== id && x.ativo && x.tipo !== 'PRAZO')) return 'Deixe pelo menos uma forma de pagamento à vista ativa.';
+        return '';
+      }
+      case 'usuario': {
+        const x = usuarioPorId(id); if (!x) return '';
+        if (x.id === sessaoAtual()?.id) return 'Você não pode excluir o seu próprio usuário.';
+        if (ehAdmin(x) && x.ativo && adminsAtivos().length === 1) return 'Não é possível excluir o único administrador ativo.';
+        if (u.operadores.has(id)) return `"${x.nome}" já operou caixa ou vendas e fica no histórico. Desative o usuário em vez de excluir.`;
+        return '';
+      }
+    }
+    return '';
+  }
+  const produtosVendidos = () => indiceUso().vendidos;
+
   const cad = fn => comModulo('Cadastros', exigindo('cadastros', fn)), fin = fn => comModulo('Financeiro', exigindo('financeiro', fn)), vnd = fn => comModulo('Vendas', fn), sis = fn => comModulo('Sistema', fn), mes = fn => comModulo('Mesas', fn), dlv = fn => comModulo('Delivery', fn), est = fn => comModulo('Estoque', fn);
   const porVenda = fn => (id, ...r) => { const t = vendaPorId(id)?.tipo; return (t === 'MESA' ? mes : t === 'DELIVERY' || t === 'ENCOMENDA' ? dlv : vnd)(fn)(id, ...r); };
   window.RestDados = {
@@ -2763,7 +2853,7 @@
     grupos: () => grupos, produtos: () => produtos, clientes: listaClientes, entregadores: () => entregadores,
     formas: () => formas, formasAtivas, formaPorId, prazoHabilitado, tipoPagamento,
     seq: () => seq, caixas: () => caixas, movCaixa: () => movCaixa, vendas: () => vendas, contas: () => contas, categorias: () => categorias,
-    grupoPorId, produtoPorId, clientePorId, entregadorPorId, vendaPorId, contaPorId, caixaPorId, produtosDoGrupo, produtoVendido, contaVencida, proximoCodigo,
+    grupoPorId, produtoPorId, clientePorId, entregadorPorId, vendaPorId, contaPorId, caixaPorId, produtosDoGrupo, produtoVendido, produtosVendidos, motivoSemExcluir, contaVencida, proximoCodigo,
     salvarGrupo: cad(salvarGrupo), excluirGrupo: cad(excluirGrupo), salvarProduto: cad(salvarProduto), excluirProduto: cad(excluirProduto), importarProdutos: cad(importarProdutos),
     salvarCliente: cad(salvarClienteRest), excluirCliente: cad(excluirClienteRest), salvarEntregador: cad(salvarEntregador), excluirEntregador: cad(excluirEntregador),
     salvarForma: cad(salvarForma), excluirForma: cad(excluirForma),

@@ -6,7 +6,7 @@
   <title>MGA | Painel master</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script src="theme.js?v=20261013b"></script>
+  <script src="theme.js?v=20261014f"></script>
   <style>
     :root { --fundo: #edf1f6; --card: #ffffff; --texto: #1f2d3d; --suave: #69778d; --linha: #dfe7f1; --azul: #1f90ff; --azul-escuro: #071d3d;
       --campo: #ffffff; --erro-fundo: #fbe4e8; --erro: #b4233f; --ok-fundo: #e3f6ec; --ok: #16794a; --chip: #ecf6ff; --chip-texto: #1d5fb0; }
@@ -101,9 +101,10 @@
       <div class="campos">
         <div class="secao">Restaurante</div>
         <label class="inteiro">Nome do restaurante *<input name="nome" maxlength="80" required></label>
-        <label>CNPJ<input name="cnpj" maxlength="18" inputmode="numeric"></label>
+        <label>CNPJ ou CPF<input name="cnpj" maxlength="18" inputmode="numeric"></label>
         <label>Telefone<input name="telefone" maxlength="20" inputmode="tel"></label>
-        <div class="secao">Administrador (o cliente)</div>
+        <div class="secao">Dono do restaurante (administrador)</div>
+        <p class="sub inteiro">É o acesso do cliente: ele entra com este e-mail e senha e administra o sistema dele (cadastros, caixa, usuários da equipe...).</p>
         <label class="inteiro">Nome *<input name="admin_nome" maxlength="60" required></label>
         <label class="inteiro">E-mail (para entrar) *<input name="admin_email" type="email" maxlength="80" autocapitalize="none" spellcheck="false" required></label>
         <label>Senha * (mín. 6)<input name="admin_senha" type="password" autocomplete="new-password" required></label>
@@ -145,8 +146,8 @@
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" crossorigin></script>
-  <script src="supabase-config.js?v=20261013b"></script>
-  <script src="restaurante-dados.js?v=20261013b"></script>
+  <script src="supabase-config.js?v=20261014f"></script>
+  <script src="restaurante-dados.js?v=20261014f"></script>
   <script>
     (async function(){
       const $ = id => document.getElementById(id);
@@ -195,7 +196,7 @@
             <div class="empresa-topo">
               <div>
                 <h2>${esc(e.nome)}</h2>
-                <div class="meta">${[e.cnpj && 'CNPJ ' + esc(e.cnpj), e.telefone && esc(e.telefone), 'Criada em ' + data(e.criado_em), e.usuarios + (e.usuarios === 1 ? ' usuário' : ' usuários')].filter(Boolean).join(' · ')}</div>
+                <div class="meta">${[e.cnpj && 'CNPJ/CPF ' + esc(e.cnpj), e.telefone && esc(e.telefone), 'Criada em ' + data(e.criado_em), e.usuarios + (e.usuarios === 1 ? ' usuário' : ' usuários')].filter(Boolean).join(' · ')}</div>
               </div>
               <div class="botoes">
                 <button type="button" class="btn btn-mini btn-azul" data-entrar="${esc(e.id)}">Entrar na empresa →</button>

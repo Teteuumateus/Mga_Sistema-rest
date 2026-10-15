@@ -5,7 +5,7 @@
   'use strict';
   if (!window.RestUI) return;
   const {useState, useRef} = React;
-  const {html, D, useDados, useAviso, Cabecalho, Busca, Campo, Modal, Segmentos, confirmar, plural} = window.RestUI;
+  const {html, D, useDados, useAviso, Cabecalho, Busca, Campo, Modal, Segmentos, useCep, confirmar, plural} = window.RestUI;
 
   // ---- Auditoria: quem fez o quê e quando ----
   const PERIODOS = [['hoje', 'Hoje'], ['7', '7 dias'], ['30', '30 dias'], ['todos', 'Tudo']];
@@ -176,9 +176,10 @@
     const {el: aviso, tentar} = useAviso();
     const c = D.config();
     const [form, setForm] = useState({nome: c.nome, ...c.empresa});
-    const campo = (k, rotulo, extra = {}) => html`<${Campo} rotulo=${rotulo} largo=${extra.largo}>
+    const cep = useCep(setForm); // CEP com 8 números preenche rua, bairro, cidade e UF
+    const campo = (k, rotulo, extra = {}) => html`<${Campo} rotulo=${rotulo} largo=${extra.largo} depois=${extra.depois}>
       <input type="text" value=${form[k]} maxLength=${extra.max || 80} placeholder=${extra.ph || ''} inputMode=${extra.modo || null}
-        onInput=${e => setForm({...form, [k]: extra.mascara ? extra.mascara(e.target.value) : e.target.value})} />
+        onInput=${e => { const v = extra.mascara ? extra.mascara(e.target.value) : e.target.value; setForm({...form, [k]: v}); if (k === 'cep') cep.mudar(v); }} />
     <//>`;
     const salvar = e => { e.preventDefault(); tentar(() => D.salvarEmpresa(form), 'Dados da empresa salvos. O nome já aparece no menu, e os dados saem nas próximas impressões.'); };
     // Prévia do cabeçalho com o que está digitado (sem salvar)
@@ -199,7 +200,7 @@
         </div>
         <h3 className="rest-form-titulo rest-config-sub">Endereço</h3>
         <div className="form-grid">
-          ${campo('cep', 'CEP', {modo: 'numeric', ph: '00000-000', mascara: D.mascaraCep})}
+          ${campo('cep', 'CEP', {modo: 'numeric', ph: '00000-000', mascara: D.mascaraCep, depois: cep.el})}
           ${campo('endereco', 'Endereço', {largo: true, max: 100, ph: 'Rua, avenida...'})}
           ${campo('numero', 'Número', {max: 10})}
           ${campo('bairro', 'Bairro', {max: 60})}

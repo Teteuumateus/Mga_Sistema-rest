@@ -232,6 +232,7 @@
   white-space: nowrap;
 }
 #appShell .row-actions button.rest-acao-estorno { border-color: #dce5ef; background: #fff; color: #455468; }
+#appShell .row-actions button.rest-sem-excluir { opacity: 0.45; cursor: help; filter: grayscale(1); font-size: 0.8rem; }
 #appShell tfoot td { border-top: 2px solid #e3e9f1; color: #455468; font-weight: 600; }
 #appShell .rest-baixa-resumo { display: flex; flex-direction: column; gap: 2px; margin: 0 0 14px; }
 #appShell .rest-baixa-resumo span { color: #69778d; font-size: 0.88rem; }
@@ -354,6 +355,8 @@
 #appShell .rest-foto-acoes small { color: #69778d; }
 #appShell .rest-foto-btn { display: inline-flex; align-items: center; cursor: pointer; }
 #appShell .rest-prod-cel { display: flex; align-items: center; gap: 10px; }
+#appShell .rest-excluir-prod { margin: 4px 0 12px; padding: 12px; border: 1px solid #e3e9f1; border-radius: 10px; }
+[data-theme="dark"] #appShell .rest-excluir-prod { border-color: #2a3a56; }
 #appShell .rest-prod-mini { width: 40px; height: 40px; flex-shrink: 0; border-radius: 10px; object-fit: cover; }
 #appShell .rest-prod-sem { display: grid; place-items: center; background: #f1f5f9; font-size: 1.1rem; }
 

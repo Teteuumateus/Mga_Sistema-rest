@@ -7,7 +7,7 @@
   'use strict';
   if (!window.RestUI) return;
   const {useState} = React;
-  const {html, D, useDados, useAviso, Cabecalho, Busca, Campo, CampoValor, StatusAtivo, Acoes, FormCard, Tabela, Segmentos, confirmar, plural} = window.RestUI;
+  const {html, D, useDados, useAviso, Cabecalho, Busca, Campo, CampoValor, StatusAtivo, Acoes, FormCard, useExcluir, Tabela, Segmentos, plural} = window.RestUI;
   const chave = () => 'k' + Math.random().toString(36).slice(2, 9);
   const regra = g => g.min && g.max === g.min ? `escolha ${g.min}` : g.min ? `escolha de ${g.min}${g.max ? ` a ${g.max}` : ' ou mais'}` : g.max ? `opcional · até ${g.max}` : 'opcional · sem limite';
 
@@ -16,6 +16,7 @@
   function TelaAdicionais({ir}){
     useDados();
     const {el: aviso, tentar} = useAviso();
+    const {pedir, el: janela} = useExcluir();
     const [form, setForm] = useState(null);
     const [busca, setBusca] = useState('');
     const lista = D.adicionais().filter(g => !busca || D.norm(g.nome + ' ' + g.opcoes.map(o => o.nome).join(' ')).includes(D.norm(busca)))
@@ -25,7 +26,10 @@
     const editar = g => setForm({...g, min: String(g.min), max: String(g.max), opcoes: g.opcoes.map(o => ({...o, key: o.id, preco: o.preco ? D.valorBR(o.preco) : ''}))});
     const mudar = (key, k, v) => setForm(f => ({...f, opcoes: f.opcoes.map(o => o.key === key ? {...o, [k]: v} : o)}));
     const salvar = () => { if (tentar(() => D.salvarGrupoAdicional(form, form.id), g => `"${g.nome}" ${form.id ? 'atualizado' : 'cadastrado'}. Ligue aos produtos no cadastro de cada produto.`)) setForm(null); };
-    const excluir = g => { if (confirmar(`Excluir o grupo "${g.nome}"?`)) tentar(() => D.excluirGrupoAdicional(g.id), `"${g.nome}" excluído.`); };
+    const excluir = g => pedir({titulo: 'Excluir adicionais', nome: g.nome, icone: '➕', rotulo: 'Excluir grupo',
+      detalhe: plural(g.opcoes.length, 'opção', 'opções') + (g.min ? ' · obrigatório' : ''), aviso: 'O grupo e as opções dele saem do cadastro.',
+      desativar: g.ativo ? () => tentar(() => D.salvarGrupoAdicional({...g, ativo: false}, g.id), `"${g.nome}" desativado.`) : null,
+      excluir: () => tentar(() => D.excluirGrupoAdicional(g.id), `"${g.nome}" excluído.`)});
     // Modelos prontos para começar rápido
     const MODELOS = [
       {nome: 'Ponto da carne', min: '1', max: '1', opcoes: [{nome: 'Mal passada'}, {nome: 'Ao ponto'}, {nome: 'Bem passada'}]},
@@ -37,6 +41,7 @@
         <button type="button" className="btn" onClick=${() => novo()}>+ Novo grupo</button>
       <//>
       ${aviso}
+      ${janela}
       ${!form && !D.adicionais().length && html`<div className="rest-dica-est">Comece por um modelo:
         ${MODELOS.map(m => html` <button type="button" key=${m.nome} className="rest-link" onClick=${() => novo(m)}>${m.nome}</button>`)}</div>`}
       ${form && html`
@@ -65,7 +70,7 @@
           <td className="rest-bairros-cel">${g.opcoes.map(o => `${o.nome}${o.preco ? ` (+${D.moedaBR(o.preco)})` : ''}${o.ativo === false ? ' · inativa' : ''}`).join(', ')}</td>
           <td>${usados(g.id).length ? html`<span title=${usados(g.id).map(p => p.nome).join(', ')}>${plural(usados(g.id).length, 'produto', 'produtos')}</span>` : html`<button type="button" className="rest-link" onClick=${() => ir('cad/produtos')}>ligar a produtos →</button>`}</td>
           <td><${StatusAtivo} ativo=${g.ativo} /></td>
-          <td><${Acoes} nome=${g.nome} onEditar=${() => editar(g)} onExcluir=${() => excluir(g)} /></td>
+          <td><${Acoes} nome=${g.nome} onEditar=${() => editar(g)} onExcluir=${() => excluir(g)} semExcluir=${D.motivoSemExcluir('adicional', g.id)} /></td>
         </tr>`)}
       <//>`;
   }
@@ -75,6 +80,7 @@
   function TelaPromocoes(){
     useDados();
     const {el: aviso, tentar} = useAviso();
+    const {pedir, el: janela} = useExcluir();
     const [form, setForm] = useState(null);
     const [buscaProd, setBuscaProd] = useState('');
     const lista = D.promocoes().slice().sort((a, b) => Number(b.ativo) - Number(a.ativo) || a.nome.localeCompare(b.nome, 'pt-BR'));
@@ -82,7 +88,10 @@
     const valendo = x => D.produtos().some(p => D.promocoesVigentes(p, agora).some(y => y.id === x.id));
     const editar = x => setForm({...x, valor: x.tipo === 'PRECO' ? D.valorBR(x.valor) : String(x.valor).replace('.', ',')});
     const salvar = () => { if (tentar(() => D.salvarPromocao(form, form.id), x => `Promoção "${x.nome}" ${form.id ? 'atualizada' : 'cadastrada'}: ${D.descreverPromocao(x)}.`)) setForm(null); };
-    const excluir = x => { if (confirmar(`Excluir a promoção "${x.nome}"?`)) tentar(() => D.excluirPromocao(x.id), `Promoção "${x.nome}" excluída.`); };
+    const excluir = x => pedir({titulo: 'Excluir promoção', nome: x.nome, icone: '🏷️', rotulo: 'Excluir promoção',
+      detalhe: D.descreverPromocao(x), aviso: 'A promoção deixa de valer; as vendas já feitas com ela não mudam.',
+      desativar: x.ativo ? () => tentar(() => D.salvarPromocao({...x, ativo: false}, x.id), `Promoção "${x.nome}" desativada.`) : null,
+      excluir: () => tentar(() => D.excluirPromocao(x.id), `Promoção "${x.nome}" excluída.`)});
     const alternarId = id => setForm(f => ({...f, ids: f.ids.includes(id) ? f.ids.filter(x => x !== id) : [...f.ids, id]}));
     const alternarDia = d => setForm(f => ({...f, dias: f.dias.includes(d) ? f.dias.filter(x => x !== d) : [...f.dias, d]}));
     const nomeAlvo = x => x.ids.map(id => (x.alvo === 'PRODUTO' ? D.produtoPorId(id) : D.grupoPorId(id))?.nome).filter(Boolean);
@@ -94,6 +103,7 @@
         <button type="button" className="btn" onClick=${() => { setBuscaProd(''); setForm({...PROMO_VAZIA}); }}>+ Nova promoção</button>
       <//>
       ${aviso}
+      ${janela}
       ${form && html`
         <${FormCard} titulo=${form.id ? `Editar promoção — ${form.nome}` : 'Nova promoção'} onSalvar=${salvar} onCancelar=${() => setForm(null)}>
           <${Campo} rotulo="Nome"><input type="text" value=${form.nome} maxLength="40" placeholder="Ex.: Happy hour, Prato do dia" onInput=${e => setForm({...form, nome: e.target.value})} /><//>
@@ -149,18 +159,23 @@
   function TelaEmbalagens(){
     useDados();
     const {el: aviso, tentar} = useAviso();
+    const {pedir, el: janela} = useExcluir();
     const [form, setForm] = useState(null);
     const [busca, setBusca] = useState('');
     const lista = D.embalagens().slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
     const produtos = form ? D.produtos().filter(p => p.tipo !== 'INSUMO' && (p.ativo || form.produtoIds.includes(p.id)) && (!busca || D.norm(p.nome).includes(D.norm(busca)))) : [];
     const salvar = () => { if (tentar(() => D.salvarEmbalagem(form, form.id), e => `Embalagem "${e.nome}" ${form.id ? 'atualizada' : 'cadastrada'}.`)) setForm(null); };
-    const excluir = e => { if (confirmar(`Excluir a embalagem "${e.nome}"?`)) tentar(() => D.excluirEmbalagem(e.id), `Embalagem "${e.nome}" excluída.`); };
+    const excluir = e => pedir({titulo: 'Excluir embalagem', nome: e.nome, icone: '📦', rotulo: 'Excluir embalagem',
+      detalhe: `${D.moedaBR(e.preco)} · ${plural(e.produtoIds.length, 'produto', 'produtos')}`, aviso: 'A taxa da embalagem deixa de ser cobrada no delivery.',
+      desativar: e.ativo ? () => tentar(() => D.salvarEmbalagem({...e, ativo: false}, e.id), `Embalagem "${e.nome}" desativada.`) : null,
+      excluir: () => tentar(() => D.excluirEmbalagem(e.id), `Embalagem "${e.nome}" excluída.`)});
     const alternar = id => setForm(f => ({...f, produtoIds: f.produtoIds.includes(id) ? f.produtoIds.filter(x => x !== id) : [...f.produtoIds, id]}));
     return html`
       <${Cabecalho} titulo="Embalagens" sub="Cobradas no delivery e na encomenda: cada unidade do produto soma o preço da embalagem dele">
         <button type="button" className="btn" onClick=${() => { setBusca(''); setForm({id: null, nome: '', preco: '', produtoIds: [], ativo: true}); }}>+ Nova embalagem</button>
       <//>
       ${aviso}
+      ${janela}
       ${form && html`
         <${FormCard} titulo=${form.id ? `Editar embalagem — ${form.nome}` : 'Nova embalagem'} onSalvar=${salvar} onCancelar=${() => setForm(null)}>
           <${Campo} rotulo="Nome"><input type="text" value=${form.nome} maxLength="40" placeholder="Ex.: Marmita de alumínio, Copo 500 ml" onInput=${e => setForm({...form, nome: e.target.value})} /><//>
@@ -191,16 +206,21 @@
   function TelaAplicativos(){
     useDados();
     const {el: aviso, tentar} = useAviso();
+    const {pedir, el: janela} = useExcluir();
     const [form, setForm] = useState(null);
     const lista = D.aplicativos().slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
     const pedidos = id => D.vendas().filter(v => v.aplicativo?.id === id && v.status === 'FINALIZADA');
     const salvar = () => { if (tentar(() => D.salvarAplicativo(form, form.id), a => `Aplicativo "${a.nome}" ${form.id ? 'atualizado' : 'cadastrado'}.`)) setForm(null); };
-    const excluir = a => { if (confirmar(`Excluir o aplicativo "${a.nome}"?`)) tentar(() => D.excluirAplicativo(a.id), `Aplicativo "${a.nome}" excluído.`); };
+    const excluir = a => pedir({titulo: 'Excluir aplicativo', nome: a.nome, icone: '📱', rotulo: 'Excluir aplicativo',
+      detalhe: `Comissão ${String(a.comissao).replace('.', ',')}%`, aviso: 'O aplicativo sai da escolha no pedido de delivery.',
+      desativar: a.ativo ? () => tentar(() => D.salvarAplicativo({...a, ativo: false}, a.id), `Aplicativo "${a.nome}" desativado.`) : null,
+      excluir: () => tentar(() => D.excluirAplicativo(a.id), `Aplicativo "${a.nome}" excluído.`)});
     return html`
       <${Cabecalho} titulo="Aplicativos de delivery" sub="De onde veio o pedido. A comissão aparece no relatório de delivery para você saber quanto cada aplicativo custa.">
         <button type="button" className="btn" onClick=${() => setForm({id: null, nome: '', comissao: '', ativo: true})}>+ Novo aplicativo</button>
       <//>
       ${aviso}
+      ${janela}
       ${form && html`
         <${FormCard} titulo=${form.id ? `Editar aplicativo — ${form.nome}` : 'Novo aplicativo'} onSalvar=${salvar} onCancelar=${() => setForm(null)}>
           <${Campo} rotulo="Nome"><input type="text" value=${form.nome} maxLength="30" placeholder="Ex.: iFood" onInput=${e => setForm({...form, nome: e.target.value})} /><//>
@@ -213,7 +233,7 @@
           <td>${String(a.comissao).replace('.', ',')}%</td>
           <td>${pedidos(a.id).length || '—'}</td>
           <td><${StatusAtivo} ativo=${a.ativo} /></td>
-          <td><${Acoes} nome=${a.nome} onEditar=${() => setForm({...a, comissao: String(a.comissao).replace('.', ',')})} onExcluir=${() => excluir(a)} /></td>
+          <td><${Acoes} nome=${a.nome} onEditar=${() => setForm({...a, comissao: String(a.comissao).replace('.', ',')})} onExcluir=${() => excluir(a)} semExcluir=${D.motivoSemExcluir('aplicativo', a.id)} /></td>
         </tr>`)}
       <//>`;
   }
